@@ -1,0 +1,1317 @@
+"use client"
+import { useState, useEffect, useRef } from "react"
+import Link from "next/link"
+import ModalCajaMixto from "./components/ModalCajaMixto"
+
+const PROVINCIAS = {
+   "PICHINCHA": ["QUITO", "CAYAMBE", "MEJÍA", "PEDRO MONCAYO", "PEDRO VICENTE MALDONADO", "PUERTO QUITO", "RUMIÑAHUI", "SAN MIGUEL DE LOS BANCOS"],
+  "GUAYAS": ["ALFREDO BAQUERIZO MORENO (JUJÁN)", "BALAO", "BALZAR", "COLIMES", "CORONEL MARCELINO MARIDUEÑA", "DAULE", "DURÁN", "EL EMPALME", "EL TRIUNFO", "GENERAL ANTONIO ELIZALDE (BUCAY) ", "GENERAL VILLAMIL PLAYAS", "GUAYAQUIL", "ISIDRO AYORA", "LOMAS DE SARGENTILLO", "MILAGRO", "NARANJAL", "NARANJITO", "NOBOL", "PALESTINA", "PEDRO CARBO", "SALITRE", "SAMBORONDÓN", "SAN JACINTO DE YAGUACHI", "SANTA LUCÍA", "SIMÓN BOLÍVAR"],
+  "AZUAY": ["CUENCA", "GUALACEO", "PAUTE", "CHORDELEG", "SÍGSIG", "GIRÓN", "SANTA ISABEL", "CAMILO PONCE ENRÍQUEZ", "SAN FERNANDO", "PUCARÁ", "NABÓN", "OÑA", "SEVILLA DE ORO", "GUACHAPALA", "EL PAN"],
+  "MANABI": ["PORTOVIEJO", "MANTA", "CHONE", "BAHÍA DE CARÁQUEZ", "MONTECRISTI", "JIPIJAPA", "CALCETA", "EL CARMEN", "PEDERNALES", "SANTA ANA", "ROCAFUERTE", "TOSAGUA", "SUCRE", "FLAVIO ALFARO", "PAJÁN", "JAMA", "SAN VICENTE", "PUERTO LÓPEZ", "24 DE MAYO", "OLMEDO", "PICHINCHA", "JARAMIJÓ"],
+  "EL ORO": ["MACHALA", "PASAJE", "SANTA ROSA", "HUAQUILLAS", "ARENILLAS", "PIÑAS", "ZARUMA", "BALSAS", "MARCABELÍ", "CHILLA", "ATAHUALPA", "PORTOVELO", "EL GUABO", "LAS LAJAS"],
+  "TUNGURAHUA": ["AMBATO", "BAÑOS DE AGUA SANTA", "PELILEO", "PÍLLARO", "QUERO", "CEVALLOS", "MOCHA", "TISALEO", "PATATE"],
+  "IMBABURA": ["IBARRA", "OTAVALO", "COTACACHI", "ATUNTAQUI", "PIMAMPIRO", "URCUQUÍ"],
+  "LOJA": ["LOJA", "CATAMAYO", "CARIAMANGA", "CATACOCHA", "MACARÁ", "ALAMOR", "CELICA", "PALTAS", "SARAGURO", "PINDAL", "ZAPOTILLO", "CHAGUARPAMBA", "ESPÍNDOLA", "GONZANAMÁ", "QUILANGA", "SOZORANGA"],
+  "COTOPAXI": ["LATACUNGA", "PUJILÍ", "SALCEDO", "SAQUISILÍ", "PANGUA", "LA MANÁ", "SIGCHOS"],
+  "CHIMBORAZO": ["RIOBAMBA", "ALAUASÍ", "COLTA", "GUANO", "CHAMBO", "GUAMOTE", "CHUNCHI", "PALLATANGA", "CUMANDÁ", "PENIPE"],
+  "ESMERALDAS": ["ESMERALDAS", "ATACAMES", "QUININDÉ", "SAN LORENZO", "ELOY ALFARO", "MUISNE", "RÍO VERDE"],
+  "LOS RIOS": ["BABAHOYO", "QUEVEDO", "BABA", "BUENA FE", "MOCACHE", "MONTALVO", "PALENQUE", "PUEBLOVIEJO", "URDANETA", "VENTANAS", "VÍNCES", "VALENCIA", "QUINSALOMA"],
+  "SANTO DOMINGO": ["SANTO DOMINGO", "LA CONCORDIA"],
+  "SANTA ELENA": ["SANTA ELENA", "SALINAS", "LA LIBERTAD"],
+  "CARCHI": ["TULCÁN", "SAN GABRIEL", "EL ÁNGEL", "HUACA", "BOLÍVAR", "MIRA"],
+  "BOLIVAR": ["GUARANDA", "SAN MIGUEL", "CHILLANES", "CHUMBO", "ECHEANDÍA", "CALUMA", "LAS NAVES"],
+  "CAÑAR": ["AZOGUES", "CAÑAR", "LA TRONCAL", "BIBLIÁN", "EL TAMBO", "DÉLEG", "SUSCAL"],
+  "MORONA SANTIAGO": ["MACAS", "SUCÚA", "GUALAQUIZA", "GENERAL LEONIDAS PLAZA GUTIÉRREZ", "SANTIAGO DE MÉNDEZ", "LOGROÑO", "PALORA", "SANTIAGO", "SAN JUAN BOSCO", "HUAMBOYA", "PABLO SEXTO", "TAISHA"],
+  "NAPO": ["TENA", "ARCHIDONA", "EL CHACO", "BAEZA", "CARLOS JULIO AROSEMENA TOLA"],
+  "ORELLANA": ["PUERTO FRANCISCO DE ORELLANA", "JOYA DE LOS SACHAS", "TIPUTINI", "LORETO"],
+  "PASTAZA": ["PUYO", "MERA", "SANTA CLARA", "SHELL"],
+  "SUCUMBIOS": ["NUEVA LOJA", "SHUSHUFINDI", "EL DORADO DE CASCALES", "LUMBAQUÍ", "PUERTO EL CARMEN DE PUTUMAYO", "TARAPOA", "LA BONITA"],
+  "ZAMORA CHINCHIPE": ["ZAMORA", "YANTZAZA", "EL PANGUI", "ZUMBA", "PALANDA", "GUAYZIMI", "ZUMBI", "PAQUISHA", "28 DE MAYO"],
+  "GALAPAGOS": ["PUERTO BAQUERIZO MORENO", "PUERTO AYORA", "PUERTO VILLAMIL"],
+} as const
+
+const POLITICAS = {
+  BLOQUEADO: "Bloqueado (Sin Crédito)",
+  REQUISITO: "Crédito Bajo Requisito",
+  VIP: "Crédito Libre / VIP"
+} as const
+const PLAZOS = [7,15,30,45,60,90]
+
+type Item = {
+  codigo:string; 
+  descripcion:string; 
+  detalle:string;
+  cant:number; 
+  pUnit:number; 
+  descPorc:number;
+  codigoPorcentaje:string; // string para que agarre "10"
+  tarifa?:number; // <- con ? ya no te obliga en todos lados
+  iva:number;
+  ice:number;
+  esPlastico:boolean;
+  valorIva?:number;
+  detalleAdicional?: string;
+  descDolar?: number;
+  tarifas?: {min:number, may:number, dist:number}
+}
+
+// === NUEVO BLOQUE PROVEEDOR SISTEMA - FICHA TECNICA SRI ===
+const PROVEEDOR_SISTEMA = {
+  nombre: "MEIJSAC POS",
+  ruc: "1793161234001", // <-- CAMBIA AQUI TU RUC REAL 13 DIGITOS
+  contacto: "https://meijsacpos.com - Soporte Quito"
+}
+
+const Chisme = ({texto, titulo}:{texto:string, titulo:string}) => (
+  <div className="absolute -top-[58px] left-1/2 -translate-x-1/2 hidden group-hover:block z-50">
+    <div className="bg-black border border-[#00f5d4] rounded-xl px-3 py-2 shadow-[0_0_20px_rgba(0,245,212,0.3)] min-w-[220px]">
+      <p className="text-[#00f5d4] font-black text-[11px]">{titulo}</p>
+      <p className="text-white text-[10px] mt-1">— {texto}</p>
+    </div>
+    <div className="w-2 h-2 bg-black border-r border-b border-[#00f5d4] rotate-45 mx-auto -mt-1"></div>
+  </div>
+);
+
+export default function FacturadorXMLReal(){
+  const [fecha, setFecha] = useState("")
+  const [secuencial] = useState("000000015")
+  const [establecimiento] = useState("001-001")
+  const [configEmisor, setConfigEmisor] = useState<any>({})
+    // --- AGREGADO TEMA Y CLIENTE ---
+  const [isDark, setIsDark] = useState(true)
+  const [showNuevoCliente, setShowNuevoCliente] = useState(false)
+  const [buscandoSRI, setBuscandoSRI] = useState(false)
+  const [nuevoCliForm, setNuevoCliForm] = useState({ razon:"", identificacion:"", direccion:"", email:"", telefono:"" })
+  
+
+  useEffect(()=>{
+    setFecha(new Date().toLocaleDateString('es-EC'))
+    const c1 = localStorage.getItem("meijsac_config_restaurante")
+    const c2 = localStorage.getItem("meijsac_config_facturacion")
+    if(c1) setConfigEmisor(JSON.parse(c1))
+    else if(c2) setConfigEmisor(JSON.parse(c2))
+  },[])
+
+
+  const [cliente, setCliente] = useState<any>({
+    tipoDoc:"05", identificacion:"9999999999999", razon:"CONSUMIDOR FINAL",
+    tipold: "",
+    direccion:"QUITO",
+    email:"cliente@dominio.com",
+    telefono: "",
+    celular: "",
+    provincia: "Pichincha",
+    ciudad: "Quito",
+    tipoEstablecimiento: "matriz",
+    codSucursal: "001",
+    limiteCredito: 200,
+    diasCredito: 30,
+    politicaCredito: "REQUISITO" as keyof typeof POLITICAS,
+    requisitosEntregados: false
+  })
+
+ const [catalogoRapido, setCatalogoRapido] = useState<any[]>([]);
+useEffect(()=>{
+  const s = localStorage.getItem('catalogo_rapido_meijsac');
+  if(s) try{ setCatalogoRapido(JSON.parse(s)) }catch{}
+},[]);
+useEffect(()=>{
+  localStorage.setItem('catalogo_rapido_meijsac', JSON.stringify(catalogoRapido));
+},[catalogoRapido]);
+
+const [busquedaLector, setBusquedaLector] = useState("");
+const [sugerencias, setSugerencias] = useState<any[]>([]);
+
+  const [sucursalesFactura, setSucursalesFactura] = useState<any[]>([]);
+  const [sucursalSeleccionada, setSucursalSeleccionada] = useState<any>(null);
+
+    const cargarSucursalesFactura = async (clienteId: string) => {
+  try {
+    const res = await fetch(`/api/sucursales?clienteId=${clienteId}`);
+    const data = await res.json();
+    // Quita duplicados por código
+    const unicas = Array.from(new Map(data.map((s:any)=>[s.codigo, s])).values());
+    setSucursalesFactura(unicas);
+    setSucursalSeleccionada(unicas.find((s:any)=>s.esMatriz) || unicas[0]);
+  } catch (e) { console.error(e); }
+};
+
+  // ESTE VA JUSTO DEBAJO DE CLIENTE
+  const manejarBusquedaCliente = async () => {
+    const id = cliente.identificacion;
+    if(!id) return alert("Pon cédula o RUC");
+    
+    // 1. Busca primero en tus clientes guardados
+    try {
+      const local = await fetch(`/api/clientes?q=${id}`).then(r => r.json());
+      if(local && local.length > 0){
+        setCliente({
+          ...cliente,
+          razon: local[0].razonSocial || local[0].razon,
+          direccion: local[0].direccion,
+          email: local[0].email,
+          telefono: local[0].telefono,
+          tipoId: local[0].tipoId
+        });
+        return;
+      }
+    } catch(e){}
+
+    // 2. Si no existe, va al SRI
+    setBuscandoSRI(true);
+    try {
+      const res = await fetch(`/api/sri/buscar-ruc?id=${id}`);
+      const json = await res.json();
+      if(json.success){
+        setCliente((f: any) => ({...f, razon: json.data.razonSocial, direccion: json.data.direccion}));
+      } else {
+        alert("No encontrado en SRI");
+      }
+    } catch(e){ alert("Error SRI"); }
+    setBuscandoSRI(false);
+  }
+
+  const guardarClienteRapido = async () => {
+    if(!cliente.razon || cliente.razon === "CONSUMIDOR FINAL") return alert("Busca primero un cliente en SRI");
+    const res = await fetch("/api/clientes", {
+      method: "POST",
+      headers: {"Content-Type":"application/json"},
+      body: JSON.stringify({
+        id: Date.now().toString(),
+        tipoId: cliente.tipoId || "05",
+        identificacion: cliente.identificacion,
+        razonSocial: cliente.razon,
+        direccion: cliente.direccion,
+        email: cliente.email,
+        telefono: cliente.telefono,
+        tipoCliente: "NATURAL",
+        categoria: "DETALLISTA",
+        descuento: 0,
+        diasCredito: 0,
+        limiteCredito: 0
+      })
+    });
+    const json = await res.json();
+    if(json.success){
+      alert("✅ Guardado. Ya aparece en dashboard/clientes");
+    }
+  }
+
+  const [productos] = useState([
+    {id:1, codigo:"P001", codigoBarras:"786123456789", nombre:"PRODUCTO DE PRUEBA", stock:45, precio:15.00, precioMay:13.00, precioDist:11.00, codigoPorcentaje:4, iva:15},
+    {id:2, codigo:"P002", codigoBarras:"786987654321", nombre:"ARTÍCULO COMERCIAL", stock:20, precio:25.50, precioMay:22.00, precioDist:19.50, codigoPorcentaje:0, iva:0},
+  ])
+    const codigoRef = useRef<HTMLInputElement>(null)
+  const [codigoRapido, setCodigoRapido] = useState("")
+  // --- DETECTOR AUTOMÁTICO DE FERIADOS ECUADOR - SRI CÓDIGO 8 ---
+const FERIADOS_ECUADOR = [
+  "2025-01-01", "2025-03-03", "2025-03-04", "2025-04-18", "2025-05-01", "2025-05-24",
+  "2025-08-10", "2025-10-09", "2025-11-02", "2025-11-03", "2025-12-25",
+  "2026-01-01", "2026-02-16", "2026-02-17", "2026-04-03", "2026-05-01", "2026-05-25",
+  "2026-08-10", "2026-10-09", "2026-11-02", "2026-11-03", "2026-12-25",
+  "2027-01-01", "2027-02-08", "2027-02-09", "2027-03-26", "2027-05-01", "2027-05-24",
+];
+
+const [esTurismoFeriado, setEsTurismoFeriado] = useState(false);
+const [esDiaFeriadoHoy, setEsDiaFeriadoHoy] = useState(false);
+const [anuncioFeriadoCerrado, setAnuncioFeriadoCerrado] = useState(false); 
+useEffect(()=>{
+  const hoy = new Date().toISOString().slice(0,10); // YYYY-MM-DD
+  const esFeriado = FERIADOS_ECUADOR.includes(hoy);
+  const esFinde = [0,6].includes(new Date().getDay()); // Domingo o Sábado, por si hay decreto puente
+  if(esFeriado){
+    setEsDiaFeriadoHoy(true);
+    console.log("🏖️ HOY ES FERIADO SRI - Se habilita Código 8 (8%)");
+  }
+}, []);
+
+const toggleTurismoFeriado = (checked: boolean) => {
+  setEsTurismoFeriado(checked);
+  setItems((prev: any[]) => prev.map((it:any) => {
+    if (checked) {
+      if (it.codigoPorcentaje === "4") {
+        return { ...it, codigoPorcentaje: "8", tarifa: 8, codigoPorcentajeAnterior: "4" };
+      }
+    } else {
+      if (it.codigoPorcentaje === "8") {
+        const codAnterior = it.codigoPorcentajeAnterior || "4";
+        return { ...it, codigoPorcentaje: codAnterior, tarifa: CATALOGO_IVA_SRI[codAnterior].tarifa, codigoPorcentajeAnterior: undefined };
+      }
+    }
+    return it;
+  }));
+};
+
+  const [filtroProd, setFiltroProd] = useState("")
+  const [items, setItems] = useState<Item[]>([])
+  
+  const [pagos, setPagos] = useState({ efectivo:0, redBancaria:0, tarjeta:0, debito:0, compensacion:0, dineroElec:0, prepago:0, endoso:0 } as any)
+  const [propinaCheck, setPropinaCheck] = useState(false)
+  const [abonos, setAbonos] = useState({ efectivo: 0, transfer: 0, tarjeta: 0, credito: 0 })
+  const [tarjetaData, setTarjetaData] = useState({ tipoSRI:"19", forma:"CORRIENTE", plazo:0, franquicia:"Datafast - Visa / Mastercard" })
+  const [conteoCaja, setConteoCaja] = useState({ "100":0,"50":0,"20":0,"10":0,"5":0,"1":0,"0.50":0,"0.25":0,"0.10":0,"0.05":0,"0.01":0 } as any)
+  const [pagoRealizado, setPagoRealizado] = useState(false)
+  const [cajaAbierta, setCajaAbierta] = useState(false)
+  const [tipoCobro, setTipoCobro] = useState<'efectivo'|'tarjeta'|'transfer'|'credito'>('efectivo')
+  const [refTarjeta, setRefTarjeta] = useState("")
+  const [refTransfer, setRefTransfer] = useState("")
+  const [plazoElegido, setPlazoElegido] = useState(30)
+  const bufferLector = useRef("")
+
+  useEffect(()=>{ setPlazoElegido(cliente.diasCredito) }, [cliente.diasCredito])
+
+  // LECTOR POR ARTE DE MAGIA - INVISIBLE EN TODA LA PÁGINA
+  useEffect(()=>{
+    const handleKeyDown = (e:KeyboardEvent) => {
+      const target = e.target as HTMLElement
+      if(target.tagName === "INPUT" || target.tagName === "SELECT" || target.tagName === "TEXTAREA") return
+      if(e.key==="Enter"){
+        const code = bufferLector.current.trim()
+        if(code.length >= 3){
+          const prod = productos.find((p:any)=>p.codigo===code || p.codigoBarras===code || p.codigoBarras===code.replace(/\D/g,''))
+          if(prod){
+            e.preventDefault()
+            addProducto(prod)
+            if(navigator.vibrate) navigator.vibrate(50)
+          }
+        }
+        bufferLector.current = ""
+      } else if(e.key.length===1){
+        bufferLector.current += e.key
+        setTimeout(()=>{ if(bufferLector.current.length>0 && bufferLector.current.length<3) bufferLector.current="" }, 800)
+      }
+    }
+    window.addEventListener("keydown", handleKeyDown)
+    return ()=>window.removeEventListener("keydown", handleKeyDown)
+      }, [productos, items])
+      // LIMPIEZA AUTOMATICA CADA VEZ QUE ABRES CAJA
+useEffect(()=>{
+  if(cajaAbierta){
+    setAbonos({ efectivo: 0, transfer: 0, tarjeta: 0, credito: 0 })
+    setConteoCaja({ "100":0,"50":0,"20":0,"10":0,"5":0,"1":0,"0.50":0,"0.25":0,"0.10":0,"0.05":0,"0.01":0 })
+    setRefTarjeta("")
+    setRefTransfer("")
+    setTipoCobro('efectivo')
+  }
+},[cajaAbierta])
+
+    useEffect(()=>{
+          const tema = localStorage.getItem("meijsac_factura_tema")
+    if(tema) setIsDark(tema === "dark")
+    const transito = localStorage.getItem("meijsac_transito_factura")
+    if(transito){
+      try{
+        const data = JSON.parse(transito)
+        const itemsRestaurante: Item[] = data.items.map((it:any, idx:number)=>({
+  codigo: `REST-${Date.now()}-${idx}`,
+  descripcion: it.descripcion,
+  detalle: it.descripcion,
+  cant: it.cantidad || 1,
+  pUnit: it.precio,
+  descPorc: 0,
+  codigoPorcentaje: "4", // ANTES tenias 2, AHORA 4 = 15% VIGENTE según Tabla 17
+  iva: 15,
+  ice: 0,
+  esPlastico: false,
+  tarifas: { min:0, may:0, dist:0 }
+}))
+        setItems(itemsRestaurante)
+        setCliente((prev:any)=>({...prev, razon: data.cliente?.nombre || data.origen || `MESA ${data.mesaOrigenId||''} - CONSUMIDOR FINAL`, tipoDoc: "07", identificacion: data.cliente?.ruc || "9999999999999" }))
+        // No borramos el transito aqui, se borra despues de AUTORIZAR en emitirComprobante
+      } catch(e){ console.error("Error transito", e) }
+    }
+  },[])
+
+    const toggleTema = ()=>{
+    const nuevo = !isDark
+    setIsDark(nuevo)
+    localStorage.setItem("meijsac_factura_tema", nuevo ? "dark" : "light")
+  }
+
+const manejarConsultaSRIExpress = async () => {
+  const identificacion = cliente.identificacion.trim();
+  if (identificacion.length !== 10 && identificacion.length !== 13) {
+    alert('Por favor, ingresa una cédula (10 dígitos) o RUC (13 dígitos) válido.');
+    return;
+  }
+  setBuscandoSRI(true);
+  try {
+    const response = await fetch(`/api/sri/consulta-ciudadano?id=${identificacion}`, { 
+      cache: "no-store" 
+    });
+    const result = await response.json();
+    if (!response.ok || !result.success) {
+      throw new Error(result.error || 'No se encontraron datos');
+    }
+    setCliente((prev: any) => ({
+      ...prev,
+      razon: result.data.razonSocial,
+      direccion: result.data.direccion,
+    }));
+    console.log('Datos cargados:', result.data);
+  } catch (error: any) {
+    console.error('Error SRI:', error);
+    alert(error.message);
+  } finally {
+    setBuscandoSRI(false);
+  }
+};
+
+  const guardarNuevoCliente = ()=>{
+    if(!nuevoCliForm.identificacion || !nuevoCliForm.razon){ alert("Cédula y Razón obligatorios"); return }
+    const guardados = JSON.parse(localStorage.getItem("meijsac_clientes")||"[]")
+    localStorage.setItem("meijsac_clientes", JSON.stringify([...guardados, {...nuevoCliForm, id:Date.now()}]))
+    setCliente({...cliente, identificacion:nuevoCliForm.identificacion, razon:nuevoCliForm.razon, direccion:nuevoCliForm.direccion||"TENA"})
+    setShowNuevoCliente(false)
+    setNuevoCliForm({ razon:"", identificacion:"", direccion:"", email:"", telefono:"" })
+  }
+  
+  const addProducto = (p:any) => {
+  const idx = items.findIndex(i=>i.codigo===p.codigo || i.codigo===p.codigoBarras)
+  if(idx>=0){
+    const n=[...items]; n[idx].cant+=1; setItems(n)
+  } else {
+    setItems([...items, {
+      codigo:p.codigo, descripcion:p.nombre, detalle:"", detalleAdicional:"", cant:1, pUnit:p.precio, descPorc:0, descDolar:0,
+      codigoPorcentaje:p.codigoPorcentaje, iva:p.iva, ice:0, esPlastico:false,
+      tarifas:{min:p.precio, may:p.precioMay||p.precio, dist:p.precioDist||p.precio}
+    }])
+  }
+  // --- CATALOGO RAPIDO: ultimos usados ---
+  setCatalogoRapido(prev=>{
+    const sinDup = prev.filter((x:any)=>x.codigo!==p.codigo);
+    return [p, ...sinDup].slice(0,12);
+  });
+}
+    const buscarYAgregarPorCodigoTexto = (texto:string) => {
+  if(!texto) return;
+  const t = texto.trim().toLowerCase();
+  if(!t) return;
+
+  // 1. Intenta por código exacto (como ya hace tu pistola)
+  let prod = (productos || []).find((p:any)=> 
+    p.codigo?.toLowerCase() === t || 
+    p.codigoBarras?.toLowerCase() === t
+  );
+
+  // 2. Si no encuentra, busca por NOMBRE
+  if(!prod){
+    const porNombre = (productos || []).filter((p:any)=>
+      p.nombre?.toLowerCase().includes(t)
+    );
+    if(porNombre.length === 1){
+      prod = porNombre[0];
+    } else if(porNombre.length > 1){
+      // Si hay varios con ese nombre, muestra la lista
+      setSugerencias(porNombre.slice(0,6));
+      return;
+    }
+  }
+
+  // 3. Si encontró, agrega
+  if(prod){
+    addProducto(prod);
+    setCodigoRapido("");
+    setSugerencias([]);
+  } else {
+    // si no hay nada, limpia
+    setSugerencias([]);
+  }
+}
+  
+  const addVacio = () => setItems([...items, {codigo:"", descripcion:"", detalle:"", detalleAdicional:"", cant:1, pUnit:0, descPorc:0, descDolar:0, codigoPorcentaje:"4", tarifa:15, iva:15, ice:0, esPlastico:false }])
+  // CATÁLOGO TABLA 17 SRI - TARIFAS IVA OFFLINE
+const CATALOGO_IVA_SRI: any = {
+  "0":  { tarifa: 0,  label: "0% - 0% Canasta Básica / Medicina / Export",  sri: "0%" },
+  "2":  { tarifa: 12, label: "12% - 12% Histórico (Compatibilidad)",        sri: "12%" },
+  "3":  { tarifa: 14, label: "14% - 14% Histórico Terremoto 2016",         sri: "14%" },
+  "4":  { tarifa: 15, label: "15% - 15% General Vigente - Conflicto Interno", sri: "15%" },
+  "5":  { tarifa: 5,  label: "5% - 5% Materiales Construcción",             sri: "5%" },
+  "6":  { tarifa: 0,  label: "6 - No Objeto de Impuesto",                   sri: "0% - No Objeto" },
+  "7":  { tarifa: 0,  label: "7 - Exento de IVA",                           sri: "0% - Exento" },
+  "8":  { tarifa: 8,  label: "8% - 8% Turismo Feriados Decreto Presidencia", sri: "8%" },
+  "10": { tarifa: 13, label: "13% - 13% Catálogo Técnico Previo",           sri: "13%" },
+}
+
+  const bruto = items.reduce((s,i)=>s+i.cant*i.pUnit,0)
+  const descuento = items.reduce((s,i)=>s+(i.cant*i.pUnit*i.descPorc/100),0)
+  const subtotalSin = bruto - descuento
+
+  const base15 = items.filter(i=>i.codigoPorcentaje==="4").reduce((s,i)=>s+(i.cant*i.pUnit)*(1-i.descPorc/100),0)
+const base0 = items.filter(i=>i.codigoPorcentaje==="0").reduce((s,i)=>s+(i.cant*i.pUnit)*(1-i.descPorc/100),0)
+const baseNoObjeto = items.filter(i=>i.codigoPorcentaje==="6").reduce((s,i)=>s+(i.cant*i.pUnit)*(1-i.descPorc/100),0) || 0
+const baseExento = items.filter(i=>i.codigoPorcentaje==="7").reduce((s,i)=>s+(i.cant*i.pUnit)*(1-i.descPorc/100),0) || 0
+const baseDiferenciado = items.filter(i=>i.codigoPorcentaje==="10" || i.codigoPorcentaje==="5" || i.codigoPorcentaje==="8" || i.codigoPorcentaje==="2" || i.codigoPorcentaje==="3").reduce((s,i)=>s+(i.cant*i.pUnit)*(1-i.descPorc/100),0) || 0
+const base5 = items.filter(i=>i.codigoPorcentaje==="5").reduce((s,i)=>s+(i.cant*i.pUnit)*(1-i.descPorc/100),0) || 0
+const base8 = items.filter(i=>i.codigoPorcentaje==="8").reduce((s,i)=>s+(i.cant*i.pUnit)*(1-i.descPorc/100),0) || 0
+
+const valorICE = items.reduce((s,i)=>s+i.ice,0) || 0
+const valorIRBPNR = items.filter(i=>i.esPlastico).reduce((s,i)=>s+(i.cant*0.02),0) || 0
+const iva15 = base15*0.15
+const iva5 = base5*0.05
+const iva8 = base8*0.08
+const ivaDiferenciado = iva5 + iva8 // + otros si usas 12%,13%,14%
+const propina = propinaCheck? subtotalSin*0.10 : 0
+const total = subtotalSin + iva15 + ivaDiferenciado + valorICE + valorIRBPNR + propina
+  const esConsumidorFinal = cliente.identificacion === "9999999999999" || cliente.identificacion.trim() === "" || cliente.razon.toUpperCase().includes("CONSUMIDOR FINAL")
+  const superaLimiteSri = total > 50.00
+  const ventaBloqueadaPorNormativa = esConsumidorFinal && superaLimiteSri
+
+  const sumaOtrosPagos = pagos.redBancaria + pagos.tarjeta + pagos.debito + pagos.compensacion + pagos.dineroElec + pagos.prepago + pagos.endoso
+  const efectivoCalculado = total - sumaOtrosPagos
+  const pagosReales = {...pagos, efectivo: efectivoCalculado < 0? 0 : efectivoCalculado}
+  const totalPagado = pagosReales.efectivo + sumaOtrosPagos
+  const vuelto = totalPagado - total
+  const saldoPendiente = total - totalPagado
+
+  const totalEfectivoEntregado = Object.entries(conteoCaja).reduce((acc:number,[billete,cant]:any)=> acc + (parseFloat(billete)*Number(cant||0)), 0)
+  const vueltoReal = totalEfectivoEntregado - total
+
+  const puedeConfirmar = () => {
+    if(tipoCobro==='efectivo') return totalEfectivoEntregado >= total && total>0
+    if(tipoCobro==='tarjeta') return refTarjeta.trim().length >= 3
+    if(tipoCobro==='transfer') return refTransfer.trim().length >= 3
+    if(tipoCobro==='credito'){
+      if(cliente.politicaCredito==="BLOQUEADO") return false
+      if(cliente.politicaCredito==="VIP") return total>0 && plazoElegido>0
+      return total <= cliente.limiteCredito && total>0 && plazoElegido<=cliente.diasCredito
+    }
+    return false
+  }
+
+  // === NUEVO - CLAVE 49 DIGITOS MODULO 11 ===
+  const getModulo11 = (clave48:string)=>{
+    let factor=2, suma=0
+    for(let i=clave48.length-1;i>=0;i--){ suma+=parseInt(clave48[i])*factor; factor=factor===7?2:factor+1 }
+    const mod = 11 - (suma % 11)
+    if(mod===11) return 0
+    if(mod===10) return 1
+    return mod
+  }
+  const getClaveAcceso = ()=>{
+    const ddmmyyyy = new Date().toLocaleDateString('es-EC').replace(/\//g,"").padStart(8,"0")
+    const tipoComp = "01"
+    const ruc = configEmisor.ruc || "1707276760001"
+    const amb = configEmisor.ambiente==="PRODUCCIÓN"?"2":"1"
+    const serie = establecimiento.replace("-","")+secuencial.padStart(9,"0")
+    const codigoNum = "12345678"
+    const tipoEmision = "1"
+    const clave48 = `${ddmmyyyy}${tipoComp}${ruc}${amb}${serie}${codigoNum}${tipoEmision}`
+    const dv = getModulo11(clave48)
+    return `${clave48}${dv}`
+  }
+
+  // === NUEVO - IMPRESION RIDE A4 ===
+  const imprimirRIDE = ()=>{
+    const clave = getClaveAcceso()
+    const html = `
+    <html><head><title>RIDE ${establecimiento}-${secuencial}</title>
+    <style>body{font-family:Arial;font-size:11px;color:#000}.borde{border:1px solid #000;padding:8px}.t{font-size:16px;font-weight:900} table{width:100%;border-collapse:collapse} td,th{border:1px solid #000;padding:4px;font-size:10px}</style>
+    </head><body>
+    <div style="display:flex;justify-content:space-between">
+      <div style="width:58%" class="borde">
+        <div style="height:60px;border:1px dashed #aaa;display:flex;align-items:center;justify-content:center;font-size:9px">Logotipo Empresa</div>
+        <div><b>${configEmisor.razon||"HERRERA VELOZ EDGAR FAVIAN"}</b></div>
+        <div>${configEmisor.comercial||"EL VECINO - CEVICHERIA"}</div>
+        <div><b>Dirección Matriz:</b> ${configEmisor.matriz||"AV DE LA PRENSA 3748 Y SALVADOR MARTINEZ"}</div>
+        <div><b>Dirección Sucursal:</b> ${configEmisor.sucursal||"AV DE LA PRENSA 3748 Y SALVADOR MARTINEZ"}</div>
+        <div><b>Obligado Contabilidad:</b> ${configEmisor.obligado||"NO"}</div>
+        <div><b>${configEmisor.regimen||"Contribuyente Régimen RIMPE Negocio Popular"}</b></div>
+        ${configEmisor.agenteRet && configEmisor.agenteRet!=="NO"?`<div><b>Agente Retención Res. Nro:</b> ${configEmisor.agenteRet}</div>`:""}
+      </div>
+      <div style="width:40%" class="borde">
+        <div>RUC: <b>${configEmisor.ruc||"1707276760001"}</b></div>
+        <div class="t">FACTURA</div>
+        <div>No. ${establecimiento}-${secuencial}</div>
+        <div><b>Número Autorización / Clave Acceso</b><br/>${clave}</div>
+        <div style="margin-top:6px;border:1px solid #000;height:50px;display:flex;align-items:center;justify-content:center">*${clave}*</div>
+        <div>Fecha y Hora Autorización: ${new Date().toLocaleString('es-EC')}</div>
+        <div>Ambiente: ${configEmisor.ambiente||"PRODUCCIÓN"}</div>
+        <div>Emisión: NORMAL</div>
+      </div>
+    </div>
+    <div class="borde" style="margin-top:8px">
+      <div><b>Razón Social / Nombres:</b> ${cliente.razon} - <b>Identificación:</b> ${cliente.identificacion} - <b>Fecha Emisión:</b> ${fecha}</div>
+      <div><b>Dirección:</b> ${cliente.direccion}</div>
+      <div><b>Guía Remisión:</b> </div>
+    </div>
+    <table style="margin-top:8px"><tr><th>Cod. Principal</th><th>Cod. Auxiliar</th><th>Cant</th><th>Descripción</th><th>Detalle Adicional</th><th>Precio Unitario</th><th>Descuento</th><th>Precio Total</th></tr>
+    ${items.map(it=>`<tr><td>${it.codigo}</td><td></td><td>${it.cant}</td><td>${it.descripcion}</td><td>${it.detalleAdicional||""}</td><td>${it.pUnit.toFixed(2)}</td><td>${(it.descDolar||0).toFixed(2)}</td><td>${(it.cant*it.pUnit-(it.descDolar||0)).toFixed(2)}</td></tr>`).join("")}
+    </table>
+    <div style="display:flex;justify-content:space-between;margin-top:8px">
+      <div style="width:58%" class="borde">
+        <b>Información Adicional</b><br/>
+        Dirección: ${cliente.direccion}<br/>
+        Teléfono: ${cliente.telefono} ${cliente.celular}<br/>
+        Email: ${cliente.email}<br/>
+        Provincia: ${cliente.provincia} Ciudad: ${cliente.ciudad}<br/>
+        Vendedor: POS QUITO<br/><br/>
+        <b style="border:1px solid #000;padding:4px;display:block">Proveedor del Sistema: ${PROVEEDOR_SISTEMA.nombre} - RUC Proveedor: ${PROVEEDOR_SISTEMA.ruc} - Contacto: ${PROVEEDOR_SISTEMA.contacto}</b>
+      </div>
+      <div style="width:40%" class="borde">
+  ${Object.keys(CATALOGO_IVA_SRI).map(cod => {
+    const base = items.filter((it:any)=>it.codigoPorcentaje===cod).reduce((a:any,b:any)=>a+(b.cant*b.pUnit),0);
+    if(base===0) return "";
+    return `<div>SUBTOTAL ${CATALOGO_IVA_SRI[cod].label}: $${base.toFixed(2)}</div>`;
+  }).join("")}
+  <div>SUBTOTAL SIN IMPUESTOS: $${(items.reduce((a:any,b:any)=>a+(b.cant*b.pUnit),0)).toFixed(2)}</div>
+  <div>TOTAL DESCUENTO: $${descuento.toFixed(2)}</div>
+  <div>IVA TOTAL: $${(items.reduce((a:any,b:any)=>a+(b.cant*b.pUnit*b.tarifa/100),0).toFixed(2))}</div>
+  <div>IVA 15%: $${items.filter((it:any)=>it.codigoPorcentaje==="4").reduce((a:any,b:any)=>a+(b.cant*b.pUnit*b.tarifa/100),0).toFixed(2)}</div>
+  <div>IVA 8% Turismo: $${items.filter((it:any)=>it.codigoPorcentaje==="8").reduce((a:any,b:any)=>a+(b.cant*b.pUnit*b.tarifa/100),0).toFixed(2)}</div>
+  <div>PROPINA 10%: $${propina.toFixed(2)}</div>
+  <div style="font-size:14px;font-weight:900">VALOR TOTAL: $${total.toFixed(2)}</div>
+</div>
+<div style="font-size:13px">EFECTIVO RECIBIDO: $${(pagosReales.efectivo + (pagos.cambio||0)).toFixed(2)}</div>
+<div style="font-size:14px;font-weight:900;background:#000;color:#fff;padding:4px">CAMBIO / VUELTO: $${(pagos.cambio||0).toFixed(2)}</div>
+<div style="margin-top:6px"><b>Forma Pago</b><br/>01: $${pagosReales.efectivo.toFixed(2)}<br/>${pagos.redBancaria>0?`20: $${pagos.redBancaria.toFixed(2)}<br/>`:""}${pagos.tarjeta>0?`19: $${pagos.tarjeta.toFixed(2)}<br/>`:""}</div>
+      </div>
+    </div>
+    </body></html>`
+    const w=window.open("","_blank"); w?.document.write(html); w?.document.close(); w?.print()
+  }
+
+  const imprimirTicket = ()=>{
+    const clave = getClaveAcceso()
+    const html = `
+    <html><head><title>TICKET ${secuencial}</title>
+    <style>@page{size:80mm auto;margin:2mm} body{width:80mm;font-family:monospace;font-size:11px;color:#000}.c{text-align:center}.b{font-weight:900}.line{border-top:1px dashed #000;margin:4px 0}</style>
+    </head><body>
+    <div class="c b">${configEmisor.comercial||"EL VECINO"}</div>
+    <div class="c">${configEmisor.razon||"HERRERA VELOZ EDGAR FAVIAN"}</div>
+    <div class="c">RUC: ${configEmisor.ruc||"1707276760001"}</div>
+    <div class="c">${configEmisor.sucursal||"AV DE LA PRENSA 3748, TENA"}</div>
+    <div class="c" style="font-size:8px">${configEmisor.regimen||"RIMPE Negocio Popular"} - Obligado: ${configEmisor.obligado||"NO"}</div>
+    <div class="line"></div>
+    <div>FACTURA: ${establecimiento}-${secuencial}</div>
+    <div style="font-size:8px;word-break:break-all">CLAVE: ${clave}</div>
+    <div>Fecha: ${fecha} ${new Date().toLocaleTimeString()}</div>
+    <div>Cliente: ${cliente.razon}</div>
+    <div>RUC/CI: ${cliente.identificacion}</div>
+    <div>Email: ${cliente.email}</div>
+    <div class="line"></div>
+    ${items.map(it=>`<div>${it.cant} x ${it.descripcion}<br/><div style="display:flex;justify-content:space-between"><span>P.Unit:${it.pUnit.toFixed(2)} Desc:${(it.descDolar||0).toFixed(2)}</span><span>Total:${(it.cant*it.pUnit-(it.descDolar||0)).toFixed(2)}</span></div></div>`).join("")}
+    <div class="line"></div>
+    <div>SUBTOTAL 15%: $${base15.toFixed(2)}</div>
+    <div>SUBTOTAL 0%: $${base0.toFixed(2)}</div>
+    <div>IVA 15%: $${iva15.toFixed(2)}</div>
+    <div>PROPINA: $${propina.toFixed(2)}</div>
+    <div class="b" style="font-size:13px">TOTAL: $${total.toFixed(2)}</div>
+    <div class="line"></div>
+    <div>FORMA PAGO SRI TABLA 24</div>
+    <div>EFECTIVO (01): $${pagosReales.efectivo.toFixed(2)} ${vueltoReal>0?`Vuelto: $${vueltoReal.toFixed(2)}`:""}</div>
+    ${pagos.redBancaria>0?`<div>OTROS (20): $${pagos.redBancaria.toFixed(2)} Ref:${refTransfer}</div>`:""}
+    ${pagos.tarjeta>0?`<div>TARJETA (19): $${pagos.tarjeta.toFixed(2)} Ref:${refTarjeta}</div>`:""}
+    ${tipoCobro==='credito'?`<div>CREDITO (20) Plazo:${plazoElegido}d Vence:${new Date(Date.now()+plazoElegido*86400000).toLocaleDateString()}</div>`:""}
+    <div class="line"></div>
+    <div class="c" style="font-size:8px">Consulte validez en portal SRI con clave 49 dígitos<br/>Factura hecha con ${PROVEEDOR_SISTEMA.nombre} - RUC ${PROVEEDOR_SISTEMA.ruc}<br/>${PROVEEDOR_SISTEMA.contacto}</div>
+    </body></html>`
+    const w=window.open("","_blank","width=320,height=600"); w?.document.write(html); w?.document.close(); w?.print()
+  }
+    const guardarComoBorrador = () => {
+    if(items.length===0){ alert("Agrega productos"); return }
+    const hoy = new Date()
+    const borrador = {
+      id: `borr-${Date.now()}`,
+      secuencial: `BORR-${Date.now().toString().slice(-6)}`,
+      receptorNombre: cliente.razon,
+      receptorIdentificacion: cliente.identificacion,
+      items: items,
+      valorTotal: total,
+      total: total,
+      fechaCreacion: hoy.toISOString(),
+      fechaEmision: hoy.toLocaleDateString('es-EC'),
+      estadoSRI: 'BORRADOR'
+    }
+    const actuales = JSON.parse(localStorage.getItem("meijsac_borradores_facturas")||"[]")
+    localStorage.setItem("meijsac_borradores_facturas", JSON.stringify([...actuales, borrador]))
+    window.location.href = "/dashboard/comprobantes/emitidos"
+  }
+  
+  
+  const emitirComprobante = () => {
+    if(!pagoRealizado) return alert("Primero cobra en CAJA")
+    console.log('Generando XML con pagos:', pagosReales, ' refs:', refTarjeta, refTransfer)
+
+    // --- CORRECCIÓN 1: CLAVE 49 + DV MODULO 11 - FICHA TÉCNICA SRI ---
+    const clave = getClaveAcceso()
+
+    // --- INICIO PARCHE RETORNO AUTOMATICO + SPLIT ---
+    const transitoActual = JSON.parse(localStorage.getItem("meijsac_transito_factura")||"{}")
+    const poolRaw = localStorage.getItem("meijsac_split_pool")
+
+    // --- CORRECCIÓN 2: EMPAQUETA TODO PARA LOS 3 DESTINOS ---
+    const facturaPendiente: any = {
+      id: Date.now(),
+      claveAcceso: clave,
+      fechaEmision: new Date().toISOString(),
+      fechaEmisionFormato: fecha,
+      establecimiento: establecimiento,
+      secuencial: secuencial,
+      configEmisor: configEmisor,
+      cliente: cliente,
+      items: items,
+      totales: { bruto, descuento, subtotalSin, base15, base0, baseNoObjeto, baseExento, baseDiferenciado, valorICE, valorIRBPNR, iva15, ivaDiferenciado, propina, total },
+      pagos: pagosReales,
+      refs: { refTarjeta, refTransfer, tipoCobro, plazoElegido },
+      transito: transitoActual,
+      mesaOrigenId: transitoActual?.mesaOrigenId || null
+    }
+
+    if(poolRaw){
+      const pool = JSON.parse(poolRaw)
+      const actualizado = pool.map((p:any)=> p.id===transitoActual.id? {...p, estado:"FACTURADA"} : p)
+      localStorage.setItem("meijsac_split_pool", JSON.stringify(actualizado))
+      const quedan = actualizado.filter((p:any)=> p.estado==="PENDIENTE")
+
+            if(quedan.length===0){
+        facturaPendiente.mesaOrigenId = transitoActual.mesaOrigenId
+        facturaPendiente.esUltimaParte = true
+        localStorage.setItem("meijsac_ultima_factura_pendiente", JSON.stringify(facturaPendiente))
+
+        // --- SUCIA - ULTIMA PARTE PAGADA ---
+        try{
+          const mesas = JSON.parse(localStorage.getItem("meijsac_restaurante_mesas")||"[]")
+          const nuevas = mesas.map((m:any)=> m.id===transitoActual.mesaOrigenId? {...m, estado:"SUCIA", tiempo:0, items:[]} : m)
+          localStorage.setItem("meijsac_restaurante_mesas", JSON.stringify(nuevas))
+        }catch(e){}
+        localStorage.removeItem("meijsac_transito_factura")
+        localStorage.removeItem("meijsac_split_pool")
+
+      } else {
+        facturaPendiente.mesaOrigenId = transitoActual.mesaOrigenId
+        facturaPendiente.parte = transitoActual.numero
+        facturaPendiente.quedan = quedan.length
+        facturaPendiente.siguienteTransito = quedan[0]
+        localStorage.setItem("meijsac_ultima_factura_pendiente", JSON.stringify(facturaPendiente))
+        // NO ponemos SUCIA aqui porque aun quedan cuentas por cobrar
+      }
+    } else {
+    // Flujo normal sin split
+    if(transitoActual?.mesaOrigenId){
+        facturaPendiente.mesaOrigenId = transitoActual.mesaOrigenId
+        facturaPendiente.totalPartes = transitoActual.totalPartes || 1
+        facturaPendiente.numero = transitoActual.numero || 1
+    }
+    localStorage.setItem("meijsac_ultima_factura_pendiente", JSON.stringify(facturaPendiente))
+
+    // --- SUCIA - FLUJO NORMAL ---
+    try{
+      if(transitoActual?.mesaOrigenId){
+        const mesas = JSON.parse(localStorage.getItem("meijsac_restaurante_mesas")||"[]")
+        const nuevas = mesas.map((m:any)=> m.id===transitoActual.mesaOrigenId? {...m, estado:"SUCIA", tiempo:0, items:[]} : m)
+        localStorage.setItem("meijsac_restaurante_mesas", JSON.stringify(nuevas))
+      }
+    }catch(e){}
+    localStorage.removeItem("meijsac_transito_factura")
+    }
+
+    // --- CORRECCIÓN 3: NO IMPRIMAS AQUÍ - VA A LA PANTALLA DE DESPACHO ---
+    window.location.href = `/dashboard/factura-xml/estado?id=${facturaPendiente.id}`;
+  }
+      const buscarEnClientesDB = async () => {
+    if (!cliente.identificacion) return alert("Pon RUC/Cédula");
+    const empresaId = localStorage.getItem("empresaId") || localStorage.getItem("empresa_id") || "meijsac-default";
+    try {
+      const rucLimpio = cliente.identificacion.trim().replace(/\D/g, ""); // solo números
+      const ruc10 = rucLimpio.substring(0, 10); // cédula sin 001
+
+      let res = await fetch(`/api/clientes?empresaId=${empresaId}&q=${rucLimpio}`);
+      let data = await res.json();
+      
+      // Si no encuentra con 13 dígitos, prueba con 10
+      if (!Array.isArray(data) || data.length === 0) {
+        console.log("No con 13, probando con 10:", ruc10);
+        res = await fetch(`/api/clientes?empresaId=${empresaId}&q=${ruc10}`);
+        data = await res.json();
+      }
+
+      console.log("Clientes encontrados:", data);
+
+      if (Array.isArray(data) && data.length > 0) {
+        // Búsqueda flexible, no exacta
+        const c = data.find((x:any) => 
+          x.identificacion?.includes(rucLimpio) || 
+          rucLimpio.includes(x.identificacion) ||
+          x.identificacion?.includes(ruc10)
+        ) || data[0];
+
+        setCliente((f:any) => ({
+          ...f,
+          tipoDoc: c.tipoId || f.tipoDoc,
+          identificacion: c.identificacion,
+          razon: c.razonSocial,
+          direccion: c.direccion,
+          provincia: c.provincia || "PICHINCHA",
+          ciudad: c.ciudad || "QUITO",
+          email: c.email,
+          telefono: c.telefono,
+          celular: c.telefono,
+        }));
+
+        // NUEVO - Carga sucursales de ese cliente
+        if(c.id) {
+          console.log("Cargando sucursales para:", c.id);
+          await cargarSucursalesFactura(c.id);
+        }
+      } else {
+        alert("No está en DB, buscando en SRI...");
+        manejarConsultaSRIExpress();
+      }
+    } catch (e) {
+      console.error(e);
+      alert("Error DB");
+    }
+  };
+
+  return (
+   
+  <div className={`min-h-screen p-4 ${isDark ? "bg-[#080a0f] text-white" : "bg-[#f1f5f9] text-slate-900"}`}>
+    {/* PEGALO AQUÍ ARRIBA DE TODO */}
+    <div className="max-w-7xl mx-auto flex gap-2 mb-4 print:hidden">
+      <a href="/dashboard/restaurante" className="bg-[#1e293b] border border-white/10 px-4 py-2 rounded-full text-[11px] font-bold">← Volver a Restaurante</a>
+      <a href="/dashboard" className="bg-white text-black px-4 py-2 rounded-full text-[11px] font-black">← MEIJSAC POS</a><button onClick={toggleTema} className="bg-white text-black px-3 py-2 rounded-full text-[10px] font-black ml-auto">{isDark?"☀️ CLARO":"🌙 OSCURO"}</button>
+    </div>
+
+    {/* TU CÓDIGO ORIGINAL SIGUE ABAJO */}
+      
+      <div className="flex justify-between bg-[#1e293b] p-3 rounded-xl mb-3 border border-white/10">
+        <div className="font-black">Emisión de Facturas Electrónicas <span className="bg-[#00f5d4]/20 text-[#00f5d4] px-2 py-1 rounded ml-2">RIMPE POPULAR - LECTOR ACTIVO</span></div>
+        <div className="flex gap-4 text-[10px]"><div>FECHA<br/><b>{fecha}</b></div><div>PUNTO<br/><b>{establecimiento}</b></div><div>SEC<br/><b className="text-[#00f5d4]">{secuencial}</b></div><b suppressHydrationWarning>{fecha || "---"}</b></div>
+      </div>
+
+      <div className="grid grid-cols-3 gap-3">
+        <div className="col-span-2 bg-[#1e293b] p-3 rounded-xl border border-white/10">
+          <div className="flex justify-between mb-2"><b className="text-[#00f5d4]">1. + CLIENTE (SRI)</b><button onClick={()=>setShowNuevoCliente(true)} className="bg-[#00f5d4]/20 text-[#00f5d4] px-2 py-1 rounded text-[10px]">+ Nuevo</button></div>
+          <div className="grid grid-cols-3 gap-2">
+            <select value={cliente.tipoDoc} onChange={e=>setCliente({...cliente,tipoDoc:e.target.value})} className="bg-black p-2 rounded-lg text-white text-[11px]">
+              <option value="05">05 - Cédula</option>
+              <option value="04">04 - RUC</option>
+              <option value="07">07 - Consumidor Final</option>
+            </select>
+            <div className="flex gap-1">
+  <input value={cliente.identificacion} onChange={e=>setCliente({...cliente,identificacion:e.target.value})} className="flex-1 ..." />
+  <button
+    type="button"
+    disabled={buscandoSRI}
+    onClick={manejarConsultaSRIExpress}
+    className={`px-4 py-2.5 rounded-xl text-xs font-black ${buscandoSRI ? "bg-cyan-500/20 animate-pulse" : "bg-cyan-400 text-black"}`}
+  >
+    {buscandoSRI ? "⌛ ..." : "🔍 SRI"}
+  </button>
+  <button
+    type="button"
+    onClick={buscarEnClientesDB}
+    className="px-4 py-2.5 rounded-xl text-xs font-black bg-yellow-400 text-black hover:bg-yellow-300"
+  >
+    📂 DB
+  </button>
+</div>
+            <input value={cliente.razon} onChange={e=>setCliente({...cliente,razon:e.target.value})} placeholder="Nombre / Razón Social" className="col-span-2 bg-black p-2 rounded-lg text-white text-[11px]" />
+            <input value={cliente.direccion} onChange={e=>setCliente({...cliente,direccion:e.target.value})} placeholder="Dirección / Ubicación" className="col-span-3 bg-black p-2 rounded-lg text-white text-[11px]" />
+            <input value={cliente.email} onChange={e=>setCliente({...cliente,email:e.target.value})} placeholder="Email" className="bg-black p-2 rounded-lg text-white text-[11px]" />
+            <input value={cliente.telefono || ''} onChange={e=>setCliente({...cliente,telefono:e.target.value})} placeholder="Teléfono" className="bg-black p-2 rounded-lg text-white text-[11px]" />
+            <input value={cliente.celular || ''} onChange={e=>setCliente({...cliente,celular:e.target.value})} placeholder="Celular" className="bg-black p-2 rounded-lg text-white text-[11px]" />
+
+            <select value={sucursalSeleccionada?.codigo === '001' ? 'matriz' : 'sucursal'} onChange={(e)=>setCliente({...cliente,tipoEstablecimiento:e.target.value})} className="bg-black p-2 rounded-lg text-[10px] border border-white/10">
+  <option value="matriz">MATRIZ</option>
+  <option value="sucursal">SUCURSAL</option>
+</select>
+<input value={cliente.codSucursal || sucursalSeleccionada?.codigo || ''} onChange={(e)=>setCliente({...cliente,codSucursal:e.target.value})} placeholder="Cód. Sucursal Ej: 001" className="bg-black p-2 rounded-lg text-[10px] border border-white/10" />
+<div className="col-span-3">
+  <label className="text-[9px] text-[#00f5d4]">Sucursal del cliente - Elige donde facturar:</label>
+  <select value={sucursalSeleccionada?.id || ""} onChange={(e)=>{
+    const s = sucursalesFactura.find((x:any)=>x.id===e.target.value);
+    if(!s) return;
+    setSucursalSeleccionada(s);
+    // ESTA ES LA CLAVE - AQUÍ CONECTAMOS LOS DOS PUNTOS
+    setCliente((f:any)=>({ 
+      ...f, 
+      direccion: s.direccion, 
+      provincia: s.provincia, 
+      ciudad: s.ciudad, 
+      codSucursal: s.codigo,
+      tipoEstablecimiento: 'matriz'
+    }));
+  }} className="w-full mt-1 bg-black border border-[#00f5d4] rounded-lg px-3 py-2 text-[11px] font-bold">
+    {sucursalesFactura.map((s:any)=><option key={s.id} value={s.id}>{s.codigo} - {s.nombre} - {s.provincia}/{s.ciudad} - {s.direccion}</option>)}
+  </select>
+</div>
+           <div className="bg-black/50 p-2 rounded-lg text-[10px] text-zinc-400 flex items-center gap-2">
+  Estab: {sucursalSeleccionada?.codigo === '001' ? 'matriz' : 'sucursal'} - {sucursalSeleccionada?.codigo || '001'}
+</div>
+
+            <select value={cliente.provincia} onChange={(e) => setCliente({...cliente, provincia: e.target.value, ciudad: PROVINCIAS[e.target.value as keyof typeof PROVINCIAS][0]})} className="bg-black text-white p-2 rounded-lg w-full">
+              {Object.keys(PROVINCIAS).map(p => <option key={p} value={p}>{p}</option>)}
+            </select>
+
+            <select value={cliente.ciudad} onChange={(e) => setCliente({...cliente, ciudad: e.target.value})} className="bg-black text-white p-2 rounded-lg w-full">
+              {PROVINCIAS[cliente.provincia as keyof typeof PROVINCIAS]?.map(c => (<option key={c} value={c}>{c}</option>))}
+            </select>
+
+            {/* INICIO NUEVO BLOQUE POLITICA CREDITO - AGREGADO SIN BORRAR LO ANTERIOR */}
+            <div className="col-span-3 grid grid-cols-3 gap-2 bg-black/60 p-2 rounded-lg border border-[#00f5d4]/30 mt-1">
+              <select value={cliente.politicaCredito} onChange={e=>setCliente({...cliente, politicaCredito:e.target.value as any})} className="bg-black p-2 rounded-lg text-white text-[11px] border border-white/10">
+                <option value="BLOQUEADO">🔴 Bloqueado (Sin Crédito)</option>
+                <option value="REQUISITO">🟡 Crédito Bajo Requisito</option>
+                <option value="VIP">🟢 Crédito Libre / VIP</option>
+              </select>
+              <input type="number" value={cliente.limiteCredito} disabled={cliente.politicaCredito==="VIP"||cliente.politicaCredito==="BLOQUEADO"} onChange={e=>setCliente({...cliente, limiteCredito:Number(e.target.value)})} className={`p-2 rounded-lg text-white text-[11px] ${cliente.politicaCredito==="VIP"?'bg-green-900/30 text-green-300':'bg-black'}`} placeholder="Límite $ Ej:200" />
+              <input type="number" value={cliente.diasCredito} onChange={e=>setCliente({...cliente, diasCredito:Number(e.target.value)})} className="bg-black p-2 rounded-lg text-white text-[11px]" placeholder="Días Ej:30" />
+              <label className="col-span-3 flex items-center gap-2 text-[10px]"><input type="checkbox" checked={cliente.requisitosEntregados} onChange={e=>setCliente({...cliente, requisitosEntregados:e.target.checked})} /> Requisitos: Cédula, Planilla luz, Historial 3 meses</label>
+              {cliente.politicaCredito==="VIP" && <div className="col-span-3 text-[9px] text-green-400 font-bold">✓ VIP: Cupo ILIMITADO - POS jamás bloqueará</div>}
+              {cliente.politicaCredito==="BLOQUEADO" && <div className="col-span-3 text-[9px] text-red-400 font-bold">⚠️ Bloqueado: No puede usar CRÉDITO DIRECTO</div>}
+            </div>
+            {/* FIN BLOQUE NUEVO */}
+          </div>
+        </div>
+
+        <div className="bg-[#0f172a] border border-white/10 rounded-xl p-3">
+  <div className="flex justify-between items-center mb-2">
+    <h3 className="text-[12px] font-bold">2. CATÁLOGO RÁPIDO</h3>
+    <span className="text-[9px] text-white/40">{catalogoRapido.length}/12</span>
+  </div>
+  
+ <div className="grid grid-cols-2 gap-2 content-start">
+    {catalogoRapido.length === 0 && (
+      <p className="col-span-2 text-[10px] text-white/30 text-center py-8">
+        Escanea productos y aparecerán aquí automáticamente
+      </p>
+    )}
+    {catalogoRapido.map((p:any)=>(
+      <div key={p.codigo} className="relative bg-black border border-white/10 rounded-lg p-2 hover:border-[#00f5d4]/50 group cursor-pointer">
+        {/* Botón X para eliminar */}
+        <button onClick={(e)=>{e.stopPropagation(); setCatalogoRapido(prev=>prev.filter((x:any)=>x.codigo!==p.codigo))}} 
+          className="absolute -top-1 -right-1 bg-red-500 text-white rounded-full w-4 h-4 flex items-center justify-center text-[10px] opacity-0 group-hover:opacity-100">
+          x
+        </button>
+        
+        <div onClick={()=>addProducto(p)}>
+          <p className="text-[11px] font-bold truncate">{p.nombre}</p>
+          <p className="text-[10px] text-white/50">Stock: {p.stock}</p>
+          <p className="text-[11px] text-[#00f5d4] font-bold">${p.precio?.toFixed(2) || p.pvp}</p>
+          <p className="text-[8px] text-white/20 truncate">{p.codigo}</p>
+        </div>
+      </div>
+    ))}
+  </div>
+</div>
+      </div>
+
+            <div className="bg-[#1e293b] p-3 rounded-xl mt-3 border border-white/10">
+        <div className="flex justify-between">
+          <b className="text-[#00f5d4]">ITEMS Y DETALLES - LECTOR POR ARTE DE MAGIA ACTIVO</b>
+          <span>Bruto: ${bruto.toFixed(2)}</span>
+        </div>
+{/* SOLO APARECE SI HOY ES FERIADO - CÓDIGO 8 SRI */}
+{esDiaFeriadoHoy && !anuncioFeriadoCerrado && (
+  <div className="relative flex items-center gap-3 bg-gradient-to-r from-[#00f5d4]/20 to-black border border-[#00f5d4]/40 rounded-xl p-2.5 mt-3">
+    <input 
+      type="checkbox" 
+      id="check-turismo" 
+      checked={esTurismoFeriado} 
+      onChange={(e)=> toggleTurismoFeriado(e.target.checked)}
+      className="w-5 h-5 accent-[#00f5d4] cursor-pointer"
+    />
+    <label htmlFor="check-turismo" className="flex-1 cursor-pointer">
+      <p className="text-[11px] font-black text-[#00f5d4] leading-none">🏖️ FERIADO DETECTADO HOY - APLICAR 8% TURISMO</p>
+      <p className="text-[9px] text-white/70">SRI Código 8 - Solo para sector turismo</p>
+    </label>
+
+    {/* BOTON X PARA ELIMINAR ANUNCIO */}
+    <button
+      onClick={()=>{
+        setAnuncioFeriadoCerrado(true);
+        if(esTurismoFeriado) toggleTurismoFeriado(false); // si estaba activo, lo regresa a 15%
+      }}
+      className="w-6 h-6 rounded-full bg-white/10 hover:bg-red-500/80 text-white flex items-center justify-center text-[12px] font-black leading-none transition"
+      title="Cerrar anuncio"
+    >
+      ✕
+    </button>
+  </div>
+)}
+        {/* INPUT MAESTRO - PISTOLA + TECLADO + NOMBRE */}
+<div className="mt-3 bg-black border border-[#00f5d4] rounded-xl p-2 flex gap-2 items-center relative">
+  <span className="text-[10px] bg-[#00f5d4] text-black px-2 py-1 rounded-full font-black">LECTOR</span>
+  <input
+    id="codigo-maestro"
+    value={codigoRapido}
+    onChange={(e)=>{
+      const val = e.target.value;
+      setCodigoRapido(val);
+      if(val.length >= 2){
+        const t = val.toLowerCase();
+        // aqui busca por codigo Y por nombre
+        const res = (productos || []).filter((p:any)=>
+          p.nombre?.toLowerCase().includes(t) || 
+          p.codigo?.toLowerCase().includes(t) ||
+          p.codigoBarras?.toLowerCase().includes(t)
+        ).slice(0,6);
+        setSugerencias(res);
+      } else {
+        setSugerencias([]);
+      }
+    }}
+    onKeyDown={(e)=>{
+      if(e.key==='Enter'){
+        e.preventDefault();
+        buscarYAgregarPorCodigoTexto(codigoRapido);
+      }
+    }}
+    placeholder="ESCANEA PISTOLA, CÓDIGO O NOMBRE → Ej: P001 / 786... / llanta"
+    className="flex-1 bg-[#0f172a] border border-[#00f5d4]/30 p-3 rounded-lg text-[#00f5d4] font-black font-mono text-sm uppercase outline-none focus:ring-2 focus:ring-[#00f5d4]"
+    autoFocus
+  />
+  <button onClick={()=> buscarYAgregarPorCodigoTexto(codigoRapido)} className="bg-[#00f5d4] text-black px-4 py-3 rounded-lg font-black text-xs">+ ADD</button>
+
+  {sugerencias.length>0 && (
+    <div className="absolute top-full left-0 mt-2 w-[85%] bg-[#0f172a] border border-[#00f5d4]/40 rounded-xl z-[100] overflow-hidden shadow-2xl">
+      {sugerencias.map((p:any)=>(
+        <div key={p.codigo} onClick={()=>{addProducto(p); setCodigoRapido(""); setSugerencias([])}} 
+          className="p-3 hover:bg-white/10 cursor-pointer flex justify-between items-center border-b border-white/5">
+          <div>
+            <p className="text-[11px] font-bold text-white">{p.nombre}</p>
+            <p className="text-[9px] text-white/40">{p.codigo} • Stock {p.stock}</p>
+          </div>
+          <p className="text-[11px] font-black text-[#00f5d4]">${p.precio}</p>
+        </div>
+      ))}
+    </div>
+  )}
+</div>
+
+        {items.map((it,i)=>(
+          <div key={i} className="grid grid-cols-12 gap-1 mt-1 p-2 bg-black rounded-xl border border-white/5 items-center">
+            <div className="relative group col-span-1"><Chisme titulo="Código del producto" texto=" " /><input value={it.codigo} onChange={e=>{ const n=[...items]; n[i].codigo=e.target.value; setItems(n); }} className="w-full bg-black p-1 rounded text-[10px] font-mono border border-white/10" placeholder="P001" /></div>
+            <div className="relative group col-span-2"><Chisme titulo="Producto" texto="Nombre del producto" /><input value={it.descripcion} onChange={e=>{ const n=[...items]; n[i].descripcion=e.target.value; setItems(n); }} className="w-full bg-black p-1 rounded text-[11px]" /></div>
+            <div className="relative group col-span-2"><Chisme titulo="Detalle Adicional" texto="coloque información adicional" /><input value={it.detalleAdicional || ""} onChange={e=>{ const n=[...items]; (n[i] as any).detalleAdicional=e.target.value; setItems(n); }} placeholder="Color, garantía..." className="w-full bg-[#11131a] p-1 rounded text-[10px] border border-[#00f5d4]/20" /></div>
+            <div className="relative group col-span-1"><Chisme titulo="Cantidad" texto="Cuántas unidades vendes" /><input type="number" value={it.cant} onChange={e=>{ const n=[...items]; n[i].cant=parseFloat(e.target.value)||1; setItems(n); }} className="w-full bg-black p-1 rounded text-xs text-center" /></div>
+            <div className="relative group col-span-1">
+              <Chisme titulo="Precio + Tarifa" texto="Minorista/Mayorista/Distribuidor en caliente" />
+              <div className="flex"><input type="number" value={it.pUnit} onChange={e=>{ const n=[...items]; n[i].pUnit=parseFloat(e.target.value)||0; setItems(n); }} className="w-full bg-black p-1 rounded-l text-xs" /><select onChange={e=>{ const n=[...items]; const v=e.target.value; if(v==='may') n[i].pUnit=n[i].tarifas?.may||n[i].pUnit; if(v==='dist') n[i].pUnit=n[i].tarifas?.dist||n[i].pUnit; if(v==='min') n[i].pUnit=n[i].tarifas?.min||n[i].pUnit; setItems(n); }} className="bg-[#1e293b] text-[8px] rounded-r px-1"><option value="min">MIN</option><option value="may">MAY</option><option value="dist">DIS</option></select></div>
+            </div>
+            <div className="relative group col-span-1"><Chisme titulo="Descuento %" texto="Coloca numero de porcentaje de descuento" /><input type="number" value={it.descPorc || 0} onChange={e=>{ const n=[...items]; const porc=parseFloat(e.target.value)||0; n[i].descPorc=porc; const brutoFila=n[i].cant*n[i].pUnit; n[i].descDolar=(brutoFila*porc/100); setItems(n); }} className="w-full bg-black p-1 rounded text-xs" placeholder="%" /></div>
+            <div className="relative group col-span-1"><Chisme titulo="Descuento $" texto="Coloca el valor total de descuento"/><input type="number" value={it.descDolar || 0} onChange={e=>{ const n=[...items]; const dol=parseFloat(e.target.value)||0; n[i].descDolar=dol; const brutoFila=n[i].cant*n[i].pUnit; n[i].descPorc=brutoFila>0?(dol/brutoFila*100):0; setItems(n); }} className="w-full bg-black p-1 rounded text-xs border border-yellow-500/20" placeholder="$" /></div>
+            <div className="relative group col-span-1"><Chisme titulo="IVA" texto="Cambie el tipo de iva si no lleva inventario" /><select 
+    value={it.codigoPorcentaje} 
+    onChange={e=>{ 
+      const n=[...items]; 
+      const cod = e.target.value;
+      n[i].codigoPorcentaje = cod;
+      n[i].tarifa = CATALOGO_IVA_SRI[cod].tarifa;
+      // Si es No Objeto (6) o Exento (7) el valor del IVA es 0
+      if(cod==="6" || cod==="7"){
+        n[i].valorIva = 0;
+      }
+      setItems(n); 
+    }} 
+    className="w-full bg-black border border-white/20 rounded-lg p-1 text-[10px] text-white"
+  >
+    <option value="0">0 - 0%</option>
+    <option value="4">4 - 15% Vigente</option>
+    <option value="8">8 - 8% Turismo Feriado</option>
+    <option value="5">5 - 5% Construcción</option>
+    <option value="2">2 - 12% Histórico</option>
+    <option value="3">3 - 14% Histórico</option>
+    <option value="10">10 - 13% Técnico</option>
+    <option value="6">6 - No Objeto</option>
+    <option value="7">7 - Exento</option>
+  </select>
+</div>
+            <div className="relative group col-span-1"><Chisme titulo="Subtotal" texto="(Cant x Precio) - Descuento $" /><div className="bg-black p-1 rounded text-[#00f5d4] text-[11px] font-bold text-right">${(it.cant*it.pUnit - (it.descDolar||0)).toFixed(2)}</div></div>
+            <div className="relative group col-span-1"><div className="absolute -top-[52px] left-1/2 -translate-x-1/2 hidden group-hover:block z-50"><div className="bg-red-950 border border-red-500 rounded-xl px-3 py-2"><p className="text-red-400 font-black text-[11px]">Borrar</p></div></div><button onClick={()=>setItems(items.filter((_,idx)=>idx!==i))} className="w-full bg-red-500/20 rounded text-red-400 text-xs font-black">X</button></div>
+          </div>
+        ))}
+      </div>
+
+      <div className="grid grid-cols-2 gap-3 mt-3">
+        <div className="bg-[#1e293b] p-3 rounded-xl border border-white/10">
+          <div className="flex justify-between items-center mb-2">
+  <b className="text-[#00f5d4] text-[11px]">PAGOS (SRI TABLA 24) - FICHA TÉCNICA</b>
+  {(() => {
+    const tp = abonos.efectivo + abonos.transfer + abonos.tarjeta + abonos.credito
+    const diff = total - tp
+    const color = diff > 0.01? 'text-yellow-400' : diff < -0.01? 'text-[#00f5d4] animate-pulse' : 'text-green-400'
+    const texto = diff > 0.01? `Falta: $${diff.toFixed(2)}` : diff < -0.01? `CAMBIO: $${Math.abs(diff).toFixed(2)} - Dar vuelto` : 'Pagado ✓'
+    return <span className={`text-[10px] font-bold ${color}`}>{texto}</span>
+  })()}
+</div>
+
+          <div className="grid grid-cols-3 gap-2">
+            <div className="bg-[#00f5d4]/10 rounded-lg p-2 border border-[#00f5d4]/30">
+              <div className="text-[9px] opacity-60">01 - SIN UTILIZACION DEL SISTEMA FINANCIERO</div>
+              <div className="font-black text-[#00f5d4] text-xl">${pagosReales.efectivo.toFixed(2)}</div>
+              <div className="text-[8px] opacity-40">Auto = Total - otros</div>
+            </div>
+            <label className="bg-black/40 rounded-lg p-2 border border-white/5 cursor-pointer hover:border-white/20">
+              <div className="text-[8px] opacity-60">20 - OTROS CON UTILIZACION DEL SISTEMA FINANCIERO</div>
+              <input type="number" value={pagos.redBancaria||''} onChange={e=>setPagos({...pagos, redBancaria: parseFloat(e.target.value)||0})} className="w-full bg-transparent font-bold outline-none text-sm" placeholder="0.00" />
+              <div className="text-[7px] opacity-30">Transfer / Depósito / Cheque</div>
+            </label>
+            <label className="bg-black/40 rounded-lg p-2 border border-white/5 cursor-pointer hover:border-white/20">
+              <div className="text-[8px] opacity-60">19 - TARJETA DE CREDITO / 16 - DEBITO</div>
+              <input type="number" value={pagos.tarjeta||''} onChange={e=>setPagos({...pagos, tarjeta: parseFloat(e.target.value)||0})} className="w-full bg-transparent font-bold outline-none text-sm" placeholder="0.00" />
+              <div className="text-[7px] opacity-30">Datafast / Medianet</div>
+            </label>
+          </div>
+
+          <details className="mt-3">
+            <summary className="text-[10px] opacity-40 cursor-pointer hover:opacity-70 list-none">
+              + Canales especiales (15, 16, 17, 18, 21) - Solo grandes contribuyentes ▼
+            </summary>
+            <div className="grid grid-cols-4 gap-2 mt-2">
+              <label className="bg-black/30 rounded-lg p-2 border border-white/10">
+                <div className="text-[7px] opacity-60">15 - COMPENSACION DE DEUDAS</div>
+                <input type="number" value={pagos.compensacion||''} onChange={e=>setPagos({...pagos, compensacion: parseFloat(e.target.value)||0})} className="w-full bg-transparent font-bold outline-none text-[11px]" placeholder="0.00" />
+              </label>
+              <label className="bg-black/30 rounded-lg p-2 border border-white/10">
+                <div className="text-[7px] opacity-60">16 - TARJETA DE DEBITO</div>
+                <input type="number" value={pagos.debito||''} onChange={e=>setPagos({...pagos, debito: parseFloat(e.target.value)||0})} className="w-full bg-transparent font-bold outline-none text-[11px]" placeholder="0.00" />
+              </label>
+              <label className="bg-black/30 rounded-lg p-2 border border-white/10">
+                <div className="text-[7px] opacity-60">17 - DINERO ELECTRONICO</div>
+                <input type="number" value={pagos.dineroElec||''} onChange={e=>setPagos({...pagos, dineroElec: parseFloat(e.target.value)||0})} className="w-full bg-transparent font-bold outline-none text-[11px]" placeholder="0.00" />
+              </label>
+              <label className="bg-black/30 rounded-lg p-2 border border-white/10">
+                <div className="text-[7px] opacity-60">18 - TARJETA PREPAGO</div>
+                <input type="number" value={pagos.prepago||''} onChange={e=>setPagos({...pagos, prepago: parseFloat(e.target.value)||0})} className="w-full bg-transparent font-bold outline-none text-[11px]" placeholder="0.00" />
+              </label>
+              <label className="bg-black/30 rounded-lg p-2 border border-white/10 col-span-1">
+                <div className="text-[7px] opacity-60">21 - ENDOSO DE TITULOS</div>
+                <input type="number" value={pagos.endoso||''} onChange={e=>setPagos({...pagos, endoso: parseFloat(e.target.value)||0})} className="w-full bg-transparent font-bold outline-none text-[11px]" placeholder="0.00" />
+              </label>
+            </div>
+          </details>
+
+          {total >= 500 && pagosReales.efectivo === total && (
+            <div className="mt-2 bg-red-500/20 border border-red-500/50 text-red-300 text-[10px] p-2 rounded">
+              ⚠️ REGLA BANCARIZACIÓN: Total ${total.toFixed(2)} ≥ $500. No puede usar solo 01. Debe incluir 15 al 21.
+            </div>
+          )}
+        </div>
+
+        <div className="bg-[#1e293b] p-3 rounded-xl border-t-4 border-t-[#7c3aed] border border-white/10">
+          <b>RESUMEN CONTABLE FACTURA (SRI)</b>
+          <div className="space-y-1 mt-2">
+            <div className="flex justify-between"><span>Subtotal sin Impuestos:</span><b>${subtotalSin.toFixed(2)}</b></div>
+            <div className="flex justify-between"><span>Subtotal IVA 15% (o vig.):</span><b>${base15.toFixed(2)}</b></div>
+            <div className="flex justify-between"><span>Subtotal IVA 0%:</span><b>${base0.toFixed(2)}</b></div>
+            <div className="flex justify-between"><span>Subtotal No objeto de IVA:</span><b>${baseNoObjeto.toFixed(2)}</b></div>
+            <div className="flex justify-between"><span>Subtotal Exento de IVA:</span><b>${baseExento.toFixed(2)}</b></div>
+            <div className="flex justify-between"><span>Subtotal IVA Diferenciado:</span><b>${baseDiferenciado.toFixed(2)}</b></div>
+            <div className="flex justify-between"><span>Total Descuentos:</span><b className="text-red-400">-${descuento.toFixed(2)}</b></div>
+            <div className="flex justify-between"><span>Valor ICE:</span><b>${valorICE.toFixed(2)}</b></div>
+            <div className="flex justify-between"><span>Valor IRBPNR (Plásticos):</span><b>${valorIRBPNR.toFixed(2)}</b></div>
+            <div className="flex justify-between"><span>IVA Oficial:</span><b className="text-[#00f5d4]">${iva15.toFixed(2)}</b></div>
+            <div className="flex justify-between items-center border-t border-white/10 pt-1"><label className="flex items-center gap-2"><input type="checkbox" checked={propinaCheck} onChange={e=>setPropinaCheck(e.target.checked)} /> Propina 10%:</label><b>${propina.toFixed(2)}</b></div>
+            <div className="flex justify-between text-lg border-t border-white/10 pt-2 mt-2"><span className="font-black">VALOR TOTAL A PAGAR:</span><b className="text-[#00f5d4] text-xl">${total.toFixed(2)}</b></div>
+          </div>
+
+          {/* === BOTONES ORIGINALES + BORRADOR + NUEVOS PDF Y TICKET === */}
+<div className="grid grid-cols-3 gap-2 mt-3">
+  <button onClick={() => setCajaAbierta(true)} className="bg-[#00f5d4] text-black font-black py-3 rounded-xl text-xs">
+    CAJA Y COBRO
+  </button>
+  <button onClick={() => guardarComoBorrador()} className="bg-[#ffbe0a] text-black font-black py-3 rounded-xl text-xs">
+    📝 BORRADOR
+  </button>
+  <button onClick={() => emitirComprobante()} disabled={!pagoRealizado} className={`font-black py-3 rounded-xl text-xs ${pagoRealizado? 'bg-white text-black' : 'bg-white/10 text-white/20'}`}>
+    EMITIR
+  </button>
+</div>
+          <div className="grid grid-cols-2 gap-2 mt-2">
+            <button onClick={imprimirRIDE} className="bg-white text-black font-black py-2 rounded-xl text-[10px] border">📄 PDF A4 RIDE (BLOQUES A-F)</button>
+            <button onClick={imprimirTicket} className="bg-black border border-white/20 font-black py-2 rounded-xl text-[10px]">🧾 TICKET 80mm TERMICO</button>
+          </div>
+          <div className="mt-2 text-[8px] opacity-40 p-2 bg-black rounded border border-white/10">
+            Clave 49: {getClaveAcceso()} | Proveedor: {PROVEEDOR_SISTEMA.nombre} RUC {PROVEEDOR_SISTEMA.ruc}
+          </div>
+
+          {cajaAbierta && (
+  <div className="fixed inset-0 bg-black/90 z-[150] flex items-center justify-center p-4">
+    <div className="bg-[#0f1b2e] w-full max-w-[500px] rounded-[20px] border border-cyan-500/30 p-5">
+      <h2 className="font-black text-[#00f5d4]">CAJA ABIERTA - {cliente.identificacion==="9999999999999"?"CONSUMIDOR FINAL":cliente.razon}</h2>
+      
+      {/* === BLOQUE CORREGIDO: TOTAL / PAGADO / VUELTO EN VIVO === */}
+      {(() => {
+        const pagado = (abonos.efectivo||0) + (abonos.transfer||0) + (abonos.tarjeta||0) + (abonos.credito||0)
+        const diff = pagado - total
+        const falta = diff < -0.01
+        const vuelto = diff > 0.01
+        return (
+          <div className="bg-black p-3 rounded-xl mt-3 flex justify-between items-center text-[11px] border border-white/10">
+            <span>Total: <b>${total.toFixed(2)}</b></span>
+            <span>Pagado: <b className="text-[#00f5d4]">${pagado.toFixed(2)}</b></span>
+            {falta && <span className="text-orange-400 font-black">Falta: ${Math.abs(diff).toFixed(2)}</span>}
+            {!falta && !vuelto && <span className="text-green-400 font-black">EXACTO</span>}
+            {vuelto && <span className="bg-[#00f5d4] text-black px-3 py-1 rounded-full font-black">Vuelto: ${diff.toFixed(2)}</span>}
+          </div>
+        )
+      })()}
+
+      <div className="flex gap-2 mt-4">
+        <button onClick={()=>setTipoCobro('efectivo')} className={`flex-1 py-2 rounded-xl text-[11px] font-black ${tipoCobro==='efectivo'?"bg-[#00f5d4] text-black":"bg-white/10"}`}>EFECTIVO</button>
+        <button onClick={()=>setTipoCobro('tarjeta')} className={`flex-1 py-2 rounded-xl text-[11px] font-black ${tipoCobro==='tarjeta'?"bg-[#00f5d4] text-black":"bg-white/10"}`}>TARJETA</button>
+        <button onClick={()=>setTipoCobro('transfer')} className={`flex-1 py-2 rounded-xl text-[11px] font-black ${tipoCobro==='transfer'?"bg-[#00f5d4] text-black":"bg-white/10"}`}>TRANSF</button>
+        <button onClick={()=>setTipoCobro('credito')} className={`flex-1 py-2 rounded-xl text-[11px] font-black ${tipoCobro==='credito'?"bg-[#00f5d4] text-black":"bg-white/10"}`}>CREDITO</button>
+      </div>
+
+      <div className="mt-4 bg-black/50 p-4 rounded-xl border border-white/10">
+        {tipoCobro==='efectivo' && (
+          <div className="space-y-3">
+            <div className="flex justify-between items-center">
+              <span className="text-xs text-white/70">Abono Efectivo</span>
+              <input type="number" className="w-28 bg-[#1a2a44] p-2.5 rounded-xl text-right font-black text-cyan-400 border border-cyan-500/30"
+                value={abonos.efectivo||""}
+                onChange={e=>setAbonos({...abonos, efectivo:Number(e.target.value)})} />
+            </div>
+            <div className="grid grid-cols-4 gap-2">
+              {[
+                {val:20, label:"$20"},
+                {val:10, label:"$10"},
+                {val:5, label:"$5"},
+                {val:1, label:"$1"},
+                {val:0.25, label:"$0.25"},
+                {val:0.10, label:"$0.10"},
+              ].map(b=>(
+                <div key={b.val} className="bg-[#1e293b] p-2 rounded-xl border border-white/5">
+                  <div className="text-[9px] text-white/50 text-center">{b.label}</div>
+                  <input type="number" min="0" placeholder="0"
+                    className="w-full bg-[#0f172a] p-1.5 rounded text-center text-xs font-black text-white mt-1"
+                    value={conteoCaja[b.val.toString()]||""}
+                    onChange={e=>{
+                      const cant = parseInt(e.target.value)||0
+                      const nuevoConteo = {...conteoCaja, [b.val.toString()]: cant}
+                      setConteoCaja(nuevoConteo)
+                      let totalEfectivo = 0
+                      Object.keys(nuevoConteo).forEach(k=>{
+                        totalEfectivo += parseFloat(k) * (nuevoConteo[k]||0)
+                      })
+                      setAbonos({...abonos, efectivo: parseFloat(totalEfectivo.toFixed(2))})
+                    }}
+                  />
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+        {tipoCobro==='tarjeta' && (
+          <div className="space-y-3 bg-[#0f172a]/50 p-3 rounded-xl border border-cyan-500/20">
+            <div className="grid grid-cols-2 gap-2">
+              <button onClick={()=>setTarjetaData({...tarjetaData, tipoSRI:"16"})}
+                className={`py-2.5 rounded-xl text-[11px] font-black border ${tarjetaData.tipoSRI==="16"?"bg-[#00f5d4] text-black border-[#00f5d4]":"bg-[#1a2a44] text-white/60 border-white/10"}`}>
+                TARJETA DEBITO (16)
+              </button>
+              <button onClick={()=>setTarjetaData({...tarjetaData, tipoSRI:"19"})}
+                className={`py-2.5 rounded-xl text-[11px] font-black border ${tarjetaData.tipoSRI==="19"?"bg-[#00f5d4] text-black border-[#00f5d4]":"bg-[#1a2a44] text-white/60 border-white/10"}`}>
+                TARJETA CREDITO (19)
+              </button>
+            </div>
+            <div className="flex gap-2">
+              <input type="number" autoFocus placeholder="Valor - EJ: 30"
+                className="flex-1 bg-[#1a2a44] p-3 rounded-xl font-black text-cyan-400 text-lg border border-white/10"
+                value={abonos.tarjeta||""}
+                onChange={e=>setAbonos({...abonos, tarjeta:Number(e.target.value)})} />
+              <button onClick={()=>setAbonos({...abonos, tarjeta: total - abonos.efectivo - abonos.transfer - abonos.credito})}
+                className="bg-white/10 px-3 rounded-xl text-[10px] leading-none">Usar<br/>${(total-abonos.efectivo-abonos.transfer-abonos.credito-abonos.tarjeta + abonos.tarjeta).toFixed(2)}</button>
+            </div>
+            {tarjetaData.tipoSRI==="19" && (
+              <div className="space-y-2 bg-black/40 p-3 rounded-xl border border-white/5">
+                <div className="grid grid-cols-2 gap-2">
+                  <button onClick={()=>setTarjetaData({...tarjetaData, forma:"CORRIENTE", plazo:0})}
+                    className={`py-2 rounded-xl text-[10px] font-black ${tarjetaData.forma==="CORRIENTE"?"bg-white text-black":"bg-[#1e293b] text-white/70"}`}>CORRIENTE</button>
+                  <button onClick={()=>setTarjetaData({...tarjetaData, forma:"DIFERIDO"})}
+                    className={`py-2 rounded-xl text-[10px] font-black ${tarjetaData.forma==="DIFERIDO"?"bg-white text-black":"bg-[#1e293b] text-white/70"}`}>DIFERIDO</button>
+                </div>
+                {tarjetaData.forma==="DIFERIDO" && (
+                  <select className="w-full bg-[#1a2a44] p-3 rounded-xl text-sm font-bold"
+                    value={tarjetaData.plazo} onChange={e=>setTarjetaData({...tarjetaData, plazo:Number(e.target.value)})}>
+                    <option value={3}>3 meses (Sin Intereses)</option>
+                    <option value={6}>6 meses</option>
+                    <option value={9}>9 meses</option>
+                    <option value={12}>12 meses</option>
+                    <option value={24}>24 meses</option>
+                  </select>
+                )}
+              </div>
+            )}
+            <select className="w-full bg-[#1a2a44] p-3 rounded-xl text-sm font-bold border border-white/10"
+              value={tarjetaData.franquicia} onChange={e=>setTarjetaData({...tarjetaData, franquicia:e.target.value})}>
+              <option>Datafast - Visa / Mastercard</option>
+              <option>Datafast - Diners / Discover</option>
+              <option>Medianet - Banco Pichincha</option>
+              <option>Banco Guayaquil - American Express</option>
+              <option>Banco Austro</option>
+            </select>
+            <input type="text" placeholder="N° Lote / Voucher (Ej: 000142) - OBLIGATORIO"
+              className="w-full bg-[#1e293b] p-3 rounded-xl text-sm border border-white/10"
+              value={refTarjeta} onChange={e=>setRefTarjeta(e.target.value)} />
+          </div>
+        )}
+        {tipoCobro==='transfer' && (
+          <div className="space-y-2">
+            <input type="number" placeholder="Valor Transfer" autoFocus className="w-full bg-[#1a2a44] p-3 rounded-xl font-black text-cyan-400 text-lg" value={abonos.transfer||""} onChange={e=>setAbonos({...abonos, transfer:Number(e.target.value)})} />
+            <input type="text" placeholder="Comprobante" className="w-full bg-[#1e293b] p-3 rounded-xl text-sm" value={refTransfer} onChange={e=>setRefTransfer(e.target.value)} />
+            <button type="button" onClick={()=>setAbonos({...abonos, transfer: total - abonos.efectivo - abonos.tarjeta - abonos.credito})} className="text-[10px] bg-white/10 px-3 py-1 rounded-full">Usar saldo restante</button>
+          </div>
+        )}
+        {tipoCobro==='credito' && <input type="number" placeholder="Valor Crédito" className="w-full bg-[#1a2a44] p-3 rounded-xl font-black" value={abonos.credito||""} onChange={e=>setAbonos({...abonos, credito:Number(e.target.value)})} />}
+      </div>
+
+      {/* === BOTONES CORREGIDOS: PERMITEN VUELTO === */}
+      <div className="grid grid-cols-2 gap-2 mt-4">
+        <button onClick={()=>setCajaAbierta(false)} className="bg-white/10 p-4 rounded-xl">Cancelar</button>
+        {(() => {
+          const pagado = (abonos.efectivo||0) + (abonos.transfer||0) + (abonos.tarjeta||0) + (abonos.credito||0)
+          const diff = pagado - total
+          const falta = total - pagado
+
+          if (falta > 0.01) {
+            return <button disabled className="bg-white/10 text-white/30 p-4 rounded-xl font-black text-[11px]">Falta ${falta.toFixed(2)}</button>
+          }
+          if (diff > 0.01) {
+            return (
+              <button onClick={()=>{
+                const cambio = diff
+                setPagos({efectivo:abonos.efectivo - cambio, redBancaria:abonos.transfer, tarjeta:abonos.tarjeta, credito:abonos.credito, cambio:cambio})
+                setPagoRealizado(true); setCajaAbierta(false)
+              }} className="bg-[#00f5d4] text-black p-4 rounded-xl font-black text-[11px] shadow-[0_0_20px_rgba(0,245,212,0.6)]">
+                ✓ ENTREGAR VUELTO ${diff.toFixed(2)}
+              </button>
+            )
+          }
+          return (
+            <button onClick={()=>{
+              setPagos({efectivo:abonos.efectivo, redBancaria:abonos.transfer, tarjeta:abonos.tarjeta, credito:abonos.credito, cambio:0})
+              setPagoRealizado(true); setCajaAbierta(false)
+            }} className="bg-[#00f5d4] text-black p-4 rounded-xl font-black">
+              ✓ CONFIRMAR PAGO MIXTO
+            </button>
+          )
+        })()}
+      </div>
+    </div>
+          {showNuevoCliente && (
+        <div className="fixed inset-0 bg-black/80 z-[200] flex items-center justify-center p-4">
+          <div className="bg-[#1e293b] w-full max-w-[400px] rounded-[20px] p-5 border border-white/10">
+            <div className="flex justify-between mb-3"><b>➕ NUEVO CLIENTE</b><button onClick={()=>setShowNuevoCliente(false)}>✕</button></div>
+            <input value={nuevoCliForm.identificacion} onChange={e=>setNuevoCliForm({...nuevoCliForm, identificacion:e.target.value})} placeholder="Cédula / RUC *" className="w-full bg-black p-3 rounded-xl text-[12px] mb-2" />
+            <input value={nuevoCliForm.razon} onChange={e=>setNuevoCliForm({...nuevoCliForm, razon:e.target.value})} placeholder="Razón Social *" className="w-full bg-black p-3 rounded-xl text-[12px] mb-2" />
+            <input value={nuevoCliForm.direccion} onChange={e=>setNuevoCliForm({...nuevoCliForm, direccion:e.target.value})} placeholder="Dirección" className="w-full bg-black p-3 rounded-xl text-[12px] mb-2" />
+            <input value={nuevoCliForm.email} onChange={e=>setNuevoCliForm({...nuevoCliForm, email:e.target.value})} placeholder="Email" className="w-full bg-black p-3 rounded-xl text-[12px] mb-2" />
+            <div className="grid grid-cols-2 gap-2 mt-2">
+              <button onClick={()=>setShowNuevoCliente(false)} className="bg-white/10 py-3 rounded-xl">Cancelar</button>
+              <button onClick={guardarNuevoCliente} className="bg-[#00f5d4] text-black py-3 rounded-xl font-black">Guardar</button>
+            </div>
+          </div>
+        </div>
+      )}
+  </div>
+)}
+         
+        </div>
+      </div>
+    </div>
+  )
+}

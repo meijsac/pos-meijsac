@@ -1,0 +1,42 @@
+{
+  "name": "pos-meijsac",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "build:apk": "npx cap copy android && npx cap open android"
+  },
+  "dependencies": {
+    "@capacitor-community/bluetooth-le": "^8.3.0",
+    "@capacitor/android": "^8.5.2",
+    "@capacitor/cli": "^8.5.2",
+    "@capacitor/core": "^8.5.2",
+    "@capacitor/share": "^8.0.2",
+    "@prisma/client": "^6.8.0",
+    "bcryptjs": "^3.0.3",
+    "dexie": "^4.4.6",
+    "framer-motion": "^13.4.0",
+    "jsonwebtoken": "^9.0.3",
+    "next": "16.3.5",
+    "next-pwa": "^5.6.0",
+    "node-forge": "^1.4.0",
+    "react": "19.2.8",
+    "react-dom": "19.2.8",
+    "xlsx": "^0.18.5"
+  },
+  "devDependencies": {
+    "@tailwindcss/postcss": "^4",
+    "@types/bcryptjs": "^2.4.6",
+    "@types/jsonwebtoken": "^9.0.10",
+    "@types/node": "^20",
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
+    "eslint": "^9.39.5",
+    "eslint-config-next": "16.3.5",
+    "prisma": "^6.8.0",
+    "tailwindcss": "^4",
+    "typescript": "^5"
+  }
+}

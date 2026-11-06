@@ -1,0 +1,146 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model Empresa {
+  id              String   @id @default(cuid())
+  ruc             String   @unique
+  razonSocial     String
+  nombre          String?
+  nombreComercial String?
+  direccion       String?
+  telefono        String?
+  email           String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  
+  // Relaciones
+  clientes        Cliente[]
+  usuarios        Usuario[]
+  productos       Producto[]
+  proveedores     Proveedor[]
+  movimientos     MovimientoInventario[]
+}
+
+model Usuario {
+  id        String   @id @default(cuid())
+  nombre    String
+  email     String?
+  password  String
+  rol       String   @default("ADMIN")
+  empresaId String
+  empresa   Empresa  @relation(fields: [empresaId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+}
+
+model Producto {
+  id          String   @id @default(cuid())
+  codigo      String?
+  nombre      String
+  categoria   String?
+  costo       Float    @default(0)
+  precio      Float
+  stock       Float    @default(0)
+  stockMinimo Float    @default(5)
+  empresaId   String
+  empresa     Empresa  @relation(fields: [empresaId], references: [id], onDelete: Cascade)
+  movimientos MovimientoInventario[]
+  createdAt   DateTime @default(now())
+
+  @@unique([codigo, empresaId])
+}
+
+model Cliente {
+  id              String     @id @default(cuid())
+  empresaId       String
+  empresa         Empresa    @relation(fields: [empresaId], references: [id], onDelete: Cascade)
+  tipoId          String     @default("05")
+  identificacion  String
+  razonSocial     String
+  nombreComercial String?
+  tipoCliente     String     @default("DETALLISTA")
+  email           String?
+  telefono        String?
+  direccion       String?
+  provincia       String?    @default("PICHINCHA")
+  ciudad          String?    @default("QUITO")
+  diasCredito     Int        @default(0)
+  limiteCredito   Float      @default(0)
+  categoria       String     @default("DETALLISTA")
+  descuento       Float      @default(0)
+  sucursales      Sucursal[]
+  createdAt       DateTime   @default(now())
+  updatedAt       DateTime   @updatedAt
+
+  @@unique([identificacion, empresaId], name: "identificacion_empresaId")
+}
+
+model Sucursal {
+  id        String   @id @default(cuid())
+  clienteId String
+  codigo    String
+  nombre    String
+  direccion String
+  provincia String   @default("PICHINCHA")
+  ciudad    String   @default("QUITO")
+  telefono  String?
+  email     String?
+  esMatriz  Boolean  @default(false)
+  cliente   Cliente  @relation(fields: [clienteId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+
+  @@unique([clienteId, codigo])
+}
+
+model Proveedor {
+  id        String   @id @default(cuid())
+  ruc       String?
+  nombre    String
+  telefono  String?
+  contacto  String?
+  empresaId String
+  empresa   Empresa  @relation(fields: [empresaId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+}
+
+model MovimientoInventario {
+  id        String   @id @default(cuid())
+  tipo      String
+  cantidad  Float
+  motivo    String?
+  productoId String
+  producto  Producto @relation(fields: [productoId], references: [id], onDelete: Cascade)
+  empresaId String
+  empresa   Empresa  @relation(fields: [empresaId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+}
+
+model CajaTurno {
+  id                String   @id @default(cuid())
+  fechaApertura     DateTime @default(now())
+  fechaCierre       DateTime?
+  usuario           String
+  puntoEmision      String
+  montoInicial      Float
+  estado            String   @default("ABIERTA")
+  montoCierreFisico Float?
+  saldoEsperado     Float?
+  diferencia        Float?
+  movimientos       CajaMovimiento[]
+  createdAt         DateTime @default(now())
+}
+
+model CajaMovimiento {
+  id      String   @id @default(cuid())
+  turnoId String
+  turno   CajaTurno @relation(fields: [turnoId], references: [id], onDelete: Cascade)
+  tipo    String
+  monto   Float
+  motivo  String?
+  fecha   DateTime @default(now())
+}
