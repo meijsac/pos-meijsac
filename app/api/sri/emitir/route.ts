@@ -1,4 +1,3 @@
-"use client" // <- BORRA ESTA LINEA SI TE SALE ERROR, ESTE ARCHIVO ES BACKEND
 import { NextResponse } from "next/server";
 export const dynamic = "force-dynamic"
 
