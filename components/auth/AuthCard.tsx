@@ -6,7 +6,7 @@ import { motion } from "framer-motion"
 export function AuthCard({ dark, setDark, onOpenRegister }: { dark: boolean; setDark: (v: boolean) => void; onOpenRegister: () => void }) {
   const router = useRouter()
   const [tab, setTab] = useState<"ADMIN" | "CAJA">("ADMIN")
-  const [ruc, setRuc] = useState("1790000000001")
+  const [ruc, setRuc] = useState("")
   const [clave, setClave] = useState("123456")
   const [loading, setLoading] = useState(false)
 
@@ -132,7 +132,7 @@ export function AuthCard({ dark, setDark, onOpenRegister }: { dark: boolean; set
         <button
           type="button"
           disabled={loading}
-          onClick={() => goDemo(ruc.trim() || "1790000000001")}
+          onClick={() => goDemo(ruc.trim())}
           className={`w-full mt-2 py-3 rounded-2xl border text-[11px] font-black tracking-widest ${dark ? "border-white/10 text-white/50" : "border-black/10 text-black/50"}`}
         >
           ▶️ PROBAR EN MODO DEMO
