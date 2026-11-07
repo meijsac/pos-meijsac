@@ -179,12 +179,9 @@ base.obligadoConta = obligadoNorm;
 base.obligadoContabilidad = obligadoNorm;
 
 base.ruc = datosReales.ruc || base.ruc;
-// Razón Social: si viene igual al RUC, la dejamos vacía pero EDITABLE
-if (datosReales.razonSocial && datosReales.razonSocial !== datosReales.ruc) {
-  base.razonSocial = datosReales.razonSocial;
-} else if (base.razonSocial === base.ruc) {
-  base.razonSocial = "";
-}
+// NO BLOQUEAR NADA - CARGAR LO QUE EL CLIENTE ESCRIBIÓ EN EL REGISTRO
+base.ruc = datosReales.ruc || base.ruc || "";
+base.razonSocial = datosReales.razonSocial || datosReales.razon || base.razonSocial || "";
 base.nombreComercial = datosReales.nombreComercial || base.nombreComercial || "";
 base.telefono = datosReales.telefono || base.telefono || "";
 base.email = datosReales.email || base.email || "";
@@ -338,15 +335,20 @@ base.sucursales = datosReales.sucursales || base.sucursales || [];
 </div>
                         <p className="text-[#00f5d4] font-bold text-[11px]">GESTIÓN DE IDENTIDAD Y DATOS LEGALES - PERFIL EMISOR SRI</p>
                         <div className="grid md:grid-cols-3 gap-3">
-                            <div className="opacity-60"><label className="text-[9px] text-red-400">RUC * BLOQUEADO SRI</label><input value={cfg.ruc} readOnly className="w-full bg-black/50 p-3 rounded-xl text-sm border border-red-500/20" /></div>
-                            <div className="opacity-60 md:col-span-2">
-  <label className="text-[9px] text-red-400">RAZÓN SOCIAL * BLOQUEADA {(!cfg.razonSocial) ? "- ESCRÍBELA UNA VEZ, LUEGO SE BLOQUEA" : ""}</label>
+                            <div><label className="text-[9px] text-white/40">RUC *</label>
+  <input 
+    value={cfg.ruc || ""} 
+    onChange={e => setCfg({ ...cfg, ruc: e.target.value.replace(/[^0-9]/g,"").slice(0,13) })} 
+    placeholder="EJ: 1713314415001"
+    className="w-full bg-black p-3 rounded-xl text-sm border border-white/10" />
+</div>
+<div className="md:col-span-2"><label className="text-[9px] text-white/40">RAZÓN SOCIAL * - TAL COMO ESTÁ EN EL SRI</label>
   <input 
     value={cfg.razonSocial || ""} 
-    readOnly={!!cfg.razonSocial} 
     onChange={e => setCfg({ ...cfg, razonSocial: e.target.value.toUpperCase() })} 
-    placeholder="EJ: MEICSACONT S.A.S - IGUAL QUE EN EL SRI"
-    className="w-full bg-black/50 p-3 rounded-xl text-sm border border-red-500/20 uppercase" />
+    placeholder="EJ: NOMBRE COMPLETO SI ES PERSONA NATURAL, O NOMBRE DE LA EMPRESA"
+    className="w-full bg-black p-3 rounded-xl text-sm border border-white/10 uppercase" />
+  <p className="text-[9px] text-white/30 mt-1">Si eres persona natural como MEICSACONT, va tu nombre completo. Si eres empresa como MEIJSAC S.A.S, va el nombre de la empresa. Lo que escribas aquí es lo que sale en la factura.</p>
 </div>
                             <div><label className="text-[9px] text-white/40">Nombre Comercial</label><input value={cfg.nombreComercial} onChange={e => setCfg({ ...cfg, nombreComercial: e.target.value.toUpperCase() })} className="w-full bg-black p-3 rounded-xl text-sm border border-white/10 uppercase" /></div>
                             <div><label className="text-[9px] text-white/40">Teléfono Empresa * RIDE</label><input value={cfg.telefono || ""} onChange={e => setCfg({ ...cfg, telefono: e.target.value })} placeholder="099..." className="w-full bg-black p-3 rounded-xl border border-white/10 text-sm" /></div>
