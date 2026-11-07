@@ -1,12 +1,23 @@
 import Link from "next/link";
 function Colibri({ size = 40 }: { size?: number }) {
   return (
-    <svg width={size} height={size} viewBox="0 0 100 100" fill="none">
-      <path d="M50 10 C65 10 75 25 72 40 C70 52 60 60 50 62 L48 88 L55 88 L53 95 L42 95 L44 62 C30 58 20 45 22 30 C24 18 35 10 50 10Z" fill="#FF2D78"/>
-      <path d="M50 10 C65 10 75 25 72 40 L95 30 L95 58 L60 62 C60 50 55 30 50 10Z" fill="#FF2D78"/>
-      <path d="M22 30 L8 35 L22 38 Z" fill="#FFC300"/>
-      <circle cx="58" cy="26" r="3" fill="white"/>
-      <circle cx="59" cy="26" r="1.5" fill="black"/>
+    <svg width={size} height={size} viewBox="0 0 200 160" fill="none">
+      {/* cola */}
+      <path d="M55 95 L5 115 L45 108 L12 135 L55 105 Z" fill="#FF2D78"/>
+      {/* cuerpo */}
+      <ellipse cx="95" cy="85" rx="50" ry="32" fill="#FF2D78" transform="rotate(-15 95 85)"/>
+      {/* ala */}
+      <path d="M70 70 Q95 20 130 65 Q100 90 70 70 Z" fill="#00B4D8"/>
+      <path d="M75 72 Q95 35 122 62 Q100 80 75 72 Z" fill="#0096C7"/>
+      {/* cabeza */}
+      <circle cx="138" cy="55" r="24" fill="#FF2D78"/>
+      {/* pico largo */}
+      <path d="M158 50 L198 58 L158 64 Z" fill="#FFC300"/>
+      {/* ojo */}
+      <circle cx="145" cy="50" r="6" fill="white"/>
+      <circle cx="146" cy="50" r="3" fill="#1a1a1a"/>
+      {/* patita */}
+      <path d="M95 115 L95 132 M95 132 L88 138 M95 132 L102 138" stroke="#FF2D78" strokeWidth="3" strokeLinecap="round"/>
     </svg>
   );
 }
