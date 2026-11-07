@@ -43,23 +43,25 @@ export default function AdminModuladorCompleto(){
   // Form crear plan
   const [nuevo, setNuevo] = useState({ nombre:"", descripcion:"", precio:0, frecuencia:"mensual" as any, dias_prueba:7, max_facturas:100, max_usuarios:3, max_sucursales:1, badge:"" })
 
-  // Cargar clientes reales
-  useEffect(()=>{
-    if(localStorage.getItem('meijsac_admin_token')==='ok') setLogado(true)
-    const lista = JSON.parse(localStorage.getItem('meijsac_clientes')||"[]")
-    const uno = localStorage.getItem('meijsac_empresa')
-    let all = [...lista]
-    if(uno){ const e=JSON.parse(uno); if(!all.find((c:any)=>c.ruc===e.ruc)) all.push(e) }
-    const mapeadas: Suscripcion[] = all.map((c:any, i:number)=>({
-      cliente_id: c.ruc, ruc: c.ruc, razon: c.razon || c.nombreComercial || "Sin nombre",
-      plan_id: c.regimen==="RIMPE_POPULAR" ? "p1" : "p2",
-      precio_id: c.regimen==="RIMPE_POPULAR" ? "pr1" : "pr2",
-      estado: c.estado==="BLOQUEADO" ? "hard_block" : c.estado==="POR VENCER" ? "soft_block" : "activo",
-      metodo_pago: "manual", fecha_inicio: c.fecha || "2026-11-01", fecha_corte: c.vencePlan || "2026-12-01",
-      consumo_facturas: Math.floor(Math.random()*80), consumo_usuarios: 1
-    }))
-    setSubs(mapeadas)
-  },[])
+useEffect(()=>{
+  if(localStorage.getItem('meijsac_admin_token')==='ok') setLogado(true)
+  
+  fetch('/api/admin/empresas')
+    .then(r=>r.json())
+    .then((all:any[])=>{
+      const mapeadas: Suscripcion[] = all.map((c:any)=>({
+        cliente_id: c.ruc, ruc: c.ruc, 
+        razon: c.razonSocial || c.razon || c.nombreComercial || "Sin nombre",
+        plan_id: "p2", precio_id: "pr2",
+        estado: c.estado==="BLOQUEADO" ? "hard_block" : "activo",
+        metodo_pago: "manual", 
+        fecha_inicio: c.createdAt?.slice(0,10) || "2026-11-01", 
+        fecha_corte: c.vencePlan || "2026-12-01",
+        consumo_facturas: 0, consumo_usuarios: 1
+      }))
+      setSubs(mapeadas)
+    })
+},[])
 
   const persistir = (nuevas: Suscripcion[])=>{ setSubs(nuevas); const paraGuardar = nuevas.map(s=>({ ruc:s.ruc, razon:s.razon, regimen: s.plan_id==="p1"?"RIMPE_POPULAR":"RIMPE_EMPRENDEDOR", plan: planes.find(p=>p.id===s.plan_id)?.nombre, vencePlan: s.fecha_corte, estado: s.estado==="hard_block"?"BLOQUEADO":s.estado==="soft_block"?"POR VENCER":"ACTIVO" })); localStorage.setItem('meijsac_clientes', JSON.stringify(paraGuardar)) }
 
