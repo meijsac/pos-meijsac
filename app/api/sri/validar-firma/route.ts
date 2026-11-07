@@ -28,17 +28,38 @@ export async function POST(req: NextRequest) {
 
     const fechaExp = cert.validity.notAfter;
     const diasRestantes = Math.ceil((fechaExp.getTime() - Date.now()) / (1000*60*60*24));
+    const subject = (cert.subject.attributes as any[]).map((a:any) => a.value).join(' ');
 
-    const subject = (cert.subject.attributes as any[]).map(a=>a.value).join(' ');
+    const attrs = cert.subject.attributes as any[];
+// La cédula en Ecuador viene en SERIALNUMBER del certificado
+let cedulaEnFirma = attrs.find((a:any) => 
+  a.shortName === 'SERIALNUMBER' || a.name === 'serialNumber'
+)?.value || "";
 
-    return NextResponse.json({
-      ok: true,
-      ruc: rucEmpresa,
-      titular: subject,
-      expira: fechaExp,
-      dias: diasRestantes,
-      valido: diasRestantes > 0
-    })
+// Si no viene como SERIALNUMBER, la buscamos en el texto del subject
+if (!cedulaEnFirma) {
+  const match = subject.match(/\b(\d{10})\b/);
+  if (match) cedulaEnFirma = match[1];
+}
+
+const rucEnFirma = cedulaEnFirma;
+// TU CASO: 1708330509 debe coincidir con 1708330509001
+const rucCoincide = rucEmpresa && rucEnFirma
+  ? (rucEmpresa.startsWith(rucEnFirma) || rucEnFirma.startsWith(rucEmpresa))
+  : false;
+
+return NextResponse.json({
+  ok: true,
+  ruc: rucEmpresa,
+  rucEnFirma: rucEnFirma,
+  rucCoincide: rucCoincide,
+  titular: subject,
+  expira: fechaExp,
+  fechaExpiracion: fechaExp,
+  dias: diasRestantes,
+  diasRestantes: diasRestantes,
+  valido: diasRestantes > 0
+})
 
   }catch(e:any){
     return NextResponse.json({ok:false, error: e.message}, {status:500})
