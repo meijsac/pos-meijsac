@@ -1,4 +1,15 @@
 import Link from "next/link";
+function Colibri({ size = 40 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 100 100" fill="none">
+      <path d="M50 10 C65 10 75 25 72 40 C70 52 60 60 50 62 L48 88 L55 88 L53 95 L42 95 L44 62 C30 58 20 45 22 30 C24 18 35 10 50 10Z" fill="#FF2D78"/>
+      <path d="M50 10 C65 10 75 25 72 40 L95 30 L95 58 L60 62 C60 50 55 30 50 10Z" fill="#FF2D78"/>
+      <path d="M22 30 L8 35 L22 38 Z" fill="#FFC300"/>
+      <circle cx="58" cy="26" r="3" fill="white"/>
+      <circle cx="59" cy="26" r="1.5" fill="black"/>
+    </svg>
+  );
+}
 
 export default function HomePage() {
   return (
@@ -6,7 +17,7 @@ export default function HomePage() {
       <header className="bg-white shadow-sm">
         <div className="max-w-6xl mx-auto px-4 py-3 flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <span className="text-3xl">🐦</span>
+            <Colibri size={36} />
             <span className="text-2xl font-black tracking-tight">MEJISAC</span>
           </div>
           <Link href="/login" className="bg-[#0a2a4a] text-white px-4 py-2 rounded-md font-bold text-sm">
@@ -34,7 +45,7 @@ export default function HomePage() {
             </div>
           </div>
           <div className="bg-[#0a2a4a] rounded-2xl p-10 text-center text-white">
-            <div className="text-8xl">🐦</div>
+            <div className="flex justify-center"><Colibri size={120} /></div>
             <p className="mt-2 font-bold">MEJISAC - Tu colibrí factura por ti</p>
           </div>
         </div>
