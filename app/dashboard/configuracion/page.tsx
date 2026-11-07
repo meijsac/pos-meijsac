@@ -161,13 +161,30 @@ if(datosReales.direccion && !datosReales.dirMatriz) datosReales.dirMatriz = dato
         { usuario: "caja1", nombre: "Cajero 1", rol: "CAJERO", permisos: { verCostos: false, editarRUC: false, anular: false, verReportes: false, cambiarAmbiente: false } }
     ],
 };
-        // CORREGIDO: si la razón social viene igual al RUC, es error de guardado, la dejamos vacía
+       // === PUNTO 1 VA AQUÍ - JUSTO DESPUÉS DEL }; DE LA LÍNEA 163 ===
+// NORMALIZAR RÉGIMEN Y OBLIGADO - UNA SOLA CLAVE PARA TODO
+let regimenNorm = (datosReales.regimen || base.regimen || "").toUpperCase().trim();
+if (regimenNorm.includes("RIMPE") && regimenNorm.includes("POPULAR")) regimenNorm = "RIMPE NEGOCIO POPULAR";
+else if (regimenNorm.includes("RIMPE")) regimenNorm = "RIMPE EMPRENDEDOR";
+else if (regimenNorm.includes("GENERAL")) regimenNorm = "REGIMEN GENERAL";
+else if (regimenNorm === "") regimenNorm = "";
+
+let obligadoNorm = (datosReales.obligadoConta || datosReales.obligadoContabilidad || base.obligadoConta || "").toUpperCase().trim();
+if (obligadoNorm.startsWith("S")) obligadoNorm = "SI";
+else if (obligadoNorm.startsWith("N")) obligadoNorm = "NO";
+else obligadoNorm = "";
+
+base.regimen = regimenNorm;
+base.obligadoConta = obligadoNorm;
+base.obligadoContabilidad = obligadoNorm;
+
+base.ruc = datosReales.ruc || base.ruc;
+// Razón Social: si viene igual al RUC, la dejamos vacía pero EDITABLE
 if (datosReales.razonSocial && datosReales.razonSocial !== datosReales.ruc) {
   base.razonSocial = datosReales.razonSocial;
 } else if (base.razonSocial === base.ruc) {
   base.razonSocial = "";
 }
-base.ruc = datosReales.ruc || base.ruc;
 base.nombreComercial = datosReales.nombreComercial || base.nombreComercial || "";
 base.telefono = datosReales.telefono || base.telefono || "";
 base.email = datosReales.email || base.email || "";
@@ -175,7 +192,6 @@ base.actividad = datosReales.actividad || datosReales.actividadEconomica || base
 base.dirMatriz = datosReales.dirMatriz || base.dirMatriz || "";
 base.provincia = datosReales.provincia || base.provincia || "";
 base.ciudad = datosReales.ciudad || base.ciudad || "";
-base.regimen = datosReales.regimen || base.regimen || "";
 base.sucursales = datosReales.sucursales || base.sucursales || [];
         setCfg(base);
         setLogs(JSON.parse(localStorage.getItem("meijsac_logs") || "[]"));
@@ -270,32 +286,68 @@ base.sucursales = datosReales.sucursales || base.sucursales || [];
             <div className="bg-[#11131a] rounded-[20px] p-6 border border-white/5">
                 {tab === "IDENTIDAD" && (
                     <div className="space-y-4">
-                      {/* === SUCURSALES - RECUPERADO, ANTES SE HABÍA PERDIDO === */}
+                      {/* === SUCURSALES COMPLETAS SRI - SIN PROMPT === */}
 <div className="md:col-span-3 border-t border-white/10 pt-4">
-  <div className="flex justify-between items-center mb-2">
-    <p className="text-[#00f5d4] font-bold text-[11px]">SUCURSALES / ESTABLECIMIENTOS DEL CLIENTE</p>
+  <div className="flex justify-between items-center mb-3">
+    <p className="text-[#00f5d4] font-bold text-[11px]">SUCURSALES / ESTABLECIMIENTOS DEL CLIENTE - SEGÚN RUC SRI</p>
     <button onClick={() => {
-      const nombre = prompt("Nombre sucursal Ej: SUCURSAL LORETO:");
-      if(!nombre) return;
-      const dir = prompt("Dirección sucursal:");
-      const nuevo = { id: `00${(cfg.sucursales?.length || 0) + 1}`.slice(-3), nombre: nombre.toUpperCase(), dir: dir || "", geo: "" };
-      setCfg({ ...cfg, sucursales: [...(cfg.sucursales || []), nuevo] });
+      const sig = `00${(cfg.sucursales?.length || 0) + 1}`.slice(-3);
+      const nueva = {
+        id: sig, // Código establecimiento 3 dígitos SRI: 001 matriz, 002, 003...
+        nombre: "", // Nombre comercial sucursal
+        nombreComercial: "",
+        dir: "", // Dirección exacta SRI: calle, número, intersección
+        provincia: cfg.provincia || "",
+        ciudad: cfg.ciudad || "",
+        email: "", // Email sucursal para notificaciones
+        telefono: "",
+        ptoEmision: "001", // Código punto emisión 3 dígitos: caja / terminal
+        secuencialInicio: "000000001", // 9 dígitos, primer comprobante
+        ambiente: cfg.ambiente || "1", // 1 PRUEBAS / 2 PRODUCCIÓN
+        obligadoConta: cfg.obligadoConta || "",
+        regimen: cfg.regimen || "",
+      };
+      setCfg({ ...cfg, sucursales: [...(cfg.sucursales || []), nueva] });
     }} className="bg-[#00f5d4] text-black px-3 py-1 rounded-full text-[10px] font-bold">+ AGREGAR SUCURSAL</button>
   </div>
-  {(cfg.sucursales || []).length === 0 && <p className="text-[10px] text-white/40">Sin sucursales. Solo matriz.</p>}
+
+  {(cfg.sucursales || []).length === 0 && <p className="text-[10px] text-white/40">Sin sucursales. Solo matriz 001.</p>}
+
   {(cfg.sucursales || []).map((s:any, i:number) => (
-    <div key={i} className="grid grid-cols-4 gap-2 mt-2">
-      <input value={s.id} readOnly className="bg-black p-2 rounded-xl text-sm border border-white/10 text-center" />
-      <input value={s.nombre} onChange={e=>{const a=[...cfg.sucursales]; a[i].nombre=e.target.value.toUpperCase(); setCfg({...cfg, sucursales:a})}} className="bg-black p-2 rounded-xl text-sm border border-white/10 uppercase" />
-      <input value={s.dir} onChange={e=>{const a=[...cfg.sucursales]; a[i].dir=e.target.value; setCfg({...cfg, sucursales:a})}} placeholder="Dirección" className="bg-black p-2 rounded-xl text-sm border border-white/10" />
-      <button onClick={()=> setCfg({...cfg, sucursales: cfg.sucursales.filter((_:any, idx:number)=> idx!==i)})} className="bg-red-500/20 text-red-400 rounded-xl text-xs">Eliminar</button>
+    <div key={i} className="bg-black p-4 rounded-xl border border-white/10 mt-3 space-y-2">
+      <div className="flex justify-between">
+        <p className="text-[10px] font-bold text-teal-300">ESTABLECIMIENTO {s.id} - {s.nombre || "NUEVA SUCURSAL"}</p>
+        <button onClick={()=> setCfg({...cfg, sucursales: cfg.sucursales.filter((_:any, idx:number)=> idx!==i)})} className="bg-red-500/20 text-red-400 rounded-xl text-xs px-3">Eliminar</button>
+      </div>
+      <div className="grid md:grid-cols-3 gap-2">
+        <div><label className="text-[8px] text-white/40">Código Establecimiento SRI * 3 dígitos</label><input value={s.id} maxLength={3} onChange={e=>{const a=[...cfg.sucursales]; a[i].id=e.target.value.replace(/[^0-9]/g,""); setCfg({...cfg, sucursales:a})}} className="w-full bg-[#11131a] p-2 rounded-xl text-sm border border-white/10" placeholder="001" /></div>
+        <div><label className="text-[8px] text-white/40">Nombre Comercial Sucursal *</label><input value={s.nombre} onChange={e=>{const a=[...cfg.sucursales]; a[i].nombre=e.target.value.toUpperCase(); setCfg({...cfg, sucursales:a})}} className="w-full bg-[#11131a] p-2 rounded-xl text-sm border border-white/10 uppercase" placeholder="EJ: MEICSACONT LORETO" /></div>
+        <div><label className="text-[8px] text-white/40">Email Sucursal *</label><input value={s.email || ""} onChange={e=>{const a=[...cfg.sucursales]; a[i].email=e.target.value; setCfg({...cfg, sucursales:a})}} className="w-full bg-[#11131a] p-2 rounded-xl text-sm border border-white/10" placeholder="sucursal@gmail.com" /></div>
+        <div className="md:col-span-2"><label className="text-[8px] text-white/40">Dirección Exacta SRI * Calle, número, intersección</label><input value={s.dir} onChange={e=>{const a=[...cfg.sucursales]; a[i].dir=e.target.value; setCfg({...cfg, sucursales:a})}} className="w-full bg-[#11131a] p-2 rounded-xl text-sm border border-white/10" placeholder="N57B Y AV DE LA PRENSA" /></div>
+        <div><label className="text-[8px] text-white/40">Teléfono Sucursal</label><input value={s.telefono || ""} onChange={e=>{const a=[...cfg.sucursales]; a[i].telefono=e.target.value; setCfg({...cfg, sucursales:a})}} className="w-full bg-[#11131a] p-2 rounded-xl text-sm border border-white/10" /></div>
+        <div><label className="text-[8px] text-white/40">Provincia</label><select value={s.provincia || ""} onChange={e=>{const a=[...cfg.sucursales]; a[i].provincia=e.target.value; setCfg({...cfg, sucursales:a})}} className="w-full bg-[#11131a] p-2 rounded-xl text-sm border border-white/10"><option value="">Seleccione</option>{["Azuay","Bolívar","Cañar","Carchi","Chimborazo","Cotopaxi","El Oro","Esmeraldas","Galápagos","Guayas","Imbabura","Loja","Los Ríos","Manabí","Morona Santiago","Napo","Orellana","Pastaza","Pichincha","Santa Elena","Santo Domingo","Sucumbíos","Tungurahua","Zamora Chinchipe"].map(p => <option key={p} value={p}>{p}</option>)}</select></div>
+        <div><label className="text-[8px] text-white/40">Ciudad</label><input value={s.ciudad || ""} onChange={e=>{const a=[...cfg.sucursales]; a[i].ciudad=e.target.value.toUpperCase(); setCfg({...cfg, sucursales:a})}} className="w-full bg-[#11131a] p-2 rounded-xl text-sm border border-white/10 uppercase" placeholder="QUITO" /></div>
+        <div><label className="text-[8px] text-white/40">Punto Emisión * 3 dígitos (Caja)</label><input value={s.ptoEmision || "001"} maxLength={3} onChange={e=>{const a=[...cfg.sucursales]; a[i].ptoEmision=e.target.value.replace(/[^0-9]/g,""); setCfg({...cfg, sucursales:a})}} className="w-full bg-[#11131a] p-2 rounded-xl text-sm border border-white/10" placeholder="001" /></div>
+        <div><label className="text-[8px] text-white/40">Secuencial Inicial 9 dígitos</label><input value={s.secuencialInicio || "000000001"} onChange={e=>{const a=[...cfg.sucursales]; a[i].secuencialInicio=e.target.value.replace(/[^0-9]/g,""); setCfg({...cfg, sucursales:a})}} className="w-full bg-[#11131a] p-2 rounded-xl text-sm border border-white/10" /></div>
+        <div><label className="text-[8px] text-white/40">Ambiente</label><select value={s.ambiente || "1"} onChange={e=>{const a=[...cfg.sucursales]; a[i].ambiente=e.target.value; setCfg({...cfg, sucursales:a})}} className="w-full bg-[#11131a] p-2 rounded-xl text-sm border border-white/10"><option value="1">1 - PRUEBAS</option><option value="2">2 - PRODUCCIÓN</option></select></div>
+        <div><label className="text-[8px] text-white/40">Obligado Contabilidad</label><select value={s.obligadoConta || cfg.obligadoConta || ""} onChange={e=>{const a=[...cfg.sucursales]; a[i].obligadoConta=e.target.value; setCfg({...cfg, sucursales:a})}} className="w-full bg-[#11131a] p-2 rounded-xl text-sm border border-white/10"><option value="">Hereda de matriz</option><option value="SI">SI</option><option value="NO">NO</option></select></div>
+      </div>
+      <p className="text-[9px] text-white/30">SRI: Estab {s.id} - Pto {s.ptoEmision} - Secuencial desde {s.secuencialInicio} - {s.provincia} - {s.ciudad} - RUC {cfg.ruc}</p>
     </div>
   ))}
 </div>
                         <p className="text-[#00f5d4] font-bold text-[11px]">GESTIÓN DE IDENTIDAD Y DATOS LEGALES - PERFIL EMISOR SRI</p>
                         <div className="grid md:grid-cols-3 gap-3">
                             <div className="opacity-60"><label className="text-[9px] text-red-400">RUC * BLOQUEADO SRI</label><input value={cfg.ruc} readOnly className="w-full bg-black/50 p-3 rounded-xl text-sm border border-red-500/20" /></div>
-                            <div className="opacity-60 md:col-span-2"><label className="text-[9px] text-red-400">RAZÓN SOCIAL * BLOQUEADA</label><input value={cfg.razonSocial} readOnly className="w-full bg-black/50 p-3 rounded-xl text-sm border border-red-500/20 uppercase" /></div>
+                            <div className="opacity-60 md:col-span-2">
+  <label className="text-[9px] text-red-400">RAZÓN SOCIAL * BLOQUEADA {(!cfg.razonSocial) ? "- ESCRÍBELA UNA VEZ, LUEGO SE BLOQUEA" : ""}</label>
+  <input 
+    value={cfg.razonSocial || ""} 
+    readOnly={!!cfg.razonSocial} 
+    onChange={e => setCfg({ ...cfg, razonSocial: e.target.value.toUpperCase() })} 
+    placeholder="EJ: MEICSACONT S.A.S - IGUAL QUE EN EL SRI"
+    className="w-full bg-black/50 p-3 rounded-xl text-sm border border-red-500/20 uppercase" />
+</div>
                             <div><label className="text-[9px] text-white/40">Nombre Comercial</label><input value={cfg.nombreComercial} onChange={e => setCfg({ ...cfg, nombreComercial: e.target.value.toUpperCase() })} className="w-full bg-black p-3 rounded-xl text-sm border border-white/10 uppercase" /></div>
                             <div><label className="text-[9px] text-white/40">Teléfono Empresa * RIDE</label><input value={cfg.telefono || ""} onChange={e => setCfg({ ...cfg, telefono: e.target.value })} placeholder="099..." className="w-full bg-black p-3 rounded-xl border border-white/10 text-sm" /></div>
                             <div><label className="text-[9px] text-white/40">Email Empresa * RIDE</label><input value={cfg.email || ""} onChange={e => setCfg({ ...cfg, email: e.target.value })} placeholder="ventas@meijsac.com" className="w-full bg-black p-3 rounded-xl border border-white/10 text-sm" /></div>
@@ -307,8 +359,8 @@ base.sucursales = datosReales.sucursales || base.sucursales || [];
                             <div><label className="text-[9px] text-white/40">Resolución Agente Retención</label><input value={cfg.resolucionAgente} onChange={e => setCfg({ ...cfg, resolucionAgente: e.target.value })} className="w-full bg-black p-3 rounded-xl text-sm border border-white/10" /><div className="flex gap-2 mt-2"><span className="text-[9px]">Toggle Agente:</span><button onClick={() => setCfg({ ...cfg, agenteRetencion: cfg.agenteRetencion === "SI" ? "NO" : "SI" })} className={`px-3 py-1 rounded-full text-[9px] ${cfg.agenteRetencion === "SI" ? "bg-green-500" : "bg-white/10"}`}>{cfg.agenteRetencion}</button></div></div>
                         </div>
                         <p className="text-[10px] bg-black p-3 rounded-xl border border-[#00f5d4]/20">
-                            Contribuyente Régimen {cfg.regimen} | Obligado Contab: {cfg.obligadoConta} {cfg.agenteRetencion === "SI" ? `| Agente Retención Res. N° ${cfg.resolucionAgente}` : ""} | {cfg.actividad || "Actividad: No definida"}
-                        </p>
+    Contribuyente Régimen {cfg.regimen} | Obligado Contab: {cfg.obligadoConta} {cfg.agenteRetencion === "SI" ? `| Agente Retención Res. N° ${cfg.resolucionAgente}` : ""} | {cfg.actividad || "Actividad: No definida"} | {cfg.provincia ? `${cfg.provincia} - ${cfg.ciudad}` : ""}
+</p>
                     </div>
                 )}
 
