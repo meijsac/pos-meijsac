@@ -46,9 +46,29 @@ export default function AdminModuladorCompleto(){
 useEffect(()=>{
   if(localStorage.getItem('meijsac_admin_token')==='ok') setLogado(true)
   
+  // 1. Primero carga lo que esté guardado en este navegador, para que no se vea vacío
+  try {
+    const local = JSON.parse(localStorage.getItem('meijsac_clientes') || '[]')
+    if(local.length > 0){
+      setSubs(local.map((c:any)=>({
+        cliente_id: c.ruc, ruc: c.ruc,
+        razon: c.razon || c.razonSocial || "Sin nombre",
+        plan_id: "p2", precio_id: "pr2",
+        estado: c.estado==="BLOQUEADO" ? "hard_block" : "activo",
+        metodo_pago: "manual",
+        fecha_inicio: "2026-11-01",
+        fecha_corte: c.vencePlan || "2026-12-01",
+        consumo_facturas: 0, consumo_usuarios: 1
+      })))
+    }
+  } catch {}
+
+  // 2. Después intenta traer los de la base
   fetch('/api/admin/empresas')
     .then(r=>r.json())
     .then((all:any[])=>{
+      if(!Array.isArray(all)) return
+      if(all.length === 0) return // si viene vacío, no borres lo local
       const mapeadas: Suscripcion[] = all.map((c:any)=>({
         cliente_id: c.ruc, ruc: c.ruc, 
         razon: c.razonSocial || c.razon || c.nombreComercial || "Sin nombre",
@@ -61,6 +81,7 @@ useEffect(()=>{
       }))
       setSubs(mapeadas)
     })
+    .catch(e=>{ console.log("No llegó de la base, uso local", e) })
 },[])
 
   const persistir = (nuevas: Suscripcion[])=>{ setSubs(nuevas); const paraGuardar = nuevas.map(s=>({ ruc:s.ruc, razon:s.razon, regimen: s.plan_id==="p1"?"RIMPE_POPULAR":"RIMPE_EMPRENDEDOR", plan: planes.find(p=>p.id===s.plan_id)?.nombre, vencePlan: s.fecha_corte, estado: s.estado==="hard_block"?"BLOQUEADO":s.estado==="soft_block"?"POR VENCER":"ACTIVO" })); localStorage.setItem('meijsac_clientes', JSON.stringify(paraGuardar)) }
