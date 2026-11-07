@@ -124,45 +124,59 @@ if(datosReales.razon && !datosReales.razonSocial) datosReales.razonSocial = dato
 if(datosReales.direccion && !datosReales.dirMatriz) datosReales.dirMatriz = datosReales.direccion;
         const saved = JSON.parse(localStorage.getItem("meijsac_config_pro") || "null");
         const base = saved || {
-            ruc: reg.ruc || "2200000000001",
-            razonSocial: reg.razonSocial || "MEIJSAC S.A.S",
-            nombreComercial: "MEIJSAC POS",
-            dirMatriz: "Orellana - Coca - Ecuador",
-            dirEstablecimiento: "Av. Principal",
-            regimen: "RIMPE EMPRENDEDOR",
-            contribuyenteEspecial: "",
-            resolucionAgente: "",
-            obligadoConta: "SI",
-            agenteRetencion: "NO",
-            ambiente: "1",
-            sucursales: [
-                { id: "001", nombre: "MATRIZ COCA", dir: "Av. Principal", geo: "-0.462, -76.89" },
-                { id: "002", nombre: "SUCURSAL LORETO", dir: "Loreto", geo: "-0.69, -77.30" }
-            ],
-            firma: { nombre: "", clave: "", expira: "", diasRestantes: null, ambiente: "1", ws: "celcer.sri.gob.ec" },
-            secuenciales: [
-              { estab: "001", pto: "001", codigo:"01", tipo: "01 FACTURA", ultimo: "00000125", alerta: 50, estado: "ACTIVO" },
-              { estab: "001", pto: "002", codigo:"01", tipo: "01 FACTURA", ultimo: "00000010", alerta: 50, estado: "ACTIVO" },
-              { estab: "002", pto: "001", codigo:"04", tipo: "04 NOTA CREDITO", ultimo: "00000005", alerta: 50, estado: "ACTIVO" }
-            ],
-            modoOffline:false,
-            colaOffline:[],
-            ultimoEnvioOffline:"",
-            impuestos: { ivaActual: 15, historial: [{ fecha: "01/04/2024", iva: 15, motivo: "Reforma LORTI - IVA 15%" }, { fecha: "01/01/2023", iva: 12, motivo: "IVA 12%" }], },
-            cuentas: { caja: "1.01.01.01", ventas0: "4.01.01.01", ventas15: "4.01.01.02", ivaVentas: "2.01.04.01", retencion: "2.01.05.01" },
-            moneda: { principal: "USD", secundaria: false, tipoCambio: 1 },
-            marca: {logo:"", colorPrimario:"#00f5d4", colorSecundario:"#ffbe0a", plantillaEmail:"Hola {cliente}", facebook:"", instagram:"", mensaje:"Gracias por su compra, visítenos en..."},
-            roles: [
-                { usuario: "admin", nombre: "Alexandra", rol: "ADMIN", permisos: { verCostos: true, editarRUC: false, anular: true, verReportes: true, cambiarAmbiente: true } },
-                { usuario: "caja1", nombre: "Cajero 1", rol: "CAJERO", permisos: { verCostos: false, editarRUC: false, anular: false, verReportes: false, cambiarAmbiente: false } }
-            ],
-        };
-        base.ruc = datosReales.ruc || base.ruc;
-base.razonSocial = datosReales.razonSocial || base.razonSocial;
-base.telefono = datosReales.telefono || base.telefono;
-base.email = datosReales.email || base.email;
-base.actividad = datosReales.actividad || base.actividad;
-base.dirMatriz = datosReales.dirMatriz || base.dirMatriz;
+    ruc: datosReales.ruc || "",
+    razonSocial: datosReales.razonSocial || datosReales.razon || "",
+    nombreComercial: datosReales.nombreComercial || "",
+    dirMatriz: datosReales.dirMatriz || datosReales.direccion || "",
+    dirEstablecimiento: datosReales.dirEstablecimiento || datosReales.dirMatriz || "",
+    // === NUEVO: PROVINCIA Y CIUDAD - ANTES NO EXISTÍAN ===
+    provincia: datosReales.provincia || "",
+    ciudad: datosReales.ciudad || "",
+    regimen: datosReales.regimen || "",
+    contribuyenteEspecial: datosReales.contribuyenteEspecial || "",
+    resolucionAgente: datosReales.resolucionAgente || datosReales.resolucionAgenteRetencion || "",
+    obligadoConta: datosReales.obligadoConta || datosReales.obligadoContabilidad || "",
+    agenteRetencion: datosReales.agenteRetencion || "NO",
+    ambiente: datosReales.ambiente || "1",
+    telefono: datosReales.telefono || "",
+    email: datosReales.email || "",
+    actividad: datosReales.actividad || datosReales.actividadEconomica || "",
+    // === SUCURSALES: YA NO FIJAS, VIENEN DEL CLIENTE O VACÍAS ===
+    sucursales: datosReales.sucursales || [],
+    firma: { nombre: "", clave: "", expira: "", diasRestantes: null, ambiente: "1", ws: "celcer.sri.gob.ec" },
+    secuenciales: [
+      { estab: "001", pto: "001", codigo:"01", tipo: "01 FACTURA", ultimo: "00000125", alerta: 50, estado: "ACTIVO" },
+      { estab: "001", pto: "002", codigo:"01", tipo: "01 FACTURA", ultimo: "00000010", alerta: 50, estado: "ACTIVO" },
+      { estab: "002", pto: "001", codigo:"04", tipo: "04 NOTA CREDITO", ultimo: "00000005", alerta: 50, estado: "ACTIVO" }
+    ],
+    modoOffline:false,
+    colaOffline:[],
+    ultimoEnvioOffline:"",
+    impuestos: { ivaActual: 15, historial: [{ fecha: "01/04/2024", iva: 15, motivo: "Reforma LORTI - IVA 15%" }, { fecha: "01/01/2023", iva: 12, motivo: "IVA 12%" }], },
+    cuentas: { caja: "1.01.01.01", ventas0: "4.01.01.01", ventas15: "4.01.01.02", ivaVentas: "2.01.04.01", retencion: "2.01.05.01" },
+    moneda: { principal: "USD", secundaria: false, tipoCambio: 1 },
+    marca: {logo:"", colorPrimario:"#00f5d4", colorSecundario:"#ffbe0a", plantillaEmail:"Hola {cliente}", facebook:"", instagram:"", mensaje:"Gracias por su compra, visítenos en..."},
+    roles: [
+        { usuario: "admin", nombre: "Alexandra", rol: "ADMIN", permisos: { verCostos: true, editarRUC: false, anular: true, verReportes: true, cambiarAmbiente: true } },
+        { usuario: "caja1", nombre: "Cajero 1", rol: "CAJERO", permisos: { verCostos: false, editarRUC: false, anular: false, verReportes: false, cambiarAmbiente: false } }
+    ],
+};
+        // CORREGIDO: si la razón social viene igual al RUC, es error de guardado, la dejamos vacía
+if (datosReales.razonSocial && datosReales.razonSocial !== datosReales.ruc) {
+  base.razonSocial = datosReales.razonSocial;
+} else if (base.razonSocial === base.ruc) {
+  base.razonSocial = "";
+}
+base.ruc = datosReales.ruc || base.ruc;
+base.nombreComercial = datosReales.nombreComercial || base.nombreComercial || "";
+base.telefono = datosReales.telefono || base.telefono || "";
+base.email = datosReales.email || base.email || "";
+base.actividad = datosReales.actividad || datosReales.actividadEconomica || base.actividad || "";
+base.dirMatriz = datosReales.dirMatriz || base.dirMatriz || "";
+base.provincia = datosReales.provincia || base.provincia || "";
+base.ciudad = datosReales.ciudad || base.ciudad || "";
+base.regimen = datosReales.regimen || base.regimen || "";
+base.sucursales = datosReales.sucursales || base.sucursales || [];
         setCfg(base);
         setLogs(JSON.parse(localStorage.getItem("meijsac_logs") || "[]"));
     }, []);
@@ -256,6 +270,28 @@ base.dirMatriz = datosReales.dirMatriz || base.dirMatriz;
             <div className="bg-[#11131a] rounded-[20px] p-6 border border-white/5">
                 {tab === "IDENTIDAD" && (
                     <div className="space-y-4">
+                      {/* === SUCURSALES - RECUPERADO, ANTES SE HABÍA PERDIDO === */}
+<div className="md:col-span-3 border-t border-white/10 pt-4">
+  <div className="flex justify-between items-center mb-2">
+    <p className="text-[#00f5d4] font-bold text-[11px]">SUCURSALES / ESTABLECIMIENTOS DEL CLIENTE</p>
+    <button onClick={() => {
+      const nombre = prompt("Nombre sucursal Ej: SUCURSAL LORETO:");
+      if(!nombre) return;
+      const dir = prompt("Dirección sucursal:");
+      const nuevo = { id: `00${(cfg.sucursales?.length || 0) + 1}`.slice(-3), nombre: nombre.toUpperCase(), dir: dir || "", geo: "" };
+      setCfg({ ...cfg, sucursales: [...(cfg.sucursales || []), nuevo] });
+    }} className="bg-[#00f5d4] text-black px-3 py-1 rounded-full text-[10px] font-bold">+ AGREGAR SUCURSAL</button>
+  </div>
+  {(cfg.sucursales || []).length === 0 && <p className="text-[10px] text-white/40">Sin sucursales. Solo matriz.</p>}
+  {(cfg.sucursales || []).map((s:any, i:number) => (
+    <div key={i} className="grid grid-cols-4 gap-2 mt-2">
+      <input value={s.id} readOnly className="bg-black p-2 rounded-xl text-sm border border-white/10 text-center" />
+      <input value={s.nombre} onChange={e=>{const a=[...cfg.sucursales]; a[i].nombre=e.target.value.toUpperCase(); setCfg({...cfg, sucursales:a})}} className="bg-black p-2 rounded-xl text-sm border border-white/10 uppercase" />
+      <input value={s.dir} onChange={e=>{const a=[...cfg.sucursales]; a[i].dir=e.target.value; setCfg({...cfg, sucursales:a})}} placeholder="Dirección" className="bg-black p-2 rounded-xl text-sm border border-white/10" />
+      <button onClick={()=> setCfg({...cfg, sucursales: cfg.sucursales.filter((_:any, idx:number)=> idx!==i)})} className="bg-red-500/20 text-red-400 rounded-xl text-xs">Eliminar</button>
+    </div>
+  ))}
+</div>
                         <p className="text-[#00f5d4] font-bold text-[11px]">GESTIÓN DE IDENTIDAD Y DATOS LEGALES - PERFIL EMISOR SRI</p>
                         <div className="grid md:grid-cols-3 gap-3">
                             <div className="opacity-60"><label className="text-[9px] text-red-400">RUC * BLOQUEADO SRI</label><input value={cfg.ruc} readOnly className="w-full bg-black/50 p-3 rounded-xl text-sm border border-red-500/20" /></div>
@@ -515,6 +551,16 @@ base.dirMatriz = datosReales.dirMatriz || base.dirMatriz;
                                 <div><label className="text-[8px] text-[#00f5d4]">Establecimiento</label><select value={u.establecimiento} onChange={e=>upd({establecimiento:e.target.value})} className="w-full bg-black rounded p-2 text-[11px] text-white border border-[#00f5d4]/20"><option>001</option><option>002</option><option>003</option></select></div>
                                 <div><label className="text-[8px] text-[#00f5d4]">Punto Emisión (Caja)</label><select value={u.puntoEmision} onChange={e=>upd({puntoEmision:e.target.value})} className="w-full bg-black rounded p-2 text-[11px] text-white border border-[#00f5d4]/20"><option>001</option><option>002</option><option>003</option><option>004</option></select></div>
                                 <div className="col-span-2"><label className="text-[8px] text-[#00f5d4]">Bodega Asignada</label><select value={u.bodega} onChange={e=>upd({bodega:e.target.value})} className="w-full bg-black rounded p-2 text-[11px] text-white border border-[#00f5d4]/20"><option>Bodega Principal</option><option>Bodega Secundaria</option><option>Bodega Quito</option></select><span className="text-[7px] text-white/30">Solo rebaja stock de esta bodega</span></div>
+                                {/* === PROVINCIA Y CIUDAD - NO BORRA LO ANTERIOR, SOLO AGREGA === */}
+                                <div><label className="text-[9px] text-white/40">Provincia *</label>
+                                <select value={cfg.provincia || ""} onChange={e => setCfg({ ...cfg, provincia: e.target.value })} className="w-full bg-black p-3 rounded-xl text-sm border border-white/10">
+                                <option value="">Seleccione provincia</option>
+                                {["Azuay","Bolívar","Cañar","Carchi","Chimborazo","Cotopaxi","El Oro","Esmeraldas","Galápagos","Guayas","Imbabura","Loja","Los Ríos","Manabí","Morona Santiago","Napo","Orellana","Pastaza","Pichincha","Santa Elena","Santo Domingo","Sucumbíos","Tungurahua","Zamora Chinchipe"].map(p => <option key={p} value={p}>{p}</option>)}
+                                    </select>
+                                      </div>
+                                        <div><label className="text-[9px] text-white/40">Ciudad *</label>
+                                        <input value={cfg.ciudad || ""} onChange={e => setCfg({ ...cfg, ciudad: e.target.value.toUpperCase() })} placeholder="Ej: QUITO, COCA, LORETO" className="w-full bg-black p-3 rounded-xl text-sm border border-white/10 uppercase" />
+                                  </div>
                               </div>
 
                               <p className="text-[#ffbe0a] text-[10px] font-bold pt-2 border-t border-white/5">2. MATRIZ ANTI-FRAUDE POS</p>
