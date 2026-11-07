@@ -45,7 +45,7 @@ export function LoginPrincipal({ dark = true }: { dark?: boolean }){
     <div className="space-y-4">
       <div>
         <label className={`text-[10px] font-bold tracking-widest ${dark? "text-white/70" : "text-black/60"}`}>RUC / USUARIO EMPRESA (13 DÍGITOS)</label>
-        <input className={i} placeholder="1790000000001" value={ruc} onChange={e=>setRuc(e.target.value)} />
+        <input className={i} placeholder="Ingresa tu RUC" value={ruc} onChange={e=>setRuc(e.target.value)} />
       </div>
       <div>
         <label className={`text-[10px] font-bold tracking-widest ${dark? "text-white/70" : "text-black/60"}`}>CONTRASEÑA PRINCIPAL</label>
@@ -55,8 +55,7 @@ export function LoginPrincipal({ dark = true }: { dark?: boolean }){
       <button onClick={handleLogin} disabled={loading} className="w-full p-4 rounded-xl bg-[#00f5d4] text-black font-bold text-[13px] mt-4 hover:bg-[#00e0c0] disabled:opacity-50">
         {loading? 'INGRESANDO...' : 'INGRESAR →'}
       </button>
-      
-      <p className="text-[9px] opacity-30 text-center">DEMO = 1790000000001 / admin123 = Modo visitante limitado</p>
+          
     </div>
   )
 }
