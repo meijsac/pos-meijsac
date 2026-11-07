@@ -1,26 +1,4 @@
 import Link from "next/link";
-function Colibri({ size = 40 }: { size?: number }) {
-  return (
-    <svg width={size} height={size} viewBox="0 0 200 160" fill="none">
-      {/* cola */}
-      <path d="M55 95 L5 115 L45 108 L12 135 L55 105 Z" fill="#FF2D78"/>
-      {/* cuerpo */}
-      <ellipse cx="95" cy="85" rx="50" ry="32" fill="#FF2D78" transform="rotate(-15 95 85)"/>
-      {/* ala */}
-      <path d="M70 70 Q95 20 130 65 Q100 90 70 70 Z" fill="#00B4D8"/>
-      <path d="M75 72 Q95 35 122 62 Q100 80 75 72 Z" fill="#0096C7"/>
-      {/* cabeza */}
-      <circle cx="138" cy="55" r="24" fill="#FF2D78"/>
-      {/* pico largo */}
-      <path d="M158 50 L198 58 L158 64 Z" fill="#FFC300"/>
-      {/* ojo */}
-      <circle cx="145" cy="50" r="6" fill="white"/>
-      <circle cx="146" cy="50" r="3" fill="#1a1a1a"/>
-      {/* patita */}
-      <path d="M95 115 L95 132 M95 132 L88 138 M95 132 L102 138" stroke="#FF2D78" strokeWidth="3" strokeLinecap="round"/>
-    </svg>
-  );
-}
 
 export default function HomePage() {
   return (
@@ -28,7 +6,7 @@ export default function HomePage() {
       <header className="bg-white shadow-sm">
         <div className="max-w-6xl mx-auto px-4 py-3 flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <Colibri size={36} />
+           <img src="/colibri2.png" alt="MEJISAC" className="w-9 h-9 object-contain" />
             <span className="text-2xl font-black tracking-tight">MEJISAC</span>
           </div>
           <Link href="/login" className="bg-[#0a2a4a] text-white px-4 py-2 rounded-md font-bold text-sm">
@@ -56,7 +34,7 @@ export default function HomePage() {
             </div>
           </div>
           <div className="bg-[#0a2a4a] rounded-2xl p-10 text-center text-white">
-            <div className="flex justify-center"><Colibri size={120} /></div>
+            <div className="flex justify-center"><img src="/colibri2.png" alt="Colibrí MEJISAC" className="w-48 h-48 object-contain mx-auto" /></div>
             <p className="mt-2 font-bold">MEJISAC - Tu colibrí factura por ti</p>
           </div>
         </div>
