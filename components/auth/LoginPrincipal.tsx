@@ -4,8 +4,8 @@ import { useRouter } from "next/navigation"
 
 export function LoginPrincipal({ dark = true }: { dark?: boolean }){
   const router = useRouter()
-  const [ruc, setRuc] = useState("1790000000001")
-  const [pass, setPass] = useState("admin123")
+  const [ruc, setRuc] = useState("")
+  const [pass, setPass] = useState("")
   const [loading, setLoading] = useState(false)
 
   const i = `w-full mt-1.5 p-4 rounded-xl border outline-none text-[13px] ${dark? "bg-[#020a0f] border-white/10 text-white placeholder:text-white/20 focus:border-[#00f5d4]" : "bg-gray-50 border-gray-200 text-black focus:border-[#00f5d4]"}`;
@@ -18,44 +18,27 @@ export function LoginPrincipal({ dark = true }: { dark?: boolean }){
     setLoading(true)
 
     try {
-      const esDemo = ruc.trim() === "1790000000001" && pass === "admin123"
+  const res = await fetch('/api/auth/login', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ ruc: ruc.trim(), password: pass })
+  });
 
-      if (esDemo) {
-        // MODO DEMO - VISITANTE LIMITADO
-        localStorage.setItem('meijsac_token', 'demo-token-limitado')
-        localStorage.setItem('meijsac_user', JSON.stringify({ 
-          ruc: ruc.trim(), 
-          nombre: "Usuario", 
-          usuario: "demo",
-          modo: "demo",
-          esDemo: true,
-          saludo: "Bienvenido Usuario, soy ESISA. Estás en modo DEMO de visita, con capacidad limitada."
-        }))
-        localStorage.setItem('esisa_usuario_actual', 'Usuario')
-        localStorage.setItem('esisa_modo', 'demo')
-      } else {
-        // MODO REAL - CON NOMBRE REAL
-        // Aquí puedes poner que el nombre venga de tu API
-        const nombreReal = "Alexandra" // Esto vendrá de tu base de datos con el RUC
-        localStorage.setItem('meijsac_token', 'token-' + ruc.trim())
-        localStorage.setItem('meijsac_user', JSON.stringify({ 
-          ruc: ruc.trim(), 
-          nombre: nombreReal, 
-          usuario: ruc.trim(),
-          modo: "real",
-          esDemo: false,
-          saludo: `Hola ${nombreReal}, soy ESISA tu ayudante inteligente de Meijsac.`
-        }))
-        localStorage.setItem('esisa_usuario_actual', nombreReal)
-        localStorage.setItem('esisa_modo', 'real')
-      }
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error || 'Error al ingresar');
 
-      router.push('/dashboard')
-    } catch (err) {
-      alert("Error de conexión")
-    }
+  // Ahora SÍ guardamos el token REAL de la base de datos
+  localStorage.setItem('meijsac_token', data.token);
+  localStorage.setItem('meijsac_user', JSON.stringify(data.usuario));
+  localStorage.setItem('esisa_modo', 'real');
+  localStorage.setItem('esisa_usuario_actual', data.usuario.nombre);
 
-    setLoading(false)
+  router.push('/dashboard');
+} catch (e: any) {
+  alert(e.message);
+} finally {
+  setLoading(false);
+}
   }
 
   return (
