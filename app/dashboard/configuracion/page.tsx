@@ -76,19 +76,37 @@ export default function ConfiguracionAvanzadaSRI() {
     const firmaSubida = !!(cfg?.firma?.nombre || cfg?.firma?.expira || infoFirma?.ok);
 
     const handleFirmaChange = async (e:any) => {
-      const file = e.target.files[0];
-      if(!file) return;
-      const form = new FormData();
-      form.append('p12', file);
-      form.append('clave', cfg?.firma?.clave || "");
-      form.append('rucEmpresa', cfg?.ruc || "");
-      const res = await fetch('/api/sri/validar-firma', {method:'POST', body: form});
-      const data = await res.json();
-      setInfoFirma(data);
-      if(data.ok){
-        setCfg((prev:any)=>({...prev, firma:{...prev.firma, expira: data.fechaExpiracion, diasRestantes: data.diasRestantes, rucDetectado: data.rucEnFirma}}));
-      }
-    };
+  const file = e.target.files[0];
+  if(!file) return;
+
+  // 1. Si no hay clave, no intentar
+  if(!cfg?.firma?.clave){
+    alert("⚠️ Primero escribe la clave de la firma .p12");
+    e.target.value = ""; // Limpia el input para que no quede pegado
+    return;
+  }
+
+  const form = new FormData();
+  form.append('p12', file);
+  form.append('clave', cfg?.firma?.clave || "");
+  form.append('rucEmpresa', cfg?.ruc || "");
+  const res = await fetch('/api/sri/validar-firma', {method:'POST', body: form});
+  const data = await res.json();
+  setInfoFirma(data);
+
+  if(data.ok){
+    // CLAVE CORRECTA: SÍ se guarda
+    setCfg((prev:any)=>({...prev, firma:{...prev.firma, nombre: file.name, expira: data.fechaExpiracion, diasRestantes: data.diasRestantes, rucDetectado: data.rucEnFirma}}));
+  } else {
+    // CLAVE INCORRECTA: NO SE GUARDA NADA
+    alert("❌ Clave incorrecta. La firma NO se guardó.");
+    setInfoFirma(data);
+    // Borra el nombre para que en el Dashboard principal siga igual, como si no hubieras subido nada
+    setCfg((prev:any)=>({...prev, firma:{...prev.firma, nombre: "", expira: "", diasRestantes: null, rucDetectado: ""}}));
+    e.target.value = ""; // Limpia el input
+    localStorage.removeItem("meijsac_config_pro"); // No deja basura guardada
+  }
+};
 
     const handleGuardar = async () => {
       try {
