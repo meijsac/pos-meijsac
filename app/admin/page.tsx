@@ -44,24 +44,9 @@ export default function AdminModuladorCompleto(){
   const [nuevo, setNuevo] = useState({ nombre:"", descripcion:"", precio:0, frecuencia:"mensual" as any, dias_prueba:7, max_facturas:100, max_usuarios:3, max_sucursales:1, badge:"" })
 
 useEffect(()=>{
-  if(localStorage.getItem('meijsac_admin_token')==='ok') setLogado(true)
+  // Ya no usamos token de la compu, el login ahora pregunta a meijsac.com
   
-  // 1. Primero carga lo que esté guardado en este navegador, para que no se vea vacío
-  try {
-    const local = JSON.parse(localStorage.getItem('meijsac_clientes') || '[]')
-    if(local.length > 0){
-      setSubs(local.map((c:any)=>({
-        cliente_id: c.ruc, ruc: c.ruc,
-        razon: c.razon || c.razonSocial || "Sin nombre",
-        plan_id: "p2", precio_id: "pr2",
-        estado: c.estado==="BLOQUEADO" ? "hard_block" : "activo",
-        metodo_pago: "manual",
-        fecha_inicio: "2026-11-01",
-        fecha_corte: c.vencePlan || "2026-12-01",
-        consumo_facturas: 0, consumo_usuarios: 1
-      })))
-    }
-  } catch {}
+
 
   // 2. Después intenta traer los de la base
   fetch('/api/admin/empresas')
@@ -84,7 +69,7 @@ useEffect(()=>{
     .catch(e=>{ console.log("No llegó de la base, uso local", e) })
 },[])
 
-  const persistir = (nuevas: Suscripcion[])=>{ setSubs(nuevas); const paraGuardar = nuevas.map(s=>({ ruc:s.ruc, razon:s.razon, regimen: s.plan_id==="p1"?"RIMPE_POPULAR":"RIMPE_EMPRENDEDOR", plan: planes.find(p=>p.id===s.plan_id)?.nombre, vencePlan: s.fecha_corte, estado: s.estado==="hard_block"?"BLOQUEADO":s.estado==="soft_block"?"POR VENCER":"ACTIVO" })); localStorage.setItem('meijsac_clientes', JSON.stringify(paraGuardar)) }
+  const persistir = (nuevas: Suscripcion[])=>{ setSubs(nuevas); const paraGuardar = nuevas.map(s=>({ ruc:s.ruc, razon:s.razon, regimen: s.plan_id==="p1"?"RIMPE_POPULAR":"RIMPE_EMPRENDEDOR", plan: planes.find(p=>p.id===s.plan_id)?.nombre, vencePlan: s.fecha_corte, estado: s.estado==="hard_block"?"BLOQUEADO":s.estado==="soft_block"?"POR VENCER":"ACTIVO" })); setLogado(true) }
 
   // ===== PRORRATEO =====
   const calcularProrrateo = (precioActual:number, precioNuevo:number, inicio:string, corte:string)=>{
@@ -151,7 +136,7 @@ useEffect(()=>{
   return (
     <div className="min-h-screen bg-[#0a0a0a] text-white p-4">
       <div className="max-w-7xl mx-auto space-y-4">
-        <div className="flex justify-between items-center"><h1 className="text-xl font-black">MODULADOR COMPLETO</h1><button onClick={()=>{localStorage.removeItem('meijsac_admin_token'); setLogado(false)}} className="text-xs bg-white/10 px-3 py-1 rounded">Salir</button></div>
+        <div className="flex justify-between items-center"><h1 className="text-xl font-black">MODULADOR COMPLETO</h1><button onClick={()=>{setLogado(false)}} className="text-xs bg-white/10 px-3 py-1 rounded">Salir</button></div>
         <div className="flex gap-2">{["dash","planes","clientes","crear"].map(t=><button key={t} onClick={()=>setTab(t as any)} className={`px-4 py-2 rounded-xl text-xs font-black ${tab===t?"bg-[#00f5d4] text-black":"bg-white/10"}`}>{t==="dash"?"DASHBOARD":t==="planes"?"PLANES":t==="clientes"?"CLIENTES / SUSCRIPCIONES":"CREAR PLAN"}</button>)}</div>
 
         {tab==="dash" && (
