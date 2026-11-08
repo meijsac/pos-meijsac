@@ -7,59 +7,36 @@ export function AuthCard({ dark, setDark, onOpenRegister }: { dark: boolean; set
   const router = useRouter()
   const [tab, setTab] = useState<"ADMIN" | "CAJA">("ADMIN")
   const [ruc, setRuc] = useState("")
-  const [clave, setClave] = useState("123456")
+  const [clave, setClave] = useState("")
   const [loading, setLoading] = useState(false)
-
-  const dest = tab === "ADMIN" ? "/dashboard" : "/dashboard/pos-ticket"
-
-  function saveSession(token: string, user: object) {
-    localStorage.setItem("meijsac_token", token)
-    localStorage.setItem("meijsac_user", JSON.stringify(user))
-  }
-
-  function goDemo(rucValue: string) {
-    saveSession("offline-token-demo", {
-      ruc: rucValue,
-      nombre: "MEIJSAC DEMO",
-      rol: tab,
-      modo: "offline",
-    })
-    router.replace(dest)
-  }
 
   async function ingresar(e?: FormEvent) {
     e?.preventDefault()
     if (loading) return
-
     const rucValue = ruc.trim()
     if (rucValue.length !== 13 || !/^[0-9]+$/.test(rucValue)) {
       alert("SRI: El RUC debe tener 13 dígitos numéricos")
       return
     }
-
+    if (!clave) { alert("Ingresa tu contraseña"); return; }
     setLoading(true)
     try {
-      // 1. Verificamos si hay una empresa registrada localmente para leer sus restricciones
-      const empresaGuardada = localStorage.getItem("meijsac_empresa");
-      let destinoPermitido = "/dashboard"; // Ruta por defecto para ADMIN
+      // AHORA SÍ pregunta a meijsac.com / Supabase
+      const res = await fetch('/api/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ruc: rucValue, password: clave })
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'RUC o clave incorrectos');
 
-      if (empresaGuardada) {
-        const empresa = JSON.parse(empresaGuardada);
-        // Si el usuario es de tipo CAJA o su empresa está configurada para POS TICKET
-        if (tab === "CAJA" || empresa.modoFacturacion === "POST TICKET") {
-          destinoPermitido = "/dashboard/pos-ticket";
-        } else {
-          destinoPermitido = "/dashboard";
-        }
-      } else {
-        // Si entra por modo demo o no hay registro previo
-        destinoPermitido = tab === "ADMIN" ? "/dashboard" : "/dashboard/pos-ticket";
-      }
+      localStorage.setItem("meijsac_token", data.token)
+      localStorage.setItem("meijsac_user", JSON.stringify(data.usuario))
 
-      saveSession("offline-token-demo", { ruc: rucValue, nombre: "MEIJSAC", rol: tab })
-      router.replace(destinoPermitido)
-    } catch {
-      router.replace(tab === "ADMIN" ? "/dashboard" : "/dashboard/pos-ticket")
+      const dest = tab === "ADMIN" ? "/dashboard" : "/dashboard/pos-ticket"
+      router.replace(dest)
+    } catch (err: any) {
+      alert(err.message);
     } finally {
       setLoading(false)
     }
@@ -100,51 +77,21 @@ export function AuthCard({ dark, setDark, onOpenRegister }: { dark: boolean; set
           <label className={`text-[10px] font-bold tracking-widest ${dark ? "text-white/60" : "text-black/60"}`}>
             {tab === "ADMIN" ? "RUC / USUARIO EMPRESA (13 DÍGITOS)" : "USUARIO CAJA"}
           </label>
-          <input
-            id="ruc"
-            maxLength={13}
-            value={ruc}
-            onChange={(e) => setRuc(e.target.value)}
-            className={`w-full mt-2 p-4 rounded-2xl border outline-none text-sm tracking-widest ${dark ? "bg-black/60 border-white/10 text-white focus:border-[#00f5d4]" : "bg-gray-100 border-black/10 text-black focus:border-[#00f5d4]"}`}
-          />
+          <input id="ruc" maxLength={13} value={ruc} onChange={(e) => setRuc(e.target.value)} className={`w-full mt-2 p-4 rounded-2xl border outline-none text-sm tracking-widest ${dark ? "bg-black/60 border-white/10 text-white focus:border-[#00f5d4]" : "bg-gray-100 border-black/10 text-black focus:border-[#00f5d4]"}`} />
         </div>
         <div>
           <label className={`text-[10px] font-bold tracking-widest ${dark ? "text-white/60" : "text-black/60"}`}>CONTRASEÑA PRINCIPAL</label>
-          <input
-            id="clave"
-            type="password"
-            value={clave}
-            onChange={(e) => setClave(e.target.value)}
-            className={`w-full mt-2 p-4 rounded-2xl border outline-none text-sm ${dark ? "bg-black/60 border-white/10 text-white focus:border-[#ff00a8]" : "bg-gray-100 border-black/10 text-black focus:border-[#ff00a8]"}`}
-          />
+          <input id="clave" type="password" value={clave} onChange={(e) => setClave(e.target.value)} className={`w-full mt-2 p-4 rounded-2xl border outline-none text-sm ${dark ? "bg-black/60 border-white/10 text-white focus:border-[#ff00a8]" : "bg-gray-100 border-black/10 text-black focus:border-[#ff00a8]"}`} />
         </div>
-        <button
-          type="submit"
-          disabled={loading}
-          className="w-full py-4 rounded-2xl bg-[#00f5d4] text-black font-black tracking-wide shadow-[0_0_20px_#00f5d4]/40 hover:shadow-[0_0_30px_#00f5d4]/60 transition disabled:opacity-50"
-        >
-          {loading ? "INGRESANDO..." : "INGRESAR →"}
+        <button type="submit" disabled={loading} className="w-full py-4 rounded-2xl bg-[#00f5d4] text-black font-black tracking-wide shadow-[0_0_20px_#00f5d4]/40 hover:shadow-[0_0_30px_#00f5d4]/60 transition disabled:opacity-50">
+          {loading ? "VERIFICANDO EN MEIJSAC.COM..." : "INGRESAR →"}
         </button>
         <div className="flex justify-between text-[11px] mt-3">
           <span className={dark ? "text-white/50" : "text-black/50"}>✓ Recordarme</span>
           <span className="text-[#00f5d4] font-bold">¿Olvidaste tu contraseña?</span>
         </div>
-        <button
-          type="button"
-          disabled={loading}
-          onClick={() => goDemo(ruc.trim())}
-          className={`w-full mt-2 py-3 rounded-2xl border text-[11px] font-black tracking-widest ${dark ? "border-white/10 text-white/50" : "border-black/10 text-black/50"}`}
-        >
-          ▶️ PROBAR EN MODO DEMO
-        </button>
-
-        {/* AQUÍ ESTÁ LA SOLUCIÓN: Botón interactivo conectado al evento */}
         <div className="text-center mt-3">
-          <button
-            type="button"
-            onClick={onOpenRegister}
-            className={`text-[11px] bg-transparent border-none cursor-pointer p-0 ${dark ? "text-white/30" : "text-black/40"}`}
-          >
+          <button type="button" onClick={onOpenRegister} className={`text-[11px] bg-transparent border-none cursor-pointer p-0 ${dark ? "text-white/30" : "text-black/40"}`}>
             ¿Primera vez? <span className="text-[#ff2e9a] font-bold hover:underline">Crear empresa nueva</span>
           </button>
         </div>
