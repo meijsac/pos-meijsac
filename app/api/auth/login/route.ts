@@ -4,17 +4,7 @@ import { randomBytes } from "crypto"
 import { NextResponse } from "next/server"
 import { cookiesSesion, empresaParaCliente, firmarSesion } from "@/lib/empresa-sesion"
 import { abrirSesion, anotarIntento, leerIntentos } from "@/lib/login-memoria"
-import { evaluarBloqueo, exigeCaptcha, ipDe, navegadorDe, totpValido, hashCodigo, desencriptar } from "@/lib/seguridad"
-
-async function captchaValido(token: string, ip: string) {
-  if (!exigeCaptcha(token)) return false
-  const secreto = process.env.TURNSTILE_SECRET_KEY || ""
-  if (!secreto) return false
-  const cuerpo = new URLSearchParams({ secret: secreto, response: token, remoteip: ip })
-  const res = await fetch("https://challenges.cloudflare.com/turnstile/v0/siteverify", { method: "POST", body: cuerpo })
-  const data = await res.json().catch(() => ({}))
-  return data.success === true
-}
+import { evaluarBloqueo, ipDe, navegadorDe, totpValido, hashCodigo, desencriptar } from "@/lib/seguridad"
 
 function responder(body: unknown, status: number, cookies: string[] = []) {
   const res = NextResponse.json(body, { status })
@@ -33,11 +23,6 @@ export async function POST(req: Request) {
     const ahora = Date.now()
     const bloqueo = evaluarBloqueo(leerIntentos(), ruc, ip, ahora, canal)
     if (bloqueo.bloqueado) return responder({ error: bloqueo.mensaje }, 429)
-    if (!(await captchaValido(String(body.captcha || ""), ip))) {
-      anotarIntento({ correo: "captcha", ip, fecha: ahora, exitoso: false, canal })
-      const otra = evaluarBloqueo(leerIntentos(), ruc, ip, ahora, canal)
-      return responder({ error: otra.bloqueado ? otra.mensaje : "Resuelve el captcha para entrar" }, 401)
-    }
     if (!ruc || !password) return responder({ error: "Falta RUC o clave" }, 400)
 
     const usuarios = await prisma.usuario.findMany({ where: { empresa: { ruc } }, include: { empresa: true } })

@@ -10,25 +10,16 @@ export function AuthCard({ dark, setDark, onOpenRegister }: { dark: boolean; set
   const [tab, setTab] = useState<"ADMIN" | "CAJA">("ADMIN")
   const [ruc, setRuc] = useState("")
   const [clave, setClave] = useState("")
-  const [loading, setLoading] = useState(false)
   const [error, setError] = useState("")
   const turnstileRef = useRef<TurnstileHandle>(null)
-  const esperando = useRef(false)
-  const esperaToken = useRef<number | null>(null)
 
-  function cortarEspera() {
-    esperando.current = false
-    if (esperaToken.current) window.clearTimeout(esperaToken.current)
-    esperaToken.current = null
-  }
-
-  async function enviar(token: string) {
+  async function enviar() {
     const rucValue = ruc.trim()
     try {
       const res = await fetch("/api/auth/login", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ruc: rucValue, password: clave, captcha: token, canal: tab === "CAJA" ? "POS" : "LOGIN" })
+        body: JSON.stringify({ ruc: rucValue, password: clave, canal: tab === "CAJA" ? "POS" : "LOGIN" })
       })
       const data = await res.json()
       if (!res.ok) throw new Error(data.error || "RUC o clave incorrectos")
@@ -36,15 +27,12 @@ export function AuthCard({ dark, setDark, onOpenRegister }: { dark: boolean; set
       localStorage.removeItem("meijsac_token")
       router.replace(tab === "ADMIN" ? "/dashboard" : "/dashboard/pos-ticket")
     } catch (err: any) {
-      setError(err.message || "Inténtalo de nuevo")
-      turnstileRef.current?.reset()
-      setLoading(false)
+      setError(err.message || "RUC o clave incorrectos")
     }
   }
 
   function ingresar(e?: FormEvent) {
     e?.preventDefault()
-    if (loading) return
     const rucValue = ruc.trim()
     if (!rucValue || !clave) {
       setError("Ingresa RUC y contraseña")
@@ -55,18 +43,8 @@ export function AuthCard({ dark, setDark, onOpenRegister }: { dark: boolean; set
       return
     }
     setError("")
-    setLoading(true)
-    esperando.current = true
-    if (esperaToken.current) window.clearTimeout(esperaToken.current)
-    esperaToken.current = window.setTimeout(() => {
-      if (!esperando.current) return
-      cortarEspera()
-      setLoading(false)
-      setError("Inténtalo de nuevo")
-      turnstileRef.current?.reset()
-    }, 8000)
-    turnstileRef.current?.reset()
     turnstileRef.current?.execute()
+    void enviar()
   }
 
   return (
@@ -115,22 +93,11 @@ export function AuthCard({ dark, setDark, onOpenRegister }: { dark: boolean; set
           sitekey={process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY}
           size="invisible"
           execution="execute"
-          onVerify={(token) => {
-            if (!esperando.current || !token) return
-            cortarEspera()
-            void enviar(token)
-          }}
-          onExpire={() => turnstileRef.current?.reset()}
-          onError={() => {
-            cortarEspera()
-            setLoading(false)
-            setError("Inténtalo de nuevo")
-            turnstileRef.current?.reset()
-          }}
+          onVerify={() => {}}
+          onError={() => {}}
         />
-        <button type="submit" disabled={loading} className="w-full py-4 rounded-2xl bg-[#00f5d4] text-black font-black tracking-wide flex items-center justify-center gap-2 disabled:opacity-70">
-          {loading && <span className="h-4 w-4 rounded-full border-2 border-black/30 border-t-black animate-spin" />}
-          {loading ? "Verificando..." : "ENTRAR"}
+        <button type="submit" className="w-full py-4 rounded-2xl bg-[#00f5d4] text-black font-black tracking-wide">
+          ENTRAR
         </button>
         {error && <p className="text-sm font-bold text-red-400">{error}</p>}
         <div className="flex justify-between text-[11px] mt-3">
