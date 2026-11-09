@@ -29,6 +29,9 @@ export default function EstadoSRI(){
         hist.push(final)
         localStorage.setItem("meijsac_facturas_emitidas", JSON.stringify(hist))
         localStorage.setItem("meijsac_ultima_factura_autorizada", JSON.stringify(final))
+        import("@/lib/plan-cliente").then(({ contarComprobante, rucLocal }) => {
+          contarComprobante(factura?.configEmisor?.ruc || rucLocal())
+        })
         if(final.mesaOrigenId){
           const mesas = JSON.parse(localStorage.getItem("meijsac_restaurante_mesas")||"[]")
           localStorage.setItem("meijsac_restaurante_mesas", JSON.stringify(mesas.map((m:any)=> m.id===final.mesaOrigenId? {...m, estado:"LIBRE", items:[]} : m)))

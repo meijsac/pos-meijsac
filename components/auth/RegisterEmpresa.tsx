@@ -67,7 +67,7 @@ export function RegisterEmpresa({ dark, setTipo }: any) {
     setError(""); setPaso(paso+1)
   }
 
-  const guardar = () => {
+  const guardar = async () => {
     if(!form.regimen){ setError("Elige un Régimen SRI"); return }
 
     // CORREGIDO 3 y 4: sin duplicados, cada campo una sola vez
@@ -96,7 +96,19 @@ export function RegisterEmpresa({ dark, setTipo }: any) {
       adminUser: form.adminUser,
       adminPass: btoa(form.adminPass),
       posTicketHabilitado: form.regimen === "RIMPE_POPULAR",
-      fecha: new Date().toISOString()
+      fecha: new Date().toISOString(),
+      planEstado: "PRUEBA"
+    }
+
+    const res = await fetch("/api/empresa/registro", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ ...datosEmpresa, adminPass: form.adminPass }),
+    })
+    const data = await res.json().catch(() => ({}))
+    if (!res.ok) {
+      setError(data.error || "No se pudo abrir el plan de prueba")
+      return
     }
 
     localStorage.setItem('meijsac_empresa', JSON.stringify(datosEmpresa))

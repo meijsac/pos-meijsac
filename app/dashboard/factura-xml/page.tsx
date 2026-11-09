@@ -629,8 +629,11 @@ const total = subtotalSin + iva15 + ivaDiferenciado + valorICE + valorIRBPNR + p
   }
   
   
-  const emitirComprobante = () => {
+  const emitirComprobante = async () => {
     if(!pagoRealizado) return alert("Primero cobra en CAJA")
+    const { emisionBloqueada, rucLocal } = await import("@/lib/plan-cliente")
+    const avisoPlan = await emisionBloqueada(configEmisor?.ruc || rucLocal())
+    if (avisoPlan) return alert(avisoPlan)
     console.log('Generando XML con pagos:', pagosReales, ' refs:', refTarjeta, refTransfer)
 
     // --- CORRECCIÓN 1: CLAVE 49 + DV MODULO 11 - FICHA TÉCNICA SRI ---

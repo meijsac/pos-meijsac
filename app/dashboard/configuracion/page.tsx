@@ -124,6 +124,13 @@ export default function ConfiguracionAvanzadaSRI() {
 
         if (!res.ok) throw new Error(`Error ${res.status}`);
         localStorage.setItem("meijsac_config_pro", JSON.stringify(payload));
+        if (payload?.ruc && payload?.firma?.expira) {
+          await fetch("/api/empresa/firma", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ ruc: payload.ruc, firmaExpira: payload.firma.expira }),
+          });
+        }
         alert(`✅ Guardado en ${cfg?.ambiente || "PRUEBAS"}`);
       } catch (e:any) {
         alert("❌ " + e.message);

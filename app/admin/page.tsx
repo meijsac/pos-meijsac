@@ -5,7 +5,7 @@ import { useState, useEffect, useMemo } from "react"
 type Plan = { id: string; nombre: string; descripcion: string; estado: "activo"|"inactivo"|"archivado"; badge: string; color: string }
 type Precio = { id: string; plan_id: string; precio: number; moneda: string; frecuencia: "mensual"|"anual"; dias_prueba: number; fecha_desde: string }
 type Limite = { plan_id: string; clave: string; valor: number } // -1 = ilimitado
-type Suscripcion = { cliente_id: string; ruc: string; razon: string; plan_id: string; precio_id: string; estado: "prueba"|"activo"|"soft_block"|"hard_block"|"cancelado"; metodo_pago: "manual"|"automatico"; fecha_inicio: string; fecha_corte: string; consumo_facturas: number; consumo_usuarios: number }
+type Suscripcion = { cliente_id: string; ruc: string; razon: string; plan_id: string; precio_id: string; estado: "prueba"|"activo"|"soft_block"|"hard_block"|"cancelado"; metodo_pago: "manual"|"automatico"; fecha_inicio: string; fecha_corte: string; firmaVence: string; consumo_facturas: number; consumo_usuarios: number }
 
 const PLANES_SEED: Plan[] = [
   { id: "p1", nombre: "Plan Emprendedor", descripcion: "Para Negocio Popular - POS Ticket", estado: "activo", badge: "Popular", color: "#00f5d4" },
@@ -43,8 +43,22 @@ export default function AdminModuladorCompleto(){
   // Form crear plan
   const [nuevo, setNuevo] = useState({ nombre:"", descripcion:"", precio:0, frecuencia:"mensual" as any, dias_prueba:7, max_facturas:100, max_usuarios:3, max_sucursales:1, badge:"" })
 
+  const entrar = async () => {
+    const res = await fetch("/api/admin/login", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ user: user.trim(), pass }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      alert(data.error || "Acceso denegado");
+      return;
+    }
+    localStorage.setItem("meijsac_admin_token", "ok");
+    setLogado(true);
+  };
+
 useEffect(()=>{
-  // Ya no usamos token de la compu, el login ahora pregunta a meijsac.com
   
 
 
@@ -62,6 +76,7 @@ useEffect(()=>{
         metodo_pago: "manual", 
         fecha_inicio: c.createdAt?.slice(0,10) || "2026-11-01", 
         fecha_corte: c.vencePlan || "2026-12-01",
+        firmaVence: c.firmaVence || c.firma_vence || "Sin firma",
         consumo_facturas: 0, consumo_usuarios: 1
       }))
       setSubs(mapeadas)
@@ -128,7 +143,7 @@ useEffect(()=>{
         <h1 className="font-black text-white">MEIJSAC SUPER ADMIN</h1>
         <input value={user} onChange={e=>setUser(e.target.value)} placeholder="Usuario" className="w-full p-3 rounded-xl bg-black border border-white/10 text-white text-sm" />
         <input type="password" value={pass} onChange={e=>setPass(e.target.value)} placeholder="Contraseña" className="w-full p-3 rounded-xl bg-black border border-white/10 text-white text-sm" />
-        <button onClick={()=>{ if(user==="MEIJSACONT" && pass==="Meijsac2026!"){ localStorage.setItem('meijsac_admin_token','ok'); setLogado(true)} else alert("Acceso denegado") }} className="w-full py-3 rounded-xl bg-[#00f5d4] text-black font-black">ENTRAR</button>
+        <button type="button" onClick={entrar} className="w-full py-3 rounded-xl bg-[#00f5d4] text-black font-black">ENTRAR</button>
       </div>
     </div>
   )
@@ -176,10 +191,10 @@ useEffect(()=>{
         {tab==="clientes" && (
           <div className="space-y-3">
             <input value={filtro} onChange={e=>setFiltro(e.target.value)} placeholder="Buscar por RUC o Razón..." className="w-full p-3 rounded-xl bg-black border border-white/10 text-sm" />
-            <div className="overflow-x-auto bg-white/5 rounded-xl border border-white/10"><table className="w-full text-[11px]"><thead><tr className="text-left opacity-50 text-[10px]"><th className="p-2">CLIENTE</th><th>PLAN</th><th>CONSUMO</th><th>CORTE</th><th>ESTADO</th><th>ACCIONES</th></tr></thead><tbody>{filtrados.map(s=>{
+            <div className="overflow-x-auto bg-white/5 rounded-xl border border-white/10"><table className="w-full text-[11px]"><thead><tr className="text-left opacity-50 text-[10px]"><th className="p-2">CLIENTE</th><th>PLAN</th><th>CONSUMO</th><th>CORTE</th><th>FIRMA VENCE</th><th>ESTADO</th><th>ACCIONES</th></tr></thead><tbody>{filtrados.map(s=>{
               const limF = limites.find(l=>l.plan_id===s.plan_id && l.clave==="max_facturas")?.valor||0
               const porc = limF===-1?0:Math.round((s.consumo_facturas/limF)*100)
-              return <tr key={s.cliente_id} className="border-t border-white/5"><td className="p-2"><div className="font-bold">{s.ruc}</div><div className="opacity-60">{s.razon}</div></td><td className="p-2"><select value={s.plan_id} onChange={e=>cambiarPlan(s, e.target.value)} className="bg-black border border-white/10 rounded px-1 py-1">{planes.map(p=><option key={p.id} value={p.id}>{p.nombre}</option>)}</select><div className="text-[9px] opacity-50">${precios.find(p=>p.id===s.precio_id)?.precio} {s.metodo_pago}</div></td><td className="p-2"><div>Facturas {s.consumo_facturas}/{limF===-1?"∞":limF} ({porc}%)</div><div className="h-1 bg-white/10 rounded"><div className={`h-1 rounded ${porc>90?"bg-red-500":"bg-[#00f5d4]"}`} style={{width: `${Math.min(100,porc)}%`}}></div></div></td><td className="p-2">{s.fecha_corte}</td><td className="p-2"><span className={`px-2 py-1 rounded text-[10px] ${s.estado==="activo"?"bg-emerald-500/20 text-emerald-300":s.estado==="soft_block"?"bg-orange-500/20 text-orange-300":"bg-red-500/20 text-red-300"}`}>{s.estado}</span></td><td className="p-2 flex gap-1"><button onClick={()=>toggleBloqueo(s)} className="bg-white/10 px-2 py-1 rounded text-[10px]">{s.estado==="activo"?"Soft Block":"Activar"}</button><button onClick={()=>{if(confirm("Eliminar?")) persistir(subs.filter(x=>x.cliente_id!==s.cliente_id))}} className="text-red-400 px-2">X</button></td></tr>
+              return <tr key={s.cliente_id} className="border-t border-white/5"><td className="p-2"><div className="font-bold">{s.ruc}</div><div className="opacity-60">{s.razon}</div></td><td className="p-2"><select value={s.plan_id} onChange={e=>cambiarPlan(s, e.target.value)} className="bg-black border border-white/10 rounded px-1 py-1">{planes.map(p=><option key={p.id} value={p.id}>{p.nombre}</option>)}</select><div className="text-[9px] opacity-50">${precios.find(p=>p.id===s.precio_id)?.precio} {s.metodo_pago}</div></td><td className="p-2"><div>Facturas {s.consumo_facturas}/{limF===-1?"∞":limF} ({porc}%)</div><div className="h-1 bg-white/10 rounded"><div className={`h-1 rounded ${porc>90?"bg-red-500":"bg-[#00f5d4]"}`} style={{width: `${Math.min(100,porc)}%`}}></div></div></td><td className="p-2">{s.fecha_corte}</td><td className="p-2">{s.firmaVence}</td><td className="p-2"><span className={`px-2 py-1 rounded text-[10px] ${s.estado==="activo"?"bg-emerald-500/20 text-emerald-300":s.estado==="soft_block"?"bg-orange-500/20 text-orange-300":"bg-red-500/20 text-red-300"}`}>{s.estado}</span></td><td className="p-2 flex gap-1"><button onClick={()=>toggleBloqueo(s)} className="bg-white/10 px-2 py-1 rounded text-[10px]">{s.estado==="activo"?"Soft Block":"Activar"}</button><button onClick={()=>{if(confirm("Eliminar?")) persistir(subs.filter(x=>x.cliente_id!==s.cliente_id))}} className="text-red-400 px-2">X</button></td></tr>
             })}</tbody></table></div>
             <p className="text-[10px] opacity-50">Reglas aplicadas: Trial → Pendiente pago → Soft Block día 1 mora (solo ver) → Hard Block día 15 (sin acceso). Downgrade bloqueado si supera usuarios. Prorrateo automático al cambiar plan. Pago actual: MANUAL transferencia/efectivo.</p>
           </div>

@@ -1,5 +1,6 @@
 "use client"
 import { useState, useEffect } from "react"
+import { contarComprobante, emisionBloqueada, rucLocal } from "@/lib/plan-cliente"
 
 type Producto = { id:number, nombre:string, precio:number, stock:number, iva: number }
 type Cart = Producto & { qty:number }
@@ -33,6 +34,8 @@ export default function PosTicket() {
 
  const cobrar = async () => {
   if(!caja.abierta){ alert("Abre caja primero"); return }
+  const aviso = await emisionBloqueada(rucLocal())
+  if (aviso) { alert(aviso); return }
 
   // 1. Cargamos la config PRO que creaste en CONFIGURACION
   const cfg = JSON.parse(localStorage.getItem('meijsac_config_pro') || '{}');
@@ -65,6 +68,7 @@ export default function PosTicket() {
     setCaja({...caja, saldo: caja.saldo+total});
     setCart([]);
     alert(`VENTA OFFLINE OK - Ticket ${claveAcceso.slice(-9)} guardado. Se enviará solo al volver internet`);
+    contarComprobante(cfg.ruc || rucLocal());
     return;
   }
 
@@ -77,6 +81,7 @@ export default function PosTicket() {
     setCaja({...caja, saldo: caja.saldo+total});
     setCart([]);
     alert("VENTA OK - Enviada al SRI");
+    contarComprobante(cfg.ruc || rucLocal());
   }catch(e){
     alert("Sin conexión, guardada en cola offline");
   }

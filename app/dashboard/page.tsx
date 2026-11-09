@@ -110,8 +110,9 @@ export default function DashboardMeijsac(){
   const [showBg, setShowBg] = useState(false)
   // === AQUI VA LO REAL - DENTRO DEL COMPONENTE ===
   const [miSuscripcion, setMiSuscripcion] = useState<any>(null)
+  const [accesoPlan, setAccesoPlan] = useState<any>(null)
   const [firmaMock, setFirmaMock] = useState({ vence: "2026-11-10", titular: "MEIJSAC CIA LTDA" })
-  const [planMock, setPlanMock] = useState({ vence: "2026-10-30", nombre: "PRO ANUAL" })
+  const [planMock, setPlanMock] = useState({ vence: "2026-10-30", nombre: "PLAN DE PRUEBA" })
   const [userMock, setUserMock] = useState({ razon: "Cargando...", ruc: "", logo: "" })
   
   useEffect(()=>{
@@ -127,10 +128,22 @@ export default function DashboardMeijsac(){
     if (guardado) {
       const e = JSON.parse(guardado)
       setUserMock({ razon: e.razon || e.nombreComercial, ruc: e.ruc, logo: "" })
-      setFirmaMock({ vence: "2026-11-10", titular: e.razon })
+      const cfgProFirma = JSON.parse(localStorage.getItem('meijsac_config_pro') || 'null')
+      if (cfgProFirma?.firma?.expira) setFirmaMock({ vence: cfgProFirma.firma.expira, titular: e.razon })
       const clientes = JSON.parse(localStorage.getItem('meijsac_clientes') || "[]")
       const yo = clientes.find((c:any)=> c.ruc === e.ruc)
       if(yo) setMiSuscripcion(yo)
+      if (e.ruc) {
+        fetch(`/api/empresa/estado?ruc=${encodeURIComponent(e.ruc)}`)
+          .then(r => r.ok ? r.json() : null)
+          .then(data => {
+            if (!data) return
+            setAccesoPlan(data)
+            if (data.firmaExpira) setFirmaMock({ vence: data.firmaExpira, titular: e.razon })
+            if (data.vence) setPlanMock({ vence: data.vence, nombre: data.planNombre || "PLAN DE PRUEBA" })
+          })
+          .catch(() => {})
+      }
     }
   const firmaGuardada = localStorage.getItem('meijsac_firma') || localStorage.getItem('meijsac_config_pro')
 const cfgPro = firmaGuardada ? JSON.parse(firmaGuardada) : null
@@ -148,8 +161,8 @@ if(localStorage.getItem('meijsac_firma') || cfgPro?.firma?.nombre){
   const diasPlan = getDias(planMock.vence)
   const colFirma = getColor(diasFirma)
   const colPlan = getColor(diasPlan)
-  const estaBloqueado = miSuscripcion?.estado === "BLOQUEADO"
-  const estaPorVencer = miSuscripcion?.estado === "POR VENCER"
+  const estaBloqueado = accesoPlan ? accesoPlan.estado === "BLOQUEADO" : miSuscripcion?.estado === "BLOQUEADO"
+  const estaPorVencer = accesoPlan ? false : miSuscripcion?.estado === "POR VENCER"
 
   return (
     <div className="min-h-screen text-white p-4 md:p-6 selection:bg-white selection:text-black pb-[20px]"

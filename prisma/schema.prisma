@@ -3,8 +3,22 @@ generator client {
 }
 
 datasource db {
-  provider = "postgresql"
-  url      = env("DATABASE_URL")
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+model PlanComercial {
+  id                 String    @id @default(cuid())
+  nombre             String
+  precio             Float     @default(0)
+  duracionDias       Int
+  limiteComprobantes Int
+  limiteUsuarios     Int
+  modulos            String    @default("")
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+  empresas           Empresa[]
 }
 
 model Empresa {
@@ -16,9 +30,18 @@ model Empresa {
   direccion       String?
   telefono        String?
   email           String?
+  firmaExpira     DateTime?
+  planEstado      String   @default("PRUEBA")
+  planId          String?
+  plan            PlanComercial? @relation(fields: [planId], references: [id], onDelete: SetNull)
+  planInicio      DateTime?
+  planFin         DateTime?
+  metodoPago      String?
+  comprobantesUsados Int   @default(0)
+  pruebaInicio    DateTime @default(now())
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
-  
+
   // Relaciones
   clientes        Cliente[]
   usuarios        Usuario[]
