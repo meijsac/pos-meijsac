@@ -285,6 +285,7 @@ export default function EstadoSRI(){
     <html><head><title>TICKET</title>
     <style>@page{size:80mm auto;margin:2mm} body{width:80mm;font-family:monospace;font-size:11px;color:#000}.c{text-align:center}.b{font-weight:900}.line{border-top:1px dashed #000;margin:4px 0}</style>
     </head><body>
+    ${d.configEmisor?.logo ? `<div class="c"><img src="${d.configEmisor.logo}" alt="" style="width:60mm;max-width:60mm;height:auto;object-fit:contain"/></div>` : ""}
     <div class="c b">${d.configEmisor?.comercial || ""}</div>
     <div class="c">${d.configEmisor?.razon || ""}</div>
     <div class="c">RUC: ${d.configEmisor?.ruc || ""}</div>

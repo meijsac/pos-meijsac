@@ -2,6 +2,7 @@
 import { useState, useEffect } from "react";
 import { feriadosIvaReducido } from '@/lib/iva-feriados.config';
 import { cargarEmpresaSesion } from "@/lib/sesion-cliente";
+import { errorLogo } from "@/lib/logo-empresa";
 
 const SRI_URLS = {
     "1": { nombre: "PRUEBAS", url: "https://celcer.sri.gob.ec/comprobantes-electronicos-ws/RecepcionComprobantesOffline?wsdl", auth: "https://celcer.sri.gob.ec/comprobantes-electronicos-ws/AutorizacionComprobantesOffline?wsdl" },
@@ -74,6 +75,7 @@ export default function ConfiguracionAvanzadaSRI() {
     const [logs, setLogs] = useState<any[]>([]);
     const [infoFirma, setInfoFirma] = useState<any>(null);
     const [guardando, setGuardando] = useState(false);
+    const [avisoLogo, setAvisoLogo] = useState("");
     const firmaSubida = !!(cfg?.firma?.nombre || cfg?.firma?.expira || infoFirma?.ok);
 
     const handleFirmaChange = async (e:any) => {
@@ -109,12 +111,47 @@ export default function ConfiguracionAvanzadaSRI() {
   }
 };
 
+    const elegirLogo = (file?: File) => {
+      if (!file) return
+      const aviso = errorLogo(file.name, file.type, file.size)
+      if (aviso) {
+        setAvisoLogo(aviso)
+        setCfg((p: any) => ({ ...p, logoFile: null, logoNombre: "" }))
+        return
+      }
+      const url = URL.createObjectURL(file)
+      setAvisoLogo("")
+      setCfg((p: any) => ({ ...p, logoPreview: url, logoFile: file, logoNombre: file.name }))
+    }
+
     const handleGuardar = async () => {
+      if (avisoLogo) return
       try {
         setGuardando(true);
         const payload = { ...cfg };
+        let logoGuardado = false
+        if (payload.logoFile instanceof File) {
+          const fd = new FormData()
+          fd.append("file", payload.logoFile)
+          const subida = await fetch("/api/empresa/logo", {
+            method: "POST",
+            headers: { Authorization: `Bearer ${localStorage.getItem("meijsac_token") || ""}` },
+            body: fd,
+          })
+          const data = await subida.json().catch(() => ({}))
+          if (!subida.ok || !data.logo_url) {
+            const texto = data.error || "No se pudo guardar el logo: error de base. Intenta de nuevo."
+            setAvisoLogo(texto)
+            return
+          }
+          payload.logo_url = data.logo_url
+          payload.logoUrl = data.logo_url
+          payload.marca_ride = data.logo_url
+          payload.logoPreview = data.logo_url
+          logoGuardado = true
+          setAvisoLogo("Logotipo guardado correctamente")
+        }
         delete payload.logoFile;
-        delete payload.logoPreview;
         delete payload.firmaFile;
 
         const res = await fetch("/api/configuracion", {
@@ -124,10 +161,15 @@ export default function ConfiguracionAvanzadaSRI() {
         });
 
         if (!res.ok) throw new Error(`Error ${res.status}`);
-        localStorage.setItem("meijsac_config_pro", JSON.stringify(payload));
-        alert(`✅ Guardado en ${cfg?.ambiente || "PRUEBAS"}`);
+        try { localStorage.setItem("meijsac_config_pro", JSON.stringify({ ...payload, logoPreview: undefined })) } catch {}
+        const empresa = await cargarEmpresaSesion()
+        const logo = empresa.logo_url || empresa.logoUrl || empresa.marca_ride || payload.logo_url || ""
+        setCfg((p: any) => ({ ...p, ...payload, logoFile: null, logo_url: logo, logoUrl: logo, marca_ride: logo, logoPreview: logo || p?.logoPreview || "" }))
+        setAvisoLogo(logoGuardado ? "Logotipo guardado correctamente" : "")
+        if (!logoGuardado) alert("Configuración guardada")
       } catch (e:any) {
-        alert("❌ " + e.message);
+        if (String(e?.message || "").includes("logo")) setAvisoLogo(e.message)
+        else alert("❌ " + e.message);
       } finally {
         setGuardando(false);
       }
@@ -219,6 +261,13 @@ base.dirMatriz = datosReales.dirMatriz || base.dirMatriz || "";
 base.provincia = datosReales.provincia || base.provincia || "";
 base.ciudad = datosReales.ciudad || base.ciudad || "";
 base.sucursales = datosReales.sucursales || base.sucursales || [];
+        const logoGuardado = datosReales.logo_url || datosReales.logoUrl || datosReales.marca_ride || "";
+        if (logoGuardado) {
+          base.logo_url = logoGuardado;
+          base.logoUrl = logoGuardado;
+          base.marca_ride = logoGuardado;
+          base.logoPreview = logoGuardado;
+        }
         setCfg(base);
         setLogs(JSON.parse(localStorage.getItem("meijsac_logs") || "[]"));
       })()
@@ -527,30 +576,33 @@ base.sucursales = datosReales.sucursales || base.sucursales || [];
                     <p className="text-[#00f5d4] font-bold text-[11px]">5. MARCA RIDE - IMAGEN PARA FACTURA ELECTRÓNICA</p>
 
                     <div
-                      onDrop={(e:any)=>{ e.preventDefault(); const f=e.dataTransfer.files[0]; if(f && f.type.startsWith('image/')){ const url=URL.createObjectURL(f); setCfg((p:any)=>({...p, logoPreview: url, logoFile: f, logoNombre: f.name})); } }}
+                      onDrop={(e:any)=>{ e.preventDefault(); elegirLogo(e.dataTransfer.files?.[0]); }}
                       onDragOver={(e)=>e.preventDefault()}
                       className="bg-black border-2 border-dashed border-white/20 rounded-xl p-6 text-center hover:border-[#00f5d4]/50 transition"
                     >
                       <p className="text-[10px] font-bold text-white mb-1">Logotipo de Empresa (RIDE)</p>
-                      <p className="text-[9px] text-white/30 mb-3">Arrastra tu logo aquí - PNG con fondo transparente recomendado</p>
+                      <p className="text-[9px] text-white/30 mb-3">PNG, JPG o WEBP. Máximo 2 MB.</p>
 
-                      {(cfg?.logoPreview || cfg?.logoUrl)? (
-                        <div className="mx-auto w-32 h-32 bg-white rounded-lg p-2 flex items-center justify-center mb-3">
-                          <img src={cfg?.logoPreview || cfg?.logoUrl} alt="Preview Logo" className="max-w-full max-h-full object-contain" />
+                      {(cfg?.logoPreview || cfg?.logoUrl || cfg?.logo_url)? (
+                        <div className="mx-auto w-48 h-48 bg-white rounded-lg p-3 flex items-center justify-center mb-3">
+                          <img src={cfg?.logoPreview || cfg?.logoUrl || cfg?.logo_url} alt="Logotipo" className="max-w-full max-h-full object-contain" />
                         </div>
                       ) : (
-                        <div className="mx-auto w-32 h-20 bg-white/5 rounded-lg flex items-center justify-center mb-3 border border-white/10">
-                          <span className="text-[9px] text-white/20">Sin logo</span>
+                        <div className="mx-auto w-48 h-28 bg-white/5 rounded-lg flex items-center justify-center mb-3 border border-white/10">
+                          <span className="text-[11px] text-white/40">Sin logotipo</span>
                         </div>
                       )}
 
                       <input
                         type="file"
-                        accept="image/png,image/jpeg,image/webp"
-                        onChange={(e:any)=>{ const f=e.target.files?.[0]; if(f){ const url=URL.createObjectURL(f); setCfg((p:any)=>({...p, logoPreview: url, logoFile: f, logoNombre: f.name})); } }}
+                        accept=".png,.jpg,.jpeg,.webp,image/png,image/jpeg,image/webp"
+                        onChange={(e:any)=>{ elegirLogo(e.target.files?.[0]); e.target.value = ""; }}
                         className="mt-2 text-[10px] mx-auto block text-white/60 file:mr-3 file:py-1 file:px-3 file:rounded-full file:border-0 file:bg-[#00f5d4] file:text-black file:text-[10px] file:font-bold hover:file:bg-[#00f5d4]/80"
                       />
                       {cfg?.logoNombre && <p className="mt-2 text-[10px] text-[#00f5d4]">📁 {cfg.logoNombre}</p>}
+                      {avisoLogo && (
+                        <p className={`mt-3 text-[12px] font-bold ${avisoLogo === "Logotipo guardado correctamente" ? "text-green-400" : "text-red-400"}`}>{avisoLogo}</p>
+                      )}
                     </div>
 
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4 bg-black border border-white/10 rounded-xl p-4">
@@ -725,6 +777,7 @@ base.sucursales = datosReales.sucursales || base.sucursales || [];
                 <div className="flex justify-end mt-8">
                   <button
                     onClick={handleGuardar}
+                    disabled={guardando || avisoLogo.startsWith("Formato") || avisoLogo.startsWith("La imagen")}
                     className={`font-black text-[11px] px-6 py-2 rounded-full transition-all ${
                       cfg?.ambiente==='PRODUCCIÓN'
                        ? 'bg-[#00ff5d] text-black shadow-[0_0_15px_rgba(0,255,93,0.5)] hover:bg-[#00ff5d]/90'
