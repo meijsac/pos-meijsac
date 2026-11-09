@@ -78,6 +78,10 @@ export default function ClientesModule() {
     { id: "1", tipoId: "07", identificacion: "9999999999999", razonSocial: "CONSUMIDOR FINAL", tipoCliente: "NATURAL", email: "", telefono: "", direccion: "Pichincha", provincia: "PICHINCHA", ciudad: "QUITO", diasCredito: 0, limiteCredito: 0, categoria: "NINGUNO", descuento: 0 }
   ]);
   const [busca, setBusca] = useState("");
+  const [avisoMasivo, setAvisoMasivo] = useState("");
+  const [cargandoMasivo, setCargandoMasivo] = useState(false);
+  const [vistaMasiva, setVistaMasiva] = useState<{ total: number; errores: number; mensaje: string; filas: { numero: number; tipo_identificacion: string; identificacion: string; nombre_razon_social: string; email: string; errores: string[] }[] } | null>(null);
+  const [archivoMasivo, setArchivoMasivo] = useState<File | null>(null);
   const [form, setForm] = useState<Cliente>({
     id: "", tipoId: "05", identificacion: "", razonSocial: "", nombreComercial: "", tipoCliente: "NATURAL", email: "", telefono: "", direccion: "", provincia: "PICHINCHA", ciudad: "QUITO", diasCredito: 0, limiteCredito: 0, categoria: "DETALLISTA", descuento: 0
   });
@@ -193,6 +197,55 @@ export default function ClientesModule() {
     c.razonSocial.toLowerCase().includes(busca.toLowerCase()) || c.identificacion.includes(busca)
   ), [clientes, busca]);
 
+  const bajarArchivo = async (url: string) => {
+    setAvisoMasivo("");
+    const res = await fetch(url);
+    const tipo = res.headers.get("content-type") || "";
+    if (!res.ok || tipo.includes("application/json")) {
+      const data = await res.json().catch(() => ({}));
+      setAvisoMasivo(data.error || "No hay clientes para descargar");
+      return;
+    }
+    const blob = await res.blob();
+    const dispo = res.headers.get("content-disposition") || "";
+    const nombre = dispo.match(/filename="?([^"]+)"?/)?.[1] || "clientes.xlsx";
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = nombre;
+    a.click();
+    URL.revokeObjectURL(a.href);
+  };
+
+  const leerMasivo = async (file: File, confirmar: boolean) => {
+    setCargandoMasivo(true);
+    setAvisoMasivo("");
+    try {
+      const fd = new FormData();
+      fd.append("archivo", file);
+      fd.append("confirmar", confirmar ? "1" : "0");
+      const res = await fetch("/api/clientes/masivo", { method: "POST", body: fd });
+      const data = await res.json();
+      if (!res.ok && data.error && !(data.filas || []).length) {
+        setVistaMasiva(null);
+        setAvisoMasivo(data.error);
+        return;
+      }
+      if (Array.isArray(data.filas)) setVistaMasiva({ total: data.total || data.filas.length, errores: data.errores || 0, mensaje: data.mensaje || "", filas: data.filas });
+      if (confirmar && data.ok) {
+        setAvisoMasivo(`${data.mensaje}. ${data.detalle}`);
+        setVistaMasiva(null);
+        setArchivoMasivo(null);
+        await cargarClientes();
+      } else if (data.mensaje) {
+        setAvisoMasivo(data.mensaje);
+      }
+    } catch {
+      setAvisoMasivo("No se pudo cargar el archivo");
+    } finally {
+      setCargandoMasivo(false);
+    }
+  };
+
   const handleGuardar = async () => {
   if(!form.identificacion || !form.razonSocial || !form.direccion){
     alert("Falta RUC, Razón Social y Dirección");
@@ -248,8 +301,23 @@ export default function ClientesModule() {
   return (
     <div className="min-h-screen bg-black text-white p-4 flex gap-4">
       <div className="w-[40%] bg-[#0f172a]/50 border border-white/10 rounded-xl p-3 flex flex-col">
-        <button onClick={() => setForm({ id: "", tipoId: "05", identificacion: "", razonSocial: "", nombreComercial: "", tipoCliente: "NATURAL", email: "", telefono: "", direccion: "", provincia: "PICHINCHA", ciudad: "QUITO", diasCredito: 0, limiteCredito: 0, categoria: "DETALLISTA", descuento: 0 })}
-          className="w-full bg-[#00f5d4] text-black font-black text-[11px] py-2 rounded-full mb-3">+ NUEVO CLIENTE</button>
+        <div className="flex flex-wrap gap-2 mb-3">
+          <button onClick={() => setForm({ id: "", tipoId: "05", identificacion: "", razonSocial: "", nombreComercial: "", tipoCliente: "NATURAL", email: "", telefono: "", direccion: "", provincia: "PICHINCHA", ciudad: "QUITO", diasCredito: 0, limiteCredito: 0, categoria: "DETALLISTA", descuento: 0 })}
+            className="flex-1 min-w-[140px] bg-[#00f5d4] text-black font-black text-[11px] py-2 rounded-full">+ NUEVO CLIENTE</button>
+          <button type="button" onClick={() => bajarArchivo("/api/clientes/plantilla")} className="flex-1 min-w-[140px] bg-white text-black font-black text-[10px] py-2 rounded-full">Descargar Plantilla</button>
+          <label className="flex-1 min-w-[140px] bg-white/10 border border-[#00f5d4] text-[#00f5d4] font-black text-[10px] py-2 rounded-full text-center cursor-pointer">
+            Cargar Masivamente
+            <input type="file" accept=".xlsx,.csv" className="hidden" onChange={(e) => {
+              const file = e.target.files?.[0];
+              e.target.value = "";
+              if (!file) return;
+              setArchivoMasivo(file);
+              void leerMasivo(file, false);
+            }} />
+          </label>
+          <button type="button" onClick={() => bajarArchivo(`/api/clientes/listado?q=${encodeURIComponent(busca.trim())}`)} className="flex-1 min-w-[140px] bg-white/10 border border-white/20 text-white font-black text-[10px] py-2 rounded-full">Descargar Listado</button>
+        </div>
+        {avisoMasivo && <p className={`text-[11px] font-bold mb-2 ${/error|No hay|corrígelas/i.test(avisoMasivo) ? "text-red-400" : "text-green-400"}`}>{avisoMasivo}</p>}
         <input value={busca} onChange={e => setBusca(e.target.value)} placeholder="Buscar RUC / Nombre..." className="bg-black border border-white/10 rounded-lg px-3 py-2 text-[11px] mb-3 outline-none focus:border-[#00f5d4]" />
         <div className="space-y-2 overflow-auto">
           {filtrados.map((c, idx) => (
@@ -413,6 +481,41 @@ export default function ClientesModule() {
           </button>
         </div>
       </div>
+      {vistaMasiva && (
+        <div className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center p-4">
+          <div className="bg-[#0f172a] border border-white/10 rounded-2xl w-full max-w-5xl max-h-[85vh] flex flex-col p-4">
+            <div className="flex justify-between items-center gap-3 mb-3">
+              <div>
+                <p className="text-[#00f5d4] font-black text-[12px]">Vista previa · {vistaMasiva.total} clientes</p>
+                {vistaMasiva.errores > 0 && <p className="text-red-400 font-bold text-[12px]">Hay {vistaMasiva.errores} filas con error, corrígelas</p>}
+              </div>
+              <div className="flex gap-2">
+                {vistaMasiva.errores === 0 && archivoMasivo && (
+                  <button disabled={cargandoMasivo} onClick={() => leerMasivo(archivoMasivo, true)} className="bg-[#00f5d4] text-black font-black text-[11px] px-4 py-2 rounded-full disabled:opacity-50">{cargandoMasivo ? "Guardando..." : "Guardar todos"}</button>
+                )}
+                <button onClick={() => { setVistaMasiva(null); setArchivoMasivo(null); }} className="bg-white/10 px-4 py-2 rounded-full text-[11px]">Cerrar</button>
+              </div>
+            </div>
+            <div className="overflow-auto">
+              <table className="w-full text-[11px]">
+                <thead className="text-white/40"><tr><th className="text-left p-2">Fila</th><th className="text-left">Tipo</th><th className="text-left">Identificación</th><th className="text-left">Nombre</th><th className="text-left">Email</th><th className="text-left">Estado</th></tr></thead>
+                <tbody>
+                  {vistaMasiva.filas.map((f) => (
+                    <tr key={f.numero} className={f.errores.length ? "bg-red-500/20 text-red-200" : "border-b border-white/5"}>
+                      <td className="p-2">{f.numero}</td>
+                      <td>{f.tipo_identificacion}</td>
+                      <td>{f.identificacion}</td>
+                      <td>{f.nombre_razon_social}</td>
+                      <td>{f.email}</td>
+                      <td>{f.errores.length ? f.errores.join(" · ") : "Listo"}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

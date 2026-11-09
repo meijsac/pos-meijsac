@@ -209,6 +209,7 @@ model Cliente {
   limiteCredito   Float      @default(0)
   categoria       String     @default("DETALLISTA")
   descuento       Float      @default(0)
+  frecuente       Boolean    @default(false)
   sucursales      Sucursal[]
   createdAt       DateTime   @default(now())
   updatedAt       DateTime   @updatedAt
