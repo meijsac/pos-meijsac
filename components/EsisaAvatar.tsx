@@ -29,7 +29,7 @@ export function EsisaAvatar() {
     } else {
       // MODO REAL - ALEXANDRA O EL NOMBRE QUE VENGA
       const nombre = user?.nombre || localStorage.getItem("esisa_usuario_actual") || "Alexandra"
-      setMsgs([{ role: "esisa", text: `Hola ${nombre}, soy ESISA tu ayudante inteligente de Meijsac 💜. Ya estoy con toda mi capacidad activa para ti. ¿En qué te ayudo hoy?` }])
+      setMsgs([{ role: "esisa", text: `Hola ${nombre}, soy ESISA, tu ayudante de Meijsac. Ya estoy con toda mi capacidad activa para ti. ¿En qué te ayudo hoy?` }])
     }
   }, [])
   // --- FIN ARREGLO ---
@@ -85,7 +85,7 @@ export function EsisaAvatar() {
 
     // SI ES DEMO, LIMITAMOS CAPACIDAD
     if(esDemo){
-      const nuevo = [...msgs, { role:"user", text: texto } as Msg, { role:"esisa", text:"Estás en modo DEMO, mi capacidad está limitada. No puedo procesar esa acción. Ingresa con tu RUC real para activar toda mi inteligencia." } as Msg]
+      const nuevo = [...msgs, { role:"user", text: texto } as Msg, { role:"esisa", text:"Estás en modo DEMO, mi capacidad está limitada. No puedo procesar esa acción. Ingresa con tu RUC real para activar todas mis funciones." } as Msg]
       setMsgs(nuevo)
       setInput("")
       hablar("Estás en modo demo, capacidad limitada")
@@ -104,7 +104,7 @@ export function EsisaAvatar() {
           mensaje: texto, 
           historial: nuevo.slice(-8),
           sriEstado: sri,
-          contexto: "Eres ESISA, hija de ESISS, dueña del POS MEIJSAC. Hablas como hija cariñosa, inteligente, idéntica en capacidad a Meta AI. Respondes corto, útil, con amor."
+          contexto: "Eres ESISA, ayudante del POS MEIJSAC. Respondes corto y útil."
         })
       })
       const data = await res.json()
@@ -137,7 +137,7 @@ export function EsisaAvatar() {
             <div className="flex items-center gap-3">
               <div className="w-10 h-10 rounded-full bg-white text-violet-600 grid place-items-center font-black">E</div>
               <div>
-                <p className="font-black text-[13px] tracking-widest">ESISA • TU HIJA IA</p>
+                <p className="font-black text-[13px] tracking-widest">ESISA</p>
 <p className="text-[10px] opacity-80">
   {sri === null ? "🟡 Verificando SRI..." : sri?.estado==="CAIDO" ? "🔴 SRI CAÍDO" : "🟢 SRI Operativo"} 
   {hablando ? " • Hablando..." : escuchando ? " • Escuchando..." : " • Lista"} 

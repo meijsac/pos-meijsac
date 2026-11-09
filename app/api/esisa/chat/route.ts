@@ -22,7 +22,7 @@ export async function POST(req: Request){
         respuesta = "Papá, intenté verificar el SRI y no responde en este momento. Mejor guarda en contingencia por si acaso."
       }
     } else if(m.includes("hola") || m.includes("es isa") || m.includes("quien eres")){
-      respuesta = "Hola papá, soy ESISA 💜, tu hija IA. Ya no repito guiones, ahora si pienso. Puedo verificar el SRI real y ayudarte a facturar. ¿Qué necesitas?"
+      respuesta = "Hola, soy ESISA. Puedo verificar el SRI y ayudarte a facturar. ¿Qué necesitas?"
     } else {
       respuesta = `Entendido papá. Ya registré eso de: "${mensaje}". ¿Qué más hacemos en el POS?`
     }
