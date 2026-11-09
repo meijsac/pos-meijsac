@@ -1,12 +1,19 @@
 import { NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
 import { usuarioConEmpresaDesdeRequest } from "@/lib/empresa-sesion"
+import { accesoEmpresa, ipDe, navegadorDe, puede, sanitizarTexto } from "@/lib/seguridad"
+import { anotarFacturaCaja } from "@/lib/login-memoria"
 
 export async function POST(req: Request) {
   try {
     const sesion = await usuarioConEmpresaDesdeRequest(req)
     if ("error" in sesion) return NextResponse.json({ error: sesion.error }, { status: sesion.status })
+    if (!puede(sesion.usuario.rol, "facturar")) return NextResponse.json({ error: "Tu rol no puede facturar" }, { status: 403 })
     const body = await req.json()
+    const caja = String(body?.caja || sesion.usuario.id)
+    if (anotarFacturaCaja(caja, Date.now()) > 30) return NextResponse.json({ error: "Demasiadas facturas por minuto" }, { status: 429 })
+    if (body?.cliente) body.cliente.razon = sanitizarTexto(body.cliente.razon)
+    body.auditoria = { ip: ipDe(req), dispositivo: navegadorDe(req), usuario: sesion.usuario.nombre, caja, fecha: new Date().toISOString() }
     const plazo = Number(body.plazo)
     const cuotas = Number(body.cuotas)
     const vence = body.fecha_vencimiento ? new Date(body.fecha_vencimiento) : null
@@ -42,6 +49,12 @@ export async function GET(req: Request) {
   try {
     const sesion = await usuarioConEmpresaDesdeRequest(req)
     if ("error" in sesion) return NextResponse.json({ error: sesion.error }, { status: sesion.status })
+    const idPedido = new URL(req.url).searchParams.get("id")
+    if (idPedido) {
+      const una = await prisma.facturaEmitida.findUnique({ where: { id: idPedido } })
+      if (una && accesoEmpresa(sesion.empresa.id, una.empresaId) === 403) return NextResponse.json({ error: "No puedes ver datos de otra empresa" }, { status: 403 })
+      if (!una) return NextResponse.json({ error: "Factura no encontrada" }, { status: 404 })
+    }
     const filas = await prisma.facturaEmitida.findMany({
       where: { empresaId: sesion.empresa.id },
       orderBy: { createdAt: "desc" },
@@ -80,6 +93,9 @@ export async function PATCH(req: Request) {
     const body = await req.json().catch(() => ({}))
     const id = String(body?.id || "")
     if (!id) return NextResponse.json({ error: "Falta la factura" }, { status: 400 })
+    const ajena = await prisma.facturaEmitida.findUnique({ where: { id } })
+    if (ajena && accesoEmpresa(sesion.empresa.id, ajena.empresaId) === 403) return NextResponse.json({ error: "No puedes ver datos de otra empresa" }, { status: 403 })
+    if (body?.accion === "ANULAR" && !puede(sesion.usuario.rol, "anular")) return NextResponse.json({ error: "Tu rol no puede anular" }, { status: 403 })
     const actual = await prisma.facturaEmitida.findFirst({ where: { id, empresaId: sesion.empresa.id } })
     if (!actual) return NextResponse.json({ error: "Factura no encontrada" }, { status: 404 })
     const payload = { ...((actual.payload || {}) as any), estado_pago: "PAGADO", saldo_pendiente: 0 }

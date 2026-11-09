@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
 import { usuarioConEmpresaDesdeRequest } from "@/lib/empresa-sesion"
+import { puede } from "@/lib/seguridad"
 
 function fila(m: {
   id: string
@@ -37,6 +38,7 @@ function fila(m: {
 export async function GET(req: Request) {
   const sesion = await usuarioConEmpresaDesdeRequest(req)
   if ("error" in sesion) return NextResponse.json({ error: sesion.error }, { status: sesion.status })
+  if (!puede(sesion.usuario.rol, "kardex")) return NextResponse.json({ error: "Tu rol no puede ver el kárdex" }, { status: 403 })
   const movimientos = await prisma.kardexMovimiento.findMany({
     where: { empresaId: sesion.empresa.id },
     orderBy: { fecha: "asc" },
@@ -47,6 +49,7 @@ export async function GET(req: Request) {
 export async function POST(req: Request) {
   const sesion = await usuarioConEmpresaDesdeRequest(req)
   if ("error" in sesion) return NextResponse.json({ error: sesion.error }, { status: sesion.status })
+  if (!puede(sesion.usuario.rol, "kardex")) return NextResponse.json({ error: "Tu rol no puede ver el kárdex" }, { status: 403 })
   const body = await req.json().catch(() => ({}))
   const lista = Array.isArray(body.movimientos) ? body.movimientos : [body]
   const creados = []

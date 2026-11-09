@@ -1,20 +1,30 @@
 import bcrypt from "bcryptjs"
 import { NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
-import { empresaParaCliente, firmarSesion } from "@/lib/empresa-sesion"
+import { claveValida, sanitizarTexto } from "@/lib/seguridad"
 import { asegurarPlanInicial, vigenciaPlan } from "@/lib/plan-inicial"
 
 export async function POST(req: Request) {
   try {
     const body = await req.json()
     const ruc = String(body?.ruc || "").trim()
-    const razonSocial = String(body?.razonSocial || body?.razon || "").trim()
-    const adminUser = String(body?.adminUser || "").trim()
+    const razonSocial = sanitizarTexto(body?.razonSocial || body?.razon || "")
+    const adminUser = sanitizarTexto(body?.adminUser || "")
     const adminPass = String(body?.adminPass || "")
+    if (!String(body?.captcha || "") || !process.env.TURNSTILE_SECRET_KEY) {
+      return NextResponse.json({ error: "Resuelve el captcha para registrarte" }, { status: 401 })
+    }
+    const site = await fetch("https://challenges.cloudflare.com/turnstile/v0/siteverify", {
+      method: "POST",
+      body: new URLSearchParams({ secret: process.env.TURNSTILE_SECRET_KEY, response: String(body.captcha) }),
+    })
+    const captcha = await site.json().catch(() => ({}))
+    if (captcha.success !== true) return NextResponse.json({ error: "Resuelve el captcha para registrarte" }, { status: 401 })
 
     if (ruc.length !== 13) return NextResponse.json({ error: "RUC debe tener 13 dígitos" }, { status: 400 })
     if (!razonSocial) return NextResponse.json({ error: "Razón social obligatoria" }, { status: 400 })
-    if (!adminUser || adminPass.length < 6) return NextResponse.json({ error: "Usuario y contraseña del administrador son obligatorios" }, { status: 400 })
+    const clave = claveValida(adminPass)
+    if (!adminUser || clave) return NextResponse.json({ error: clave || "Usuario del administrador obligatorio" }, { status: 400 })
 
     const datosRegistro = {
       provincia: body?.provincia || null,
@@ -87,14 +97,11 @@ export async function POST(req: Request) {
 
     const usuario = empresa.usuarios[0]
     if (!usuario?.empresaId) return NextResponse.json({ error: "No se vinculó el usuario con la empresa" }, { status: 500 })
-    const token = firmarSesion({ id: usuario.id, empresaId: usuario.empresaId })
 
     return NextResponse.json({
       ok: true,
       id: empresa.id,
       estado: "ACTIVO",
-      token,
-      empresa: empresaParaCliente(empresa, usuario),
     })
   } catch (e: any) {
     return NextResponse.json({ error: e.message || "No se pudo registrar la empresa" }, { status: 500 })

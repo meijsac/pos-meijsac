@@ -70,6 +70,71 @@ export const calcularTotalesUniversal = (itemsCarrito: any[]) => {
   }
 }
 
+function PanelSeguridad() {
+  const [eventos, setEventos] = useState<any[]>([])
+  const [aviso, setAviso] = useState("")
+  useEffect(() => {
+    fetch("/api/seguridad/actividad").then((r) => r.json()).then((d) => setEventos(d.eventos || [])).catch(() => {})
+  }, [])
+  const activar = async () => {
+    const res = await fetch("/api/auth/2fa", { method: "POST" })
+    const data = await res.json()
+    setAviso(res.ok ? `2FA activo. Secreto: ${data.secreto}. Respaldos: ${data.respaldos.join(", ")}` : data.error)
+  }
+  return (
+    <div className="space-y-3 text-[12px]">
+      <button onClick={activar} className="bg-[#00f5d4] text-black font-black rounded-xl px-4 py-2">Activar 2FA</button>
+      {aviso && <p className="text-[#00f5d4]">{aviso}</p>}
+      <p className="font-black">Actividad reciente</p>
+      {eventos.slice(0, 50).map((e) => <p key={e.id}>{e.fecha} · {e.usuario} · {e.ip} · {e.accion} · {e.dispositivo}</p>)}
+      {eventos.length === 0 && <p className="opacity-50">Sin eventos todavía.</p>}
+    </div>
+  )
+}
+
+function PanelWhatsapp() {
+  const [info, setInfo] = useState<any>(null)
+  useEffect(() => { fetch("/api/whatsapp").then((r) => r.json()).then(setInfo).catch(() => {}) }, [])
+  const desconectar = async () => {
+    const res = await fetch("/api/whatsapp", { method: "DELETE" })
+    const data = await res.json()
+    setInfo(data)
+  }
+  return (
+    <div className="space-y-2 text-[12px]">
+      <p>Número conectado: {info?.numero || "Sin verificar"}</p>
+      <p>Fecha de conexión: {info?.conectadoEn || "—"}</p>
+      <p>Última actividad: {info?.ultima || "—"}</p>
+      <p>Dispositivo: {info?.dispositivo || "—"}</p>
+      <button onClick={desconectar} className="bg-red-500 text-white rounded-xl px-4 py-2 font-black">Desconectar WhatsApp</button>
+      {(info?.historial || []).map((h: any) => <p key={h.id}>{h.fecha} · {h.usuario} · {h.numero} · {h.detalle}</p>)}
+    </div>
+  )
+}
+
+function PanelRespaldo() {
+  const [clave, setClave] = useState("")
+  const [aviso, setAviso] = useState("")
+  const descargar = async () => {
+    const res = await fetch("/api/respaldo", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ password: clave }) })
+    if (!res.ok) { const data = await res.json(); setAviso(data.error); return }
+    const blob = await res.blob()
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement("a")
+    a.href = url
+    a.download = "respaldo-meijsac.enc"
+    a.click()
+  }
+  return (
+    <div className="space-y-2 max-w-md">
+      <p className="text-[12px]">El respaldo sale cifrado. Solo el administrador puede descargarlo.</p>
+      <input type="password" value={clave} onChange={(e) => setClave(e.target.value)} placeholder="Contraseña de admin" className="w-full bg-black border border-white/10 rounded-xl p-3" />
+      <button onClick={descargar} className="bg-[#00f5d4] text-black font-black rounded-xl px-4 py-2">Descargar Respaldo</button>
+      {aviso && <p className="text-red-300 text-[12px]">{aviso}</p>}
+    </div>
+  )
+}
+
 function MetodoInventario() {
   const [metodo, setMetodo] = useState("PROMEDIO");
   const [aviso, setAviso] = useState("");
@@ -383,7 +448,7 @@ base.sucursales = datosReales.sucursales || base.sucursales || [];
 
 
             <div className="flex gap-2 mb-4 overflow-x-auto pb-2">
-                {["IDENTIDAD", "FIRMA", "SECUENCIALES", "IMPUESTOS", "INVENTARIO", "MARCA RIDE", "DOCUMENTOS", "PERMISOS", "AMBIENTE SRI"].map(t => (
+                {["IDENTIDAD", "FIRMA", "SECUENCIALES", "IMPUESTOS", "INVENTARIO", "SEGURIDAD", "WHATSAPP", "RESPALDO", "MARCA RIDE", "DOCUMENTOS", "PERMISOS", "AMBIENTE SRI"].map(t => (
                     <button key={t} onClick={() => setTab(t)} className={`px-4 py-2 rounded-xl text-[10px] font-black whitespace-nowrap ${tab === t ? 'bg-[#00f5d4] text-black' : 'bg-[#11131a] border border-white/10'}`}>{t}</button>
                 ))}
             </div>
@@ -607,6 +672,9 @@ base.sucursales = datosReales.sucursales || base.sucursales || [];
                 )}
                 
                 {tab === "INVENTARIO" && <MetodoInventario />}
+                {tab === "SEGURIDAD" && <PanelSeguridad />}
+                {tab === "WHATSAPP" && <PanelWhatsapp />}
+                {tab === "RESPALDO" && <PanelRespaldo />}
                 {tab === "DOCUMENTOS" && <DocumentosLegales />}
 
                 {tab === "MARCA RIDE" && (

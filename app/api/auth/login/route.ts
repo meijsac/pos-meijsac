@@ -1,51 +1,85 @@
 import { prisma } from "@/lib/prisma"
 import bcrypt from "bcryptjs"
+import { randomBytes } from "crypto"
 import { NextResponse } from "next/server"
-import { empresaParaCliente, firmarSesion } from "@/lib/empresa-sesion"
+import { cookiesSesion, empresaParaCliente, firmarSesion } from "@/lib/empresa-sesion"
+import { abrirSesion, anotarIntento, leerIntentos } from "@/lib/login-memoria"
+import { evaluarBloqueo, exigeCaptcha, ipDe, navegadorDe, totpValido, hashCodigo, desencriptar } from "@/lib/seguridad"
+
+async function captchaValido(token: string, ip: string) {
+  if (!exigeCaptcha(token)) return false
+  const secreto = process.env.TURNSTILE_SECRET_KEY || ""
+  if (!secreto) return false
+  const cuerpo = new URLSearchParams({ secret: secreto, response: token, remoteip: ip })
+  const res = await fetch("https://challenges.cloudflare.com/turnstile/v0/siteverify", { method: "POST", body: cuerpo })
+  const data = await res.json().catch(() => ({}))
+  return data.success === true
+}
+
+function responder(body: unknown, status: number, cookies: string[] = []) {
+  const res = NextResponse.json(body, { status })
+  cookies.forEach((c) => res.headers.append("Set-Cookie", c))
+  return res
+}
 
 export async function POST(req: Request) {
   try {
     const body = await req.json()
     const ruc = String(body.ruc || "").trim()
     const password = String(body.password || "")
-
-    if (!ruc || !password) {
-      return NextResponse.json({ error: "Falta RUC o clave" }, { status: 400 })
+    const canal = body.canal === "POS" ? "POS" : "LOGIN"
+    const ip = ipDe(req)
+    const ua = navegadorDe(req)
+    const ahora = Date.now()
+    const bloqueo = evaluarBloqueo(leerIntentos(), ruc, ip, ahora, canal)
+    if (bloqueo.bloqueado) return responder({ error: bloqueo.mensaje }, 429)
+    if (!(await captchaValido(String(body.captcha || ""), ip))) {
+      anotarIntento({ correo: "captcha", ip, fecha: ahora, exitoso: false, canal })
+      const otra = evaluarBloqueo(leerIntentos(), ruc, ip, ahora, canal)
+      return responder({ error: otra.bloqueado ? otra.mensaje : "Resuelve el captcha para entrar" }, 401)
     }
+    if (!ruc || !password) return responder({ error: "Falta RUC o clave" }, 400)
 
-    const usuarios = await prisma.usuario.findMany({
-      where: { empresa: { ruc } },
-      include: { empresa: true },
-    })
-
-    if (usuarios.length === 0) {
-      const empresa = await prisma.empresa.findFirst({ where: { ruc } })
-      if (!empresa) return NextResponse.json({ error: `RUC ${ruc} no existe` }, { status: 404 })
-      return NextResponse.json({ error: "Empresa sin usuario vinculado" }, { status: 404 })
-    }
-
+    const usuarios = await prisma.usuario.findMany({ where: { empresa: { ruc } }, include: { empresa: true } })
     let usuario = null as (typeof usuarios)[number] | null
     for (const candidato of usuarios) {
-      if (await bcrypt.compare(password, candidato.password)) {
-        usuario = candidato
-        break
+      if (await bcrypt.compare(password, candidato.password)) usuario = candidato
+    }
+    if (!usuario?.empresa || !usuario.empresaId) {
+      anotarIntento({ correo: ruc, ip, fecha: ahora, exitoso: false, canal })
+      prisma.loginIntento.create({ data: { correo: ruc, ip, exitoso: false, canal } }).catch(() => {})
+      const fallos = leerIntentos().filter((i) => i.correo === ruc && i.canal === canal && !i.exitoso).length
+      await new Promise((r) => setTimeout(r, fallos * 1000))
+      return responder({ error: "Clave incorrecta" }, 401)
+    }
+
+    const seguridad = await prisma.usuarioSeguridad.findUnique({ where: { usuarioId: usuario.id } }).catch(() => null)
+    if (seguridad?.dosFaActivo) {
+      const codigo = String(body.codigo2fa || "")
+      const secreto = seguridad.totpCifrado ? Buffer.from(desencriptar(seguridad.totpCifrado), "base64") : Buffer.alloc(0)
+      const respaldo = seguridad.respaldos.split(",").filter(Boolean).includes(hashCodigo(codigo))
+      if (!totpValido(secreto, codigo) && !respaldo) {
+        return responder({ requiere2fa: true, error: "Ingresa el código de 6 dígitos" }, 401)
       }
     }
 
-    if (!usuario?.empresa || !usuario.empresaId) {
-      return NextResponse.json({ error: "Clave incorrecta" }, { status: 401 })
-    }
-
-    const token = firmarSesion({ id: usuario.id, empresaId: usuario.empresaId })
+    anotarIntento({ correo: ruc, ip, fecha: ahora, exitoso: true, canal })
+    prisma.loginIntento.create({ data: { correo: ruc, ip, exitoso: true, canal } }).catch(() => {})
+    prisma.seguridadLog.create({ data: { empresaId: usuario.empresaId, usuario: usuario.nombre, ip, accion: "LOGIN_OK", dispositivo: ua, detalle: canal } }).catch(() => {})
+    const sid = randomBytes(16).toString("hex")
+    abrirSesion(sid)
+    const acceso = firmarSesion({ id: usuario.id, empresaId: usuario.empresaId, sid, ip, ua })
+    const refresh = firmarSesion({ id: usuario.id, empresaId: usuario.empresaId, sid, ip, ua }, "7d")
+    prisma.sesionUsuario.create({
+      data: { id: sid, usuarioId: usuario.id, expira: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000), ip, navegador: ua },
+    }).catch(() => {})
     const empresa = empresaParaCliente(usuario.empresa, usuario)
-
-    return NextResponse.json({
-      token,
+    return responder({
       usuario: { nombre: usuario.nombre, empresa: empresa.razonSocial, rol: usuario.rol, ruc: empresa.ruc, empresaId: usuario.empresaId },
       empresa,
-    })
-  } catch (e: any) {
-    console.error("ERROR REAL LOGIN:", e)
-    return NextResponse.json({ error: e.message }, { status: 500 })
+    }, 200, cookiesSesion(acceso, refresh))
+  } catch (e: unknown) {
+    const mensaje = e instanceof Error ? e.message : "No se pudo entrar"
+    return responder({ error: mensaje === "JWT_SECRET no configurado" ? mensaje : "No se pudo entrar" }, 500)
   }
 }

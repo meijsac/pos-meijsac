@@ -100,6 +100,63 @@ model Usuario {
   empresaId String
   empresa   Empresa  @relation(fields: [empresaId], references: [id], onDelete: Cascade)
   createdAt DateTime @default(now())
+  sesiones  SesionUsuario[]
+}
+
+model SesionUsuario {
+  id        String   @id
+  usuarioId String
+  usuario   Usuario  @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
+  expira    DateTime
+  ip        String   @default("")
+  navegador String   @default("")
+  revocada  Boolean  @default(false)
+  updatedAt DateTime @updatedAt
+  createdAt DateTime @default(now())
+
+  @@map("sesiones_usuario")
+}
+
+model LoginIntento {
+  id      String   @id @default(cuid())
+  correo  String
+  ip      String
+  fecha   DateTime @default(now())
+  exitoso Boolean
+  canal   String   @default("LOGIN")
+
+  @@map("login_intentos")
+}
+
+model SeguridadLog {
+  id          String   @id @default(cuid())
+  empresaId   String?
+  usuario     String   @default("")
+  ip          String   @default("")
+  accion      String
+  dispositivo String   @default("")
+  detalle     String   @default("")
+  fecha       DateTime @default(now())
+
+  @@map("seguridad_logs")
+}
+
+model PasswordReset {
+  id        String   @id
+  usuarioId String
+  expira    DateTime
+  usado     Boolean  @default(false)
+
+  @@map("password_reset")
+}
+
+model UsuarioSeguridad {
+  usuarioId   String  @id
+  dosFaActivo Boolean @default(false)
+  totpCifrado String  @default("")
+  respaldos   String  @default("")
+
+  @@map("usuario_seguridad")
 }
 
 model Producto {
@@ -244,8 +301,11 @@ model CajaTurno {
   montoInicial      Float
   estado            String   @default("ABIERTA")
   montoCierreFisico Float?
+  montoFinal        Float?
   saldoEsperado     Float?
   diferencia        Float?
+  dispositivo       String   @default("")
+  ultimaActividad   DateTime @default(now())
   movimientos       CajaMovimiento[]
   createdAt         DateTime @default(now())
 }

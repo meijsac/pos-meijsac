@@ -10,15 +10,15 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const [ok, setOk] = useState(false)
 
   useEffect(() => {
-    const token = localStorage.getItem('meijsac_token')
-    // Rechaza tokens falsos viejos
-    if (!token || token === 'ok' || token === 'offline-token-demo' || token === 'demo') {
-      localStorage.removeItem('meijsac_token')
-      localStorage.removeItem('meijsac_user')
-      router.replace('/login')
-      return
-    }
-    setOk(true)
+    localStorage.removeItem('meijsac_token')
+    fetch('/api/auth/sesion').then((res) => {
+      if (!res.ok) {
+        localStorage.removeItem('meijsac_user')
+        router.replace('/login')
+        return
+      }
+      setOk(true)
+    }).catch(() => router.replace('/login'))
   }, [router])
 
   if (!ok) {

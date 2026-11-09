@@ -2,6 +2,7 @@
 import { useState } from "react"
 import { useRouter } from "next/navigation"
 import { guardarEmpresaLocal } from "@/lib/sesion-cliente"
+import { Turnstile } from "@/components/auth/Turnstile"
 
 const PROVINCIAS: any = {
   "Pichincha": ["Quito","Cayambe","Mejía","Rumiñahui"],
@@ -38,6 +39,7 @@ export function RegisterEmpresa({ dark, setTipo }: any) {
   const [error, setError] = useState("")
   const router = useRouter()
   // CORREGIDO 1 y 2: ya agregué actividad y contribuyenteEspecial aquí
+  const [captcha, setCaptcha] = useState("")
   const [form, setForm] = useState({ ruc:"", razon:"", nombreComercial:"", tipoContribuyente:"PERSONA_NATURAL", obligado:"NO", provincia:"", canton:"", direccion:"", telefono:"", celular:"", correo:"", respNombre:"", respCelular:"", adminUser:"", adminPass:"", adminPass2:"", sector:"", regimen:"", actividad:"", contribuyenteEspecial:"" })
   
   const validarPaso1 = () => {
@@ -54,7 +56,7 @@ export function RegisterEmpresa({ dark, setTipo }: any) {
     if(!form.respNombre) return "Nombre del responsable obligatorio"
     if(!/^\d{10}$/.test(form.respCelular)) return "Celular responsable 10 dígitos"
     if(!form.adminUser) return "Usuario ADMIN obligatorio"
-    if(form.adminPass.length<6) return "Contraseña mínimo 6"
+    if(!/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[^A-Za-z0-9]).{8,}$/.test(form.adminPass) || /^(12345678|password|admin|meijsac)$/i.test(form.adminPass)) return "Contraseña: 8 caracteres, mayúscula, minúscula, número y símbolo"
     if(form.adminPass!==form.adminPass2) return "Contraseñas no coinciden"
     return ""
   }
@@ -95,7 +97,6 @@ export function RegisterEmpresa({ dark, setTipo }: any) {
       sector: form.sector,
       regimen: form.regimen,
       adminUser: form.adminUser,
-      adminPass: btoa(form.adminPass),
       posTicketHabilitado: form.regimen === "RIMPE_POPULAR",
       fecha: new Date().toISOString(),
       planEstado: "PRUEBA"
@@ -104,7 +105,7 @@ export function RegisterEmpresa({ dark, setTipo }: any) {
     const res = await fetch("/api/empresa/registro", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ ...datosEmpresa, adminPass: form.adminPass }),
+      body: JSON.stringify({ ...datosEmpresa, adminPass: form.adminPass, captcha }),
     })
     const data = await res.json().catch(() => ({}))
     if (!res.ok) {
@@ -112,15 +113,14 @@ export function RegisterEmpresa({ dark, setTipo }: any) {
       return
     }
 
-    const { adminPass: _clave, ...publico } = datosEmpresa
-    guardarEmpresaLocal({ ...publico, ...(data.empresa || {}) }, data.token)
+    guardarEmpresaLocal({ ...datosEmpresa, ...(data.empresa || {}) })
     localStorage.setItem('meijsac_caja_user', JSON.stringify({
       usuario: form.adminUser,
       ruc: form.ruc
     }))
 
     alert('✅ Empresa y usuario creados: ' + form.ruc)
-    router.push('/dashboard')
+    router.push('/login')
   }
 
   return (
@@ -201,6 +201,7 @@ export function RegisterEmpresa({ dark, setTipo }: any) {
 
       <div className="flex gap-2 pt-2">
         {paso>1 && <button onClick={()=>setPaso(paso-1)} className="flex-1 py-3 rounded-xl bg-white/10 text-white text-xs">Atrás</button>}
+        {paso===4 && <Turnstile onToken={setCaptcha} />}
         {paso<4? <button onClick={siguiente} className="flex-1 py-3 rounded-xl bg-[#00f5d4] text-black font-black text-xs">Siguiente</button> : <button onClick={guardar} className="flex-1 py-3 rounded-xl bg-[#00f5d4] text-black font-black text-xs">CREAR EMPRESA</button>}
       </div>
       <button onClick={()=>setTipo("principal")} className="w-full text-[10px] text-white/30">¿Ya tienes cuenta? Ingresar</button>

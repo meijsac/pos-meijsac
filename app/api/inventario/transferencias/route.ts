@@ -1,11 +1,13 @@
 import { NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
 import { usuarioConEmpresaDesdeRequest } from "@/lib/empresa-sesion"
+import { puede } from "@/lib/seguridad"
 import { costoParaSalida, type MetodoCosteo, type MovimientoCosto } from "@/lib/kardex-costo"
 
 export async function GET(req: Request) {
   const sesion = await usuarioConEmpresaDesdeRequest(req)
   if ("error" in sesion) return NextResponse.json({ error: sesion.error }, { status: sesion.status })
+  if (!puede(sesion.usuario.rol, "kardex")) return NextResponse.json({ error: "Tu rol no puede ver transferencias" }, { status: 403 })
   const transferencias = await prisma.transferenciaInventario.findMany({
     where: { empresaId: sesion.empresa.id },
     orderBy: { fecha: "desc" },
@@ -30,6 +32,7 @@ export async function GET(req: Request) {
 export async function POST(req: Request) {
   const sesion = await usuarioConEmpresaDesdeRequest(req)
   if ("error" in sesion) return NextResponse.json({ error: sesion.error }, { status: sesion.status })
+  if (!puede(sesion.usuario.rol, "transferir")) return NextResponse.json({ error: "Tu rol no puede transferir" }, { status: 403 })
   const body = await req.json().catch(() => ({}))
   const origen = String(body.origen || "PRINCIPAL")
   const destino = String(body.destino || "")
