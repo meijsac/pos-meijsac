@@ -1,12 +1,7 @@
 "use client"
 import { useState, useEffect } from "react"
 import { useRouter } from "next/navigation"
-
-const PROVEEDOR_SISTEMA = {
-  nombre: "MEIJSAC POS",
-  ruc: "1793161234001",
-  contacto: "https://meijsacpos.com - Soporte Tena"
-}
+import { CSS_RIDE, CSS_TICKET, PIE_PROVEEDOR, usd } from "@/lib/impresion-sri"
 
 export default function EstadoSRI(){
   const router = useRouter()
@@ -70,7 +65,7 @@ export default function EstadoSRI(){
     const formaPagoTxt = d.pagos?.tarjeta > 0 || d.pagos?.redBancaria > 0 ? `01: $${enCaja.toFixed(2)}` : `01 - SIN UTILIZACION SISTEMA FINANCIERO $${enCaja.toFixed(2)}`
     const html = `
     <html><head><title>RIDE ${d.establecimiento}-${d.secuencial}</title>
-    <style>body{font-family:Arial;font-size:11px;color:#000}.borde{border:1px solid #000;padding:8px}.t{font-size:16px;font-weight:900} table{width:100%;border-collapse:collapse} td,th{border:1px solid #000;padding:4px;font-size:10px}</style>
+    <style>${CSS_RIDE}.t{font-size:16px;font-weight:900}</style>
     </head><body>
     <div style="display:flex;justify-content:space-between">
       <div style="width:58%" class="borde">
@@ -94,27 +89,27 @@ export default function EstadoSRI(){
       <div><b>Razón Social:</b> ${d.cliente?.razon} - <b>ID:</b> ${d.cliente?.identificacion} - <b>Fecha:</b> ${d.fechaEmisionFormato}</div>
     </div>
     <table style="margin-top:8px"><tr><th>Cod. Principal</th><th>Cant</th><th>Descripción</th><th>Detalle Adic.</th><th>P.Unit</th><th>Desc</th><th>P.Total</th></tr>
-    ${(d.items||[]).map((it:any)=>`<tr><td>${it.codigo}</td><td>${it.cant}</td><td>${it.descripcion}</td><td>${it.detalleAdicional||""}</td><td>${it.pUnit?.toFixed(2)}</td><td>${(it.descDolar||0).toFixed(2)}</td><td>${(it.cant*it.pUnit-(it.descDolar||0)).toFixed(2)}</td></tr>`).join("")}
+    ${(d.items||[]).map((it:any)=>`<tr><td>${it.codigo||""}</td><td>${it.cant||0}</td><td>${it.descripcion||""}</td><td>${it.detalleAdicional||""}</td><td>${usd(it.pUnit)}</td><td>${usd(it.descDolar||0)}</td><td>${usd((Number(it.cant)||0)*(Number(it.pUnit)||0)-(Number(it.descDolar)||0))}</td></tr>`).join("")}
     </table>
-    <div style="display:flex;justify-content:space-between;margin-top:8px">
-      <div style="width:58%" class="borde">
-        Email: ${d.cliente?.email}<br/>Tel: ${d.cliente?.telefono}<br/>
-        <b style="border:1px solid #000;padding:4px;display:block;margin-top:8px">Proveedor del Sistema: ${PROVEEDOR_SISTEMA.nombre} - RUC ${PROVEEDOR_SISTEMA.ruc} - ${PROVEEDOR_SISTEMA.contacto}</b>
-      </div>
-      <div style="width:40%" class="borde">
-        <div>SUBTOTAL 15%: ${d.totales?.base15?.toFixed(2) || d.totales?.subtotalSin?.toFixed(2)}</div>
-        <div>SUBTOTAL 0%: ${d.totales?.base0?.toFixed(2)}</div>
-        <div>SUBTOTAL SIN IMP: ${d.totales?.subtotalSin?.toFixed(2)}</div>
-        <div>IVA 15%: ${d.totales?.iva15?.toFixed(2)}</div>
-        <div>PROPINA 10%: ${d.totales?.propina?.toFixed(2)}</div>
-        <div style="font-size:14px;font-weight:900">TOTAL: ${d.totales?.total?.toFixed(2)}</div>
-        <hr/>
-        <div>FORMA PAGO: ${formaPagoTxt}</div>
-        <div>ENTREGADO: $${entregado.toFixed(2)}</div>
-        <div style="background:#000;color:#fff;padding:4px;font-weight:900">VUELTO: $${cambio.toFixed(2)}</div>
-        <div>EFECTIVO EN CAJA: $${enCaja.toFixed(2)}</div>
-      </div>
-    </div>
+    <table class="sinborde" style="margin-top:8px"><tr>
+      <td style="width:58%" class="bloque">
+        Email: ${d.cliente?.email||""}<br/>Tel: ${d.cliente?.telefono||""}<br/>
+        ${d.transportista ? `Transportista: ${d.transportista.ruc||""}<br/>Placa: ${d.transportista.placa||""}<br/>Motivo: ${d.transportista.motivo||""}<br/>` : ""}
+        <b style="display:block;margin-top:8px">${PIE_PROVEEDOR}</b>
+      </td>
+      <td style="width:42%" class="bloque">
+        <table>
+          <tr><td>SUBTOTAL 15%</td><td style="text-align:right">${usd(d.totales?.base15 ?? d.totales?.subtotalSin)}</td></tr>
+          <tr><td>SUBTOTAL 0%</td><td style="text-align:right">${usd(d.totales?.base0)}</td></tr>
+          <tr><td>IVA 15%</td><td style="text-align:right">${usd(d.totales?.iva15)}</td></tr>
+          <tr><td>PROPINA</td><td style="text-align:right">${usd(d.totales?.propina)}</td></tr>
+          <tr><td><b>TOTAL</b></td><td style="text-align:right"><b>${usd(d.totales?.total)}</b></td></tr>
+          <tr><td>ENTREGADO</td><td style="text-align:right">${usd(entregado)}</td></tr>
+          <tr><td>VUELTO</td><td style="text-align:right">${usd(cambio)}</td></tr>
+          <tr><td colspan="2">${formaPagoTxt}</td></tr>
+        </table>
+      </td>
+    </tr></table>
     </body></html>`
     const w=window.open("","_blank"); w?.document.write(html); w?.document.close(); w?.print()
   }
@@ -132,7 +127,7 @@ export default function EstadoSRI(){
     const formaPagoTxt = d.pagos?.tarjeta > 0 || d.pagos?.redBancaria > 0 ? `01: $${enCaja.toFixed(2)} | 19: $${(d.pagos?.tarjeta||0).toFixed(2)}` : `01 - EFECTIVO`
     const html = `
     <html><head><title>TICKET</title>
-    <style>@page{size:80mm auto;margin:2mm} body{width:80mm;font-family:monospace;font-size:11px;color:#000}.c{text-align:center}.b{font-weight:900}.line{border-top:1px dashed #000;margin:4px 0}</style>
+    <style>${CSS_TICKET}</style>
     </head><body>
     <div class="c b">${d.configEmisor?.comercial||"EL VECINO - CEVICHERIA"}</div>
     <div class="c">${d.configEmisor?.razon||"HERRERA VELOZ EDGAR FAVIAN"}</div>
@@ -145,11 +140,11 @@ export default function EstadoSRI(){
     <div>Cliente: ${d.cliente?.razon}</div>
     <div>RUC/CI: ${d.cliente?.identificacion}</div>
     <div class="line"></div>
-    ${(d.items||[]).map((it:any)=>`<div>${it.cant} x ${it.descripcion}<br/>P.Unit $${it.pUnit?.toFixed(2)} = $${(it.cant*it.pUnit).toFixed(2)}</div>`).join("")}
+    ${(d.items||[]).map((it:any)=>`<div class="row"><span class="nombre">${it.cant||0} x ${it.descripcion||""}</span><span class="monto">${usd((Number(it.cant)||0)*(Number(it.pUnit)||0))}</span></div>`).join("")}
     <div class="line"></div>
-    <div>SUBTOTAL 15%: $${Number(subtotal).toFixed(2)}</div>
-    <div>IVA 15%: $${Number(iva).toFixed(2)}</div>
-    <div class="b" style="font-size:13px">TOTAL: $${d.totales?.total?.toFixed(2)}</div>
+    <div class="row"><span class="nombre">SUBTOTAL 15%</span><span class="monto">${usd(subtotal)}</span></div>
+    <div class="row"><span class="nombre">IVA 15%</span><span class="monto">${usd(iva)}</span></div>
+    <div class="row b"><span class="nombre">TOTAL</span><span class="monto">${usd(d.totales?.total)}</span></div>
     <div class="line"></div>
     <div>FORMA PAGO: ${formaPagoTxt}</div>
     <div>ENTREGADO: $${entregado.toFixed(2)}</div>
@@ -160,9 +155,7 @@ export default function EstadoSRI(){
     <div class="line"></div>
     <div class="c" style="font-size:9px;opacity:0.8">
     ----------------------------------------<br/>
-    Proveedor del Sistema: ${PROVEEDOR_SISTEMA.nombre}<br/>
-    RUC Proveedor: ${PROVEEDOR_SISTEMA.ruc}<br/>
-    Soporte: ${PROVEEDOR_SISTEMA.contacto}<br/>
+    ${PIE_PROVEEDOR}<br/>
     </div>
     </body></html>`
     const w=window.open("","_blank","width=320,height=600"); w?.document.write(html); w?.document.close(); w?.print()

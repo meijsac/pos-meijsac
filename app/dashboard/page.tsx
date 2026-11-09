@@ -3,6 +3,7 @@ import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { useEffect, useState } from "react"
 import { cargarEmpresaSesion } from "@/lib/sesion-cliente"
+import { BotonTema } from "@/components/tema"
 
 const CORPORATE = "#23AAB3"
 
@@ -219,6 +220,7 @@ export default function DashboardMeijsac(){
                 <p className="text-[9px] font-black leading-none truncate max-w-[150px]">{userMock.razon}</p>
                 <p className="text-[7px] opacity-50 leading-none">{userMock.ruc}</p>
               </div>
+              <BotonTema />
               <button onClick={()=>setShowBg(!showBg)} className="text-[8px] bg-white/5 hover:bg-white/15 border border-white/10 px-2.5 py-1 rounded-full font-bold transition">🎨 Fondo</button>
               <button onClick={()=>{ localStorage.clear(); window.location.href = "/"; }} className="text-[8px] bg-white/10 hover:bg-white/20 border border-white/10 px-3 py-1 rounded-full font-bold transition">Cerrar sesión</button>
               {showBg && (

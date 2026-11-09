@@ -1,5 +1,6 @@
 "use client"
 import { useState, useEffect, useMemo } from "react"
+import { BotonTema } from "@/components/tema"
 
 // ===== TIPOS = TABLAS SQL =====
 type Plan = { id: string; nombre: string; descripcion: string; estado: "activo"|"inactivo"|"archivado"; badge: string; color: string }
@@ -140,7 +141,7 @@ useEffect(()=>{
   if(!logado) return (
     <div className="min-h-screen bg-black flex items-center justify-center p-4">
       <div className="w-full max-w-sm bg-white/5 border border-white/10 rounded-2xl p-6 space-y-4">
-        <h1 className="font-black text-white">MEIJSAC SUPER ADMIN</h1>
+        <div className="flex justify-between items-center"><h1 className="font-black text-white">MEIJSAC SUPER ADMIN</h1><BotonTema /></div>
         <input value={user} onChange={e=>setUser(e.target.value)} placeholder="Usuario" className="w-full p-3 rounded-xl bg-black border border-white/10 text-white text-sm" />
         <input type="password" value={pass} onChange={e=>setPass(e.target.value)} placeholder="Contraseña" className="w-full p-3 rounded-xl bg-black border border-white/10 text-white text-sm" />
         <button type="button" onClick={entrar} className="w-full py-3 rounded-xl bg-[#00f5d4] text-black font-black">ENTRAR</button>
@@ -151,7 +152,7 @@ useEffect(()=>{
   return (
     <div className="min-h-screen bg-[#0a0a0a] text-white p-4">
       <div className="max-w-7xl mx-auto space-y-4">
-        <div className="flex justify-between items-center"><h1 className="text-xl font-black">MODULADOR COMPLETO</h1><button onClick={()=>{setLogado(false)}} className="text-xs bg-white/10 px-3 py-1 rounded">Salir</button></div>
+        <div className="flex justify-between items-center"><h1 className="text-xl font-black">MODULADOR COMPLETO</h1><div className="flex gap-2"><BotonTema /><button onClick={()=>{setLogado(false)}} className="text-xs bg-white/10 px-3 py-1 rounded">Salir</button></div></div>
         <div className="flex gap-2">{["dash","planes","clientes","crear"].map(t=><button key={t} onClick={()=>setTab(t as any)} className={`px-4 py-2 rounded-xl text-xs font-black ${tab===t?"bg-[#00f5d4] text-black":"bg-white/10"}`}>{t==="dash"?"DASHBOARD":t==="planes"?"PLANES":t==="clientes"?"CLIENTES / SUSCRIPCIONES":"CREAR PLAN"}</button>)}</div>
 
         {tab==="dash" && (

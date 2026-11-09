@@ -1,6 +1,7 @@
 "use client"
 import { useState, useEffect, useMemo } from "react"
 import { useRouter } from "next/navigation"
+import { CSS_TICKET, PIE_PROVEEDOR, usd } from "@/lib/impresion-sri"
 
 // === AUMENTADO: COMPONENTE CHISMOSO - NO BORRA NADA ===
 function Chismoso({ children, texto, pos="top" }:{children:any, texto:string, pos?:string}){
@@ -99,8 +100,8 @@ export default function EmitidosPage(){
       ${doc.estadoSRI==='ANULADO'?'<div class="anulado">ANULADO EN SRI</div>':''}
       <div class="header"><div><b>MEIJSAC FACTURACION</b><br/>RUC: 1799999999001<br/>Dir Matriz: Quito<br/>Obligado Contabilidad: SI</div><div><b>RIDE - ${doc.tipoComprobante==='07'?'RETENCION':'FACTURA'}</b><br/>No. ${doc.secuencial}<br/>Clave Acceso:<br/>${doc.claveAcceso}<br/>Estado: ${doc.estadoSRI}</div></div>
       <p><b>Cliente/Proveedor:</b> ${doc.receptorNombre}<br/><b>RUC/CI:</b> ${doc.receptorIdentificacion}<br/><b>Fecha:</b> ${doc.fechaEmision}</p>
-      <table border="1" width="100%" cellpadding="5"><tr><th>Valor Total</th><td>$${doc.estadoSRI==='ANULADO'?'0.00':doc.valorTotal.toFixed(2)}</td></tr></table>
-      <div class="barcode">${doc.claveAcceso}</div>
+      <table border="1" width="100%" cellpadding="5" style="table-layout:fixed"><tr><th>Valor Total</th><td>${doc.estadoSRI==='ANULADO'?usd(0):usd(doc.valorTotal)}</td></tr></table>
+      <div class="barcode" style="word-break:break-word">${doc.claveAcceso}<br/>${PIE_PROVEEDOR}</div>
       <script>window.print()</script>
       </body></html>`)
   }
@@ -108,7 +109,7 @@ export default function EmitidosPage(){
   const descargarTicket = (doc:ComprobanteHistorialSRI)=>{
     if(doc.tipoComprobante==='07' || doc.tipoComprobante==='06'){ alert("Las Retenciones 07 y Guías 06 solo se permiten en formato RIDE A4 corporativo SRI"); return }
     const w=window.open('','','width=300,height=600'); if(!w) return
-    w.document.write(`<html><body style="width:80mm;font-family:monospace;font-size:10px;text-align:center"><b>CHIFA MEIJSAC</b><br/>${doc.secuencial}<br/>${doc.fechaEmision}<br/>${doc.receptorNombre}<br/>----------------<br/>TOTAL: $${doc.valorTotal.toFixed(2)}<br/>----------------<br/>Clave:${doc.claveAcceso.slice(0,20)}...<br/><script>window.print()</script></body></html>`)
+    w.document.write(`<html><head><style>${CSS_TICKET}</style></head><body><div class="c b">${doc.secuencial}</div><div class="nombre">${doc.receptorNombre}</div><div class="row"><span class="nombre">TOTAL</span><span class="monto">${usd(doc.valorTotal)}</span></div><div class="c" style="font-size:8px;word-break:break-word">${doc.claveAcceso}</div><div class="c" style="font-size:8px">${PIE_PROVEEDOR}</div><script>window.print()</script></body></html>`)
   }
 
   const anularLogico = ()=>{

@@ -2,6 +2,7 @@
 import { useEffect, useState } from 'react'
 import { useRouter, usePathname } from 'next/navigation'
 import { EsisaAvatar } from '@/components/EsisaAvatar'
+import { BotonTema } from '@/components/tema'
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   const router = useRouter()
@@ -28,7 +29,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   return (
     <div className="min-h-screen bg-[#0a0a0a] text-white">
       {!isDashboard && (
-        <div className="p-4"></div>
+        <div className="flex justify-end p-3"><BotonTema /></div>
       )}
       {children}
       <EsisaAvatar />
