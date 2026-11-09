@@ -38,6 +38,7 @@ export async function GET(req: Request, context: { params: Promise<{ clave: stri
   })()
   const pedido = new URL(req.url)
   const vuelto = Number(p.pagos?.vuelto || p.vuelto || 0)
+  const recibido = Number(p.pagos?.efectivoRecibido || p.efectivoRecibido || p.pagos?.entregado || 0)
   if (pedido.searchParams.get("xml") === "1") {
     if (!xmlAutorizado) return pagina("XML", "Esta factura no tiene XML.", 404)
     return new NextResponse(xmlAutorizado, {
@@ -81,6 +82,7 @@ export async function GET(req: Request, context: { params: Promise<{ clave: stri
     mensajeSri: autorizado ? "" : (p.mensajeSri || ""),
     xmlUrl: `/dashboard/factura-xml/pdf/${clave}?xml=1`,
     vuelto,
+    recibido,
   })
   if (pedido.searchParams.get("ticket") === "1") {
     return new NextResponse(htmlTicket({
@@ -105,7 +107,7 @@ export async function GET(req: Request, context: { params: Promise<{ clave: stri
       items: Array.isArray(p.items) ? p.items : [],
       base15: t.base15, base0: t.base0, baseNoObjeto: t.baseNoObjeto, baseExento: t.baseExento,
       subtotalSin: t.subtotalSin, descuento: t.descuento, ice: t.valorICE, iva: t.iva15,
-      propina: t.propina, total: t.total, vuelto,
+      propina: t.propina, total: t.total, vuelto, recibido,
     }), { headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store" } })
   }
   return new NextResponse(html, { headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store" } })

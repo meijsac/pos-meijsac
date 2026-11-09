@@ -79,7 +79,14 @@ export function htmlRide(data: {
   mensajeSri?: string
   xmlUrl?: string
   vuelto?: number
+  recibido?: number
 }) {
+  const leyendaRegimen = (() => {
+    const texto = String(data.regimen || "").toUpperCase()
+    if (texto.includes("POPULAR")) return "CONTRIBUYENTE RÉGIMEN RIMPE: NEGOCIO POPULAR"
+    if (texto.includes("RIMPE") || texto.includes("EMPRENDEDOR")) return "CONTRIBUYENTE RÉGIMEN RIMPE: EMPRENDEDOR"
+    return ""
+  })()
   const filas = (data.items || []).map((item) => {
     const cant = Number(item.cant || 0)
     const precio = Number(item.pUnit || 0)
@@ -127,7 +134,7 @@ export function htmlRide(data: {
       <p style="margin:0 0 4px"><b>Dirección Matriz:</b> ${esc(data.dirMatriz)}</p>
       <p style="margin:0 0 8px"><b>Dirección Sucursal:</b> ${esc(data.dirSucursal || data.dirMatriz)}</p>
       <p style="margin:0"><b>OBLIGADO A LLEVAR CONTABILIDAD:</b> ${esc(data.obligado || "NO")}</p>
-      <p style="margin:0"><b>CONTRIBUYENTE RÉGIMEN:</b> ${esc(data.regimen || "—")}</p>
+      ${leyendaRegimen ? `<p style="margin:0"><b>${esc(leyendaRegimen)}</b></p>` : ""}
     </div>
     <div class="caja">
       <p style="font-size:14px;font-weight:700;margin:0">R.U.C.: <span style="font-weight:400">${esc(data.ruc)}</span></p>
@@ -171,6 +178,7 @@ export function htmlRide(data: {
       <h3 style="margin:0 0 8px;font-size:11px;text-transform:uppercase">Información Adicional</h3>
       <p style="margin:0"><b>Forma de Pago:</b> ${esc(data.formaPago)}</p>
       ${Number(data.vuelto) > 0 ? `<p style="margin:4px 0 0"><b>Vuelto:</b> ${dinero(data.vuelto)}</p>` : ""}
+      <p style="margin:8px 0 0"><b>Proveedor del sistema:</b> MEIJSAC S.A.S. RUC 1793243789001</p>
       ${data.mensajeSri ? `<p style="margin:8px 0 0"><b>Mensaje del SRI:</b> ${esc(data.mensajeSri)}</p>` : ""}
     </div>
     <div style="border:1px solid #e2e8f0;border-radius:8px;overflow:hidden;font-family:monospace">
@@ -197,11 +205,20 @@ export function htmlTicket(data: Parameters<typeof htmlRide>[0]) {
     const desc = Number(item.descDolar || 0) || cant * precio * Number(item.descPorc || 0) / 100
     const total = Number.isFinite(Number(item.total)) ? Number(item.total) : cant * precio - desc
     return `<tr>
-      <td style="text-align:left;padding:2px 0">${esc(item.descripcion || "")}</td>
-      <td style="text-align:right;padding:2px 0">${cant.toFixed(2)}</td>
+      <td style="text-align:left;padding:2px 0;text-transform:uppercase">${esc(item.descripcion || "")}</td>
+      <td style="text-align:center;padding:2px 0">${cant.toFixed(2)}</td>
       <td style="text-align:right;padding:2px 0">${dinero(total)}</td>
     </tr>`
   }).join("")
+  const leyendaRegimen = (() => {
+    const texto = String(data.regimen || "").toUpperCase()
+    if (texto.includes("POPULAR")) return "RÉGIMEN RIMPE: NEGOCIO POPULAR"
+    if (texto.includes("RIMPE") || texto.includes("EMPRENDEDOR")) return "RÉGIMEN RIMPE: EMPRENDEDOR"
+    return ""
+  })()
+  const clave = String(data.claveAcceso || "").replace(/\D/g, "")
+  const recibido = Number(data.recibido || 0)
+  const vuelto = Number(data.vuelto || 0)
   return `<!DOCTYPE html>
 <html lang="es">
 <head>
@@ -218,28 +235,48 @@ export function htmlTicket(data: Parameters<typeof htmlRide>[0]) {
 <body>
   <div class="no-print" style="margin-bottom:6px"><button onclick="window.print()">Imprimir ticket</button></div>
   <div style="text-align:center;text-transform:uppercase;font-weight:bold">${esc(data.razonSocial)}</div>
-  <p style="text-align:center;margin:2px 0">RUC: ${esc(data.ruc)}</p>
+  ${data.nombreComercial ? `<p style="text-align:center;margin:2px 0;text-transform:uppercase;font-weight:600">${esc(data.nombreComercial)}</p>` : ""}
+  <p style="text-align:center;margin:2px 0;font-weight:bold">R.U.C.: ${esc(data.ruc)}</p>
+  <p style="text-align:center;margin:2px 0">Matriz: ${esc(data.dirMatriz || "—")}</p>
+  <p style="text-align:center;margin:2px 0;font-size:9px">OBLIGADO A LLEVAR CONTABILIDAD: ${esc(data.obligado || "NO")}</p>
+  ${leyendaRegimen ? `<p style="text-align:center;margin:2px 0;font-size:9px">${esc(leyendaRegimen)}</p>` : ""}
   <hr>
-  <p style="margin:2px 0">FACTURA: ${esc(data.numeroFactura)}</p>
-  <p style="margin:2px 0">CLIENTE: ${esc(data.cliente)}</p>
-  <p style="margin:2px 0">ID: ${esc(data.identificacion)}</p>
-  <p style="margin:2px 0">FECHA: ${esc(data.fechaEmision)}</p>
+  <p style="margin:2px 0;font-weight:bold">FACTURA No: <span style="font-weight:normal">${esc(data.numeroFactura)}</span></p>
+  <p style="margin:2px 0"><b>FECHA EMISIÓN:</b> ${esc(data.fechaEmision)}</p>
+  <p style="margin:2px 0;text-transform:uppercase"><b>CLIENTE:</b> ${esc(data.cliente)}</p>
+  <p style="margin:2px 0"><b>RUC/CÍ:</b> ${esc(data.identificacion)}</p>
   <hr>
   <table>
     <thead>
       <tr style="border-bottom:1px solid #000">
         <th style="text-align:left">DESCRIPCIÓN</th>
-        <th style="text-align:right">CANT</th>
+        <th style="text-align:center">CANT</th>
         <th style="text-align:right">TOTAL</th>
       </tr>
     </thead>
     <tbody>${filas}</tbody>
   </table>
   <hr>
-  <p style="margin:2px 0">PAGO: ${esc(data.formaPago)}</p>
-  ${Number(data.vuelto) > 0 ? `<p style="margin:2px 0">VUELTO: ${dinero(data.vuelto)}</p>` : ""}
-  <p style="text-align:right;font-weight:bold;margin:4px 0">TOTAL: ${dinero(data.total)}</p>
-  <p style="font-size:9px;word-break:break-all;margin:4px 0">${esc(String(data.claveAcceso || "").replace(/\D/g, ""))}</p>
+  <div style="text-align:right">
+    <p style="margin:2px 0">SUBTOTAL 15%: ${dinero(data.base15)}</p>
+    <p style="margin:2px 0">SUBTOTAL 0%: ${dinero(data.base0)}</p>
+    <p style="margin:2px 0">SUBTOTAL SIN IMPUESTOS: ${dinero(data.subtotalSin)}</p>
+    <p style="margin:2px 0">TOTAL DESCUENTO: ${dinero(data.descuento)}</p>
+    <p style="margin:2px 0">IVA 15%: ${dinero(data.iva)}</p>
+    <p style="margin:4px 0;font-weight:bold;border-top:1px solid #000">TOTAL A PAGAR: ${dinero(data.total)}</p>
+  </div>
+  <hr>
+  <p style="margin:2px 0;font-weight:bold">Detalle de Cobro:</p>
+  <p style="margin:2px 0">${esc(data.formaPago)}</p>
+  ${recibido > 0 ? `<p style="margin:2px 0;font-weight:bold">VALOR RECIBIDO: ${dinero(recibido)}</p>` : ""}
+  ${vuelto > 0 ? `<p style="margin:2px 0;font-weight:bold">VUELTO ENTREGADO: ${dinero(vuelto)}</p>` : ""}
+  <hr>
+  <p style="margin:2px 0;font-weight:bold">AMBIENTE: <span style="font-weight:normal">${esc(data.ambiente || "PRUEBAS")}</span></p>
+  <p style="margin:2px 0;font-weight:bold">EMISIÓN: <span style="font-weight:normal">NORMAL</span></p>
+  <p style="margin:6px 0 2px;font-weight:bold">CLAVE DE ACCESO / NÚMERO DE AUTORIZACIÓN:</p>
+  ${barrasCode128(clave)}
+  <p style="font-size:8px;word-break:break-all;margin:4px 0">${esc(clave)}</p>
+  <p style="text-align:center;margin:8px 0 0;font-style:italic">¡Gracias por su pago${data.nombreComercial ? ` en ${esc(data.nombreComercial)}` : ""}!</p>
 </body>
 </html>`
 }
