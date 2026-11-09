@@ -1,9 +1,9 @@
 "use client"
-import { FormEvent, useState } from "react"
+import { FormEvent, useRef, useState } from "react"
 import { useRouter } from "next/navigation"
 import { motion } from "framer-motion"
 import { guardarEmpresaLocal } from "@/lib/sesion-cliente"
-import { Turnstile } from "@/components/auth/Turnstile"
+import { Turnstile, type TurnstileHandle } from "@/components/auth/Turnstile"
 
 export function AuthCard({ dark, setDark, onOpenRegister }: { dark: boolean; setDark: (v: boolean) => void; onOpenRegister: () => void }) {
   const router = useRouter()
@@ -11,44 +11,62 @@ export function AuthCard({ dark, setDark, onOpenRegister }: { dark: boolean; set
   const [ruc, setRuc] = useState("")
   const [clave, setClave] = useState("")
   const [loading, setLoading] = useState(false)
-  const [captcha, setCaptcha] = useState("")
   const [error, setError] = useState("")
+  const turnstileRef = useRef<TurnstileHandle>(null)
+  const esperando = useRef(false)
+  const esperaToken = useRef<number | null>(null)
 
-  async function ingresar(e?: FormEvent) {
+  function cortarEspera() {
+    esperando.current = false
+    if (esperaToken.current) window.clearTimeout(esperaToken.current)
+    esperaToken.current = null
+  }
+
+  async function enviar(token: string) {
+    const rucValue = ruc.trim()
+    try {
+      const res = await fetch("/api/auth/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ruc: rucValue, password: clave, captcha: token, canal: tab === "CAJA" ? "POS" : "LOGIN" })
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || "RUC o clave incorrectos")
+      if (data.empresa) guardarEmpresaLocal(data.empresa, undefined, data.usuario)
+      localStorage.removeItem("meijsac_token")
+      router.replace(tab === "ADMIN" ? "/dashboard" : "/dashboard/pos-ticket")
+    } catch (err: any) {
+      setError(err.message || "Inténtalo de nuevo")
+      turnstileRef.current?.reset()
+      setLoading(false)
+    }
+  }
+
+  function ingresar(e?: FormEvent) {
     e?.preventDefault()
     if (loading) return
     const rucValue = ruc.trim()
-    if (!captcha) {
-      setError("COMPLETA EL CAPTCHA")
+    if (!rucValue || !clave) {
+      setError("Ingresa RUC y contraseña")
       return
     }
     if (rucValue.length !== 13 || !/^[0-9]+$/.test(rucValue)) {
       setError("SRI: El RUC debe tener 13 dígitos numéricos")
       return
     }
-    if (!clave) { setError("Ingresa tu contraseña"); return; }
     setError("")
     setLoading(true)
-    try {
-      const res = await fetch('/api/auth/login', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ruc: rucValue, password: clave, captcha, canal: tab === "CAJA" ? "POS" : "LOGIN" })
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'RUC o clave incorrectos');
-
-      if (data.empresa) guardarEmpresaLocal(data.empresa, undefined, data.usuario)
-      localStorage.removeItem("meijsac_token")
-
-      const dest = tab === "ADMIN" ? "/dashboard" : "/dashboard/pos-ticket"
-      router.replace(dest)
-    } catch (err: any) {
-      setError(err.message);
-      setCaptcha("")
-    } finally {
+    esperando.current = true
+    if (esperaToken.current) window.clearTimeout(esperaToken.current)
+    esperaToken.current = window.setTimeout(() => {
+      if (!esperando.current) return
+      cortarEspera()
       setLoading(false)
-    }
+      setError("Inténtalo de nuevo")
+      turnstileRef.current?.reset()
+    }, 8000)
+    turnstileRef.current?.reset()
+    turnstileRef.current?.execute()
   }
 
   return (
@@ -93,14 +111,26 @@ export function AuthCard({ dark, setDark, onOpenRegister }: { dark: boolean; set
           <input id="clave" type="password" value={clave} onChange={(e) => setClave(e.target.value)} className={`w-full mt-2 p-4 rounded-2xl border outline-none text-sm ${dark ? "bg-black/60 border-white/10 text-white focus:border-[#ff00a8]" : "bg-gray-100 border-black/10 text-black focus:border-[#ff00a8]"}`} />
         </div>
         <Turnstile
+          ref={turnstileRef}
           sitekey={process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY}
-          onVerify={(token) => { setCaptcha(token); setError("") }}
-          onExpire={() => setCaptcha("")}
-          onError={(mensaje) => { setCaptcha(""); setError(mensaje) }}
-          options={{ theme: "dark", size: "normal" }}
+          size="invisible"
+          execution="execute"
+          onVerify={(token) => {
+            if (!esperando.current || !token) return
+            cortarEspera()
+            void enviar(token)
+          }}
+          onExpire={() => turnstileRef.current?.reset()}
+          onError={() => {
+            cortarEspera()
+            setLoading(false)
+            setError("Inténtalo de nuevo")
+            turnstileRef.current?.reset()
+          }}
         />
-        <button type="submit" disabled={loading || !captcha} className={`w-full py-4 rounded-2xl font-black tracking-wide transition disabled:cursor-not-allowed ${captcha ? "bg-green-500 text-black" : "bg-white/15 text-white/70"}`}>
-          {loading ? "VERIFICANDO..." : captcha ? "ENTRAR" : "COMPLETA EL CAPTCHA"}
+        <button type="submit" disabled={loading} className="w-full py-4 rounded-2xl bg-[#00f5d4] text-black font-black tracking-wide flex items-center justify-center gap-2 disabled:opacity-70">
+          {loading && <span className="h-4 w-4 rounded-full border-2 border-black/30 border-t-black animate-spin" />}
+          {loading ? "Verificando..." : "ENTRAR"}
         </button>
         {error && <p className="text-sm font-bold text-red-400">{error}</p>}
         <div className="flex justify-between text-[11px] mt-3">
