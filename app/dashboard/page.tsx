@@ -2,7 +2,7 @@
 import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { useEffect, useState } from "react"
-import { cargarEmpresaSesion } from "@/lib/sesion-cliente"
+import { cargarEmpresaSesion, cerrarSesionEnEsteEquipo } from "@/lib/sesion-cliente"
 
 const CORPORATE = "#23AAB3"
 
@@ -251,7 +251,7 @@ export default function DashboardMeijsac(){
             {colPlan && <div className={`text-[9px] px-2.5 py-1 rounded-full border flex items-center gap-1.5 ${colPlan.bg}`}><span className={`w-1.5 h-1.5 rounded-full animate-pulse ${colPlan.dot}`}></span> {accesoPlan?.planNombre || "PLAN"} · {colPlan.label}</div>}
             <div className="flex items-center gap-2 bg-[#12141d] border border-white/10 rounded-full pl-1 pr-1 py-1 relative">
               <button onClick={()=>setShowBg(!showBg)} className="text-[8px] bg-white/5 hover:bg-white/15 border border-white/10 px-2.5 py-1 rounded-full font-bold transition">🎨 Fondo</button>
-              <button onClick={()=>{ localStorage.clear(); window.location.href = "/"; }} className="text-[8px] bg-white/10 hover:bg-white/20 border border-white/10 px-3 py-1 rounded-full font-bold transition">Cerrar sesión</button>
+              <button onClick={() => { void cerrarSesionEnEsteEquipo() }} className="text-[8px] bg-white/10 hover:bg-white/20 border border-white/10 px-3 py-1 rounded-full font-bold transition">Cerrar sesión</button>
               {showBg && (
                 <div className="absolute right-0 top-[40px] w-[290px] bg-[#12141d] border border-white/10 rounded-2xl p-4 z-50 shadow-2xl">
                   <div className="flex justify-between items-center mb-3">

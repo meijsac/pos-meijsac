@@ -2,6 +2,7 @@
 import { useEffect } from 'react'
 import { useRouter, usePathname } from 'next/navigation'
 import { EsisaAvatar } from '@/components/EsisaAvatar'
+import { guardarEmpresaLocal } from '@/lib/sesion-cliente'
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   const router = useRouter()
@@ -9,27 +10,36 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const isDashboard = pathname === '/dashboard'
 
   useEffect(() => {
-    const empresa = localStorage.getItem("meijsac_empresa")
-    const usuario = localStorage.getItem("meijsac_user")
-    if (!empresa && !usuario) {
-      router.replace("/login")
-      return
-    }
-    if (sessionStorage.getItem("meijsac_acceso_ok") === "1") return
+    let vivo = true
+    const tieneLocal = () => !!(localStorage.getItem("meijsac_empresa") || localStorage.getItem("meijsac_user"))
+    if (sessionStorage.getItem("meijsac_acceso_ok") === "1" && tieneLocal()) return
     const ctrl = new AbortController()
     const timer = setTimeout(() => ctrl.abort(), 3000)
-    fetch("/api/auth/sesion", { signal: ctrl.signal })
-      .then((res) => {
-        if (res.status === 401) {
-          sessionStorage.removeItem("meijsac_acceso_ok")
-          router.replace("/login")
+    fetch("/api/auth/sesion", { signal: ctrl.signal, credentials: "same-origin" })
+      .then(async (res) => {
+        if (!vivo) return
+        if (res.ok) {
+          sessionStorage.setItem("meijsac_acceso_ok", "1")
+          if (!tieneLocal()) {
+            const data = await fetch("/api/empresa/mia", { credentials: "same-origin" }).then((r) => r.json()).catch(() => null)
+            if (data?.empresa) guardarEmpresaLocal(data.empresa)
+          }
           return
         }
-        if (res.ok) sessionStorage.setItem("meijsac_acceso_ok", "1")
+        if (res.status === 401) {
+          sessionStorage.removeItem("meijsac_acceso_ok")
+          sessionStorage.setItem("meijsac_aviso_sesion", "Sesión vencida")
+          router.replace("/login")
+        }
       })
-      .catch(() => {})
+      .catch(() => {
+        if (vivo && !tieneLocal()) router.replace("/login")
+      })
       .finally(() => clearTimeout(timer))
-    return () => clearTimeout(timer)
+    return () => {
+      vivo = false
+      clearTimeout(timer)
+    }
   }, [router])
 
   return (

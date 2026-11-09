@@ -1,5 +1,5 @@
 "use client"
-import { FormEvent, useRef, useState } from "react"
+import { FormEvent, useEffect, useRef, useState } from "react"
 import { useRouter } from "next/navigation"
 import { motion } from "framer-motion"
 import { guardarEmpresaLocal } from "@/lib/sesion-cliente"
@@ -13,18 +13,35 @@ export function AuthCard({ dark, setDark, onOpenRegister }: { dark: boolean; set
   const [error, setError] = useState("")
   const turnstileRef = useRef<TurnstileHandle>(null)
 
+  useEffect(() => {
+    const aviso = sessionStorage.getItem("meijsac_aviso_sesion")
+    if (aviso) {
+      sessionStorage.removeItem("meijsac_aviso_sesion")
+      setError("Sesión vencida")
+    }
+    let vivo = true
+    fetch("/api/auth/sesion", { credentials: "same-origin" })
+      .then((res) => {
+        if (vivo && res.ok) router.replace("/dashboard")
+      })
+      .catch(() => {})
+    return () => { vivo = false }
+  }, [router])
+
   async function enviar() {
     const rucValue = ruc.trim()
     try {
       const res = await fetch("/api/auth/login", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
+        credentials: "same-origin",
         body: JSON.stringify({ ruc: rucValue, password: clave, canal: tab === "CAJA" ? "POS" : "LOGIN" })
       })
       const data = await res.json()
       if (!res.ok) throw new Error(data.error || "RUC o clave incorrectos")
       if (data.empresa) guardarEmpresaLocal(data.empresa, undefined, data.usuario)
-      localStorage.removeItem("meijsac_token")
+      sessionStorage.setItem("meijsac_acceso_ok", "1")
+      sessionStorage.removeItem("meijsac_aviso_sesion")
       router.replace(tab === "ADMIN" ? "/dashboard" : "/dashboard/pos-ticket")
     } catch (err: any) {
       setError(err.message || "RUC o clave incorrectos")

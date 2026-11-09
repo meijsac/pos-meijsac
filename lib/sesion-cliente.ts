@@ -3,7 +3,6 @@ let refresco: Promise<any | null> | null = null
 
 export function guardarEmpresaLocal(empresa: any, token?: string, usuario?: any) {
   if (typeof window === "undefined" || !empresa) return
-  localStorage.removeItem("meijsac_token")
   void token
   localStorage.setItem("meijsac_empresa", JSON.stringify(empresa))
   localStorage.setItem("meijsac_registro", JSON.stringify(empresa))
@@ -56,6 +55,23 @@ function pedirEmpresaUnaVez() {
     }
   })()
   return refresco
+}
+
+export function limpiarSesionLocal() {
+  if (typeof window === "undefined") return
+  localStorage.removeItem("meijsac_user")
+  localStorage.removeItem("meijsac_empresa")
+  localStorage.removeItem("meijsac_registro")
+  localStorage.removeItem("meijsac_token")
+  sessionStorage.removeItem(MARCA)
+  sessionStorage.removeItem("meijsac_acceso_ok")
+}
+
+export async function cerrarSesionEnEsteEquipo() {
+  await fetch("/api/auth/logout", { method: "POST", credentials: "same-origin" }).catch(() => {})
+  limpiarSesionLocal()
+  sessionStorage.removeItem("meijsac_aviso_sesion")
+  window.location.href = "/login"
 }
 
 export async function cargarEmpresaSesion() {

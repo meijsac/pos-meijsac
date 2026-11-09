@@ -54,10 +54,15 @@ export async function POST(req: Request) {
     const sid = randomBytes(16).toString("hex")
     abrirSesion(sid)
     const acceso = firmarSesion({ id: usuario.id, empresaId: usuario.empresaId, sid, ip, ua })
-    const refresh = firmarSesion({ id: usuario.id, empresaId: usuario.empresaId, sid, ip, ua }, "7d")
-    prisma.sesionUsuario.create({
-      data: { id: sid, usuarioId: usuario.id, expira: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000), ip, navegador: ua },
-    }).catch(() => {})
+    const refresh = firmarSesion({ id: usuario.id, empresaId: usuario.empresaId, sid, ip, ua })
+    const expira = new Date(Date.now() + 60 * 60 * 1000)
+    try {
+      await prisma.sesionUsuario.upsert({
+        where: { id: sid },
+        create: { id: sid, usuarioId: usuario.id, expira, ip, navegador: ua },
+        update: { revocada: false, expira, ip, navegador: ua },
+      })
+    } catch { /* la cookie firmada igual entra; la siguiente visita recompone la fila */ }
     const empresa = empresaParaCliente(usuario.empresa, usuario)
     return responder({
       usuario: { nombre: usuario.nombre, empresa: empresa.razonSocial, rol: usuario.rol, ruc: empresa.ruc, empresaId: usuario.empresaId },

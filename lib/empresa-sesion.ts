@@ -1,8 +1,7 @@
 import jwt from "jsonwebtoken"
 import type { Empresa, Usuario } from "@prisma/client"
 import { prisma } from "@/lib/prisma"
-import { abrirSesion, sesionViva } from "@/lib/login-memoria"
-import { ipDe, navegadorDe } from "@/lib/seguridad"
+import { abrirSesion } from "@/lib/login-memoria"
 
 export function secretoJwt() {
   const secreto = process.env.JWT_SECRET || ""
@@ -60,6 +59,9 @@ export function empresaParaCliente(
   }
 }
 
+const UNA_HORA_SEG = 60 * 60
+const UNA_HORA_MS = UNA_HORA_SEG * 1000
+
 export function firmarSesion(usuario: { id: string; empresaId: string; sid: string; ip: string; ua: string }, dias?: "7d") {
   return jwt.sign(
     { id: usuario.id, empresaId: usuario.empresaId, sid: usuario.sid, ip: usuario.ip, ua: usuario.ua },
@@ -68,56 +70,77 @@ export function firmarSesion(usuario: { id: string; empresaId: string; sid: stri
   )
 }
 
-function leerCookie(req: Request, nombre: string) {
-  const raw = req.headers.get("cookie") || ""
-  const parte = raw.split(";").map((s) => s.trim()).find((s) => s.startsWith(`${nombre}=`))
-  return parte ? decodeURIComponent(parte.slice(nombre.length + 1)) : ""
+export function tokensDeCabeceras(cookie: string, authorization = "") {
+  const tokens: string[] = []
+  for (const parte of cookie.split(";")) {
+    const item = parte.trim()
+    if (!item.startsWith("meijsac_sesion=")) continue
+    const crudo = item.slice("meijsac_sesion=".length)
+    try { tokens.push(decodeURIComponent(crudo)) } catch { tokens.push(crudo) }
+  }
+  const bearer = authorization.startsWith("Bearer ") ? authorization.slice(7).trim() : ""
+  if (bearer && bearer !== "ok" && !bearer.startsWith("ok-") && bearer !== "demo" && !tokens.includes(bearer)) tokens.push(bearer)
+  return tokens.filter(Boolean)
+}
+
+export function sesionEstaVencida(fila: { revocada: boolean; expira: Date; updatedAt: Date } | null, ahora = Date.now()) {
+  if (!fila) return false
+  if (fila.revocada) return true
+  if (new Date(fila.expira).getTime() <= ahora) return true
+  const toque = new Date(fila.updatedAt).getTime()
+  if (Number.isFinite(toque) && ahora - toque >= UNA_HORA_MS) return true
+  return false
 }
 
 export function cookiesSesion(acceso: string, refresh: string) {
   const secure = process.env.NODE_ENV === "production" ? "; Secure" : ""
   return [
-    `meijsac_sesion=${acceso}; HttpOnly; Path=/; SameSite=Strict${secure}`,
-    `meijsac_refresh=${refresh}; HttpOnly; Path=/api/auth; SameSite=Strict${secure}`,
+    `meijsac_sesion=${encodeURIComponent(acceso)}; HttpOnly; Path=/; SameSite=Lax; Max-Age=${UNA_HORA_SEG}${secure}`,
+    `meijsac_refresh=${encodeURIComponent(refresh)}; HttpOnly; Path=/api/auth; SameSite=Lax; Max-Age=${UNA_HORA_SEG}${secure}`,
   ]
 }
 
 export function cookiesCerradas() {
   const secure = process.env.NODE_ENV === "production" ? "; Secure" : ""
-  return [
-    `meijsac_sesion=; HttpOnly; Path=/; SameSite=Strict; Max-Age=0${secure}`,
-    `meijsac_refresh=; HttpOnly; Path=/api/auth; SameSite=Strict; Max-Age=0${secure}`,
+  const bases = [
+    "meijsac_sesion=; HttpOnly; Path=/; Max-Age=0",
+    "meijsac_refresh=; HttpOnly; Path=/api/auth; Max-Age=0",
   ]
+  return bases.flatMap((base) => ["", "; SameSite=Lax", "; SameSite=Strict"].map((site) => `${base}${site}${secure}`))
 }
 
 export async function usuarioConEmpresaDesdeRequest(req: Request) {
-  const header = req.headers.get("authorization") || ""
-  const bearer = header.startsWith("Bearer ") ? header.slice(7).trim() : ""
-  const token = leerCookie(req, "meijsac_sesion") || (bearer && bearer !== "ok" && !bearer.startsWith("ok-") && bearer !== "demo" ? bearer : "")
-  if (!token) return { error: "No hay sesión. Vuelve a entrar.", status: 401 as const }
-  let payload: { id?: string; empresaId?: string; sid?: string; ip?: string; ua?: string }
-  try {
-    payload = jwt.verify(token, secretoJwt()) as { id?: string; empresaId?: string; sid?: string; ip?: string; ua?: string }
-  } catch {
-    return { error: "Sesión vencida. Vuelve a entrar.", status: 401 as const }
-  }
-  if (!payload.id || !payload.sid) return { error: "Sesión vencida. Vuelve a entrar.", status: 401 as const }
-  let viva = sesionViva(payload.sid)
-  if (!viva) {
+  const tokens = tokensDeCabeceras(req.headers.get("cookie") || "", req.headers.get("authorization") || "")
+  if (!tokens.length) return { error: "No hay sesión. Vuelve a entrar.", status: 401 as const }
+  let payload: { id?: string; empresaId?: string; sid?: string; ip?: string; ua?: string } | null = null
+  for (const token of tokens) {
+    let dato: { id?: string; empresaId?: string; sid?: string; ip?: string; ua?: string }
     try {
-      const fila = await prisma.sesionUsuario.findUnique({ where: { id: payload.sid } })
-      viva = !!fila && !fila.revocada && fila.expira > new Date() && Date.now() - fila.updatedAt.getTime() < 8 * 60 * 60 * 1000
-      if (viva) {
-        abrirSesion(payload.sid)
-        await prisma.sesionUsuario.update({ where: { id: payload.sid }, data: { updatedAt: new Date() } })
+      dato = jwt.verify(token, secretoJwt()) as { id?: string; empresaId?: string; sid?: string; ip?: string; ua?: string }
+    } catch { continue }
+    if (!dato.id || !dato.sid) continue
+    try {
+      const fila = await prisma.sesionUsuario.findUnique({ where: { id: dato.sid } })
+      if (sesionEstaVencida(fila)) continue
+      if (!fila) {
+        await prisma.sesionUsuario.create({
+          data: {
+            id: dato.sid,
+            usuarioId: dato.id,
+            expira: new Date(Date.now() + UNA_HORA_MS),
+            ip: dato.ip || "",
+            navegador: (dato.ua || "").slice(0, 180),
+          },
+        }).catch(() => {})
+      } else {
+        await prisma.sesionUsuario.update({ where: { id: dato.sid }, data: { updatedAt: new Date() } }).catch(() => {})
       }
-    } catch {
-      viva = false
-    }
+    } catch { /* el JWT firmado sigue valiendo si la base no responde */ }
+    payload = dato
+    break
   }
-  if (!viva) return { error: "Sesión vencida. Vuelve a entrar.", status: 401 as const }
-  if (payload.ip && payload.ip !== ipDe(req)) return { error: "La red cambió. Vuelve a entrar.", status: 401 as const }
-  if (payload.ua && payload.ua !== navegadorDe(req)) return { error: "El navegador cambió. Vuelve a entrar.", status: 401 as const }
+  if (!payload?.id || !payload.sid) return { error: "Sesión vencida. Vuelve a entrar.", status: 401 as const }
+  abrirSesion(payload.sid)
 
   const usuario = await prisma.usuario.findUnique({
     where: { id: payload.id },
