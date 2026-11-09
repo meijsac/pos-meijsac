@@ -1,6 +1,7 @@
 "use client";
 import { useState, useEffect, useMemo } from "react";
 import * as XLSX from 'xlsx';
+import { calcularKardex, costoParaSalida, type MetodoCosteo } from "@/lib/kardex-costo";
 
 type TipoItem = "FISICO" | "SERVICIO" | "COMBO" | "FABRICADO";
 
@@ -25,6 +26,7 @@ type Producto = {
   precioDistribuidor: number;
   costoInicial: number;
   stock: number;
+  stockPorSucursal?: Record<string, number>;
   stockMin: number;
   stockMax: number;
   bodega: string;
@@ -48,12 +50,26 @@ interface KardexMov {
   id: string;
   productoId: string;
   fecha: string;
-  tipo: "INGRESO" | "EGRESO";
-  doc: string;
+  tipo: "ENTRADA" | "SALIDA" | "TRANSFERENCIA";
+  detalle: string;
+  cantidadEntrada: number;
+  cantidadSalida: number;
+  costoEntrada: number;
+  sucursal: string;
+  usuario: string;
+  transferenciaId?: string | null;
+}
+
+type Transferencia = {
+  id: string;
+  fecha: string;
+  origen: string;
+  destino: string;
+  productoId: string;
+  productoNombre: string;
+  cantidad: number;
+  costo: number;
   motivo: string;
-  cant: number;
-  saldoAnterior: number;
-  saldoNuevo: number;
   usuario: string;
 }
 
@@ -86,9 +102,14 @@ export default function ProductosModule() {
   const [filtroIva, setFiltroIva] = useState<"TODOS"|"IVA15"|"IVA0"|"EXENTO">("TODOS");
 
   const [movimientos, setMovimientos] = useState<KardexMov[]>([]);
-  const [bodegas, setBodegas] = useState<string[]>(["PRINCIPAL", "EXHIBICION"]);
+  const [transferencias, setTransferencias] = useState<Transferencia[]>([]);
+  const [metodo, setMetodo] = useState<MetodoCosteo>("PROMEDIO");
+  const [sucursales, setSucursales] = useState<{ id: string; nombre: string }[]>([{ id: "PRINCIPAL", nombre: "PRINCIPAL / Matriz" }]);
+  const [transferir, setTransferir] = useState<Producto | null>(null);
+  const [transferForm, setTransferForm] = useState({ origen: "PRINCIPAL", destino: "", cantidad: 1, motivo: "" });
+  const [bodegas, setBodegas] = useState<string[]>(["PRINCIPAL"]);
   const [fechasKardex, setFechasKardex] = useState({ desde: "", hasta: "" });
-  const [ajusteForm, setAjusteForm] = useState({ tipo: "EGRESO", cant: 1, motivo: "Mermas / Daños" });
+  const [ajusteForm, setAjusteForm] = useState({ tipo: "EGRESO", cant: 1, costo: 0, motivo: "Mermas / Daños" });
   const [resumenImportacion, setResumenImportacion] = useState<{ importados: number; errores: string[] } | null>(null);
 
   const importarDesdeExcel = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -257,19 +278,19 @@ export default function ProductosModule() {
     URL.revokeObjectURL(url)
   };
 
+  const authHeaders = () => ({ Authorization: `Bearer ${localStorage.getItem("meijsac_token") || ""}`, "Content-Type": "application/json" });
+
   useEffect(() => {
     const eid = localStorage.getItem("empresa_id") || "EMPRESA_001";
     setEmpresaId(eid);
     
     const savedBodegas = localStorage.getItem(`bodegas_${eid}`);
     if (savedBodegas) setBodegas(JSON.parse(savedBodegas));
-    const savedMovs = localStorage.getItem(`movimientos_${eid}`);
-    if (savedMovs) setMovimientos(JSON.parse(savedMovs));
 
     const saved = localStorage.getItem(`productos_${eid}`);
     if(saved){
       const parsed = JSON.parse(saved);
-      const migrados = parsed.map((p:any)=>({
+      const migrados = parsed.filter((p: any) => !(String(p?.id) === "1" && String(p?.nombre || "").toUpperCase() === "COCA COLA 500ML" && Number(p?.precioMinorista) === 1.2 && Number(p?.costoInicial) === 0.85 && Number(p?.stock) === 100)).map((p:any)=>({
        ...p,
         codigo: p.codigo || "001", codigoAuxiliar: p.codigoAuxiliar || "",
         descripcion: p.descripcion || p.nombre, detalle: p.detalle || "",
@@ -285,11 +306,16 @@ export default function ProductosModule() {
         precioMayorista: p.precioMayorista ?? 0, precioDistribuidor: p.precioDistribuidor ?? 0,
       }));
       setProductos(migrados);
-    } else {
-      setProductos([
-        { id: "1", empresa_id: eid, nombre: "COCA COLA 500ML", codigo:"001", codigoAuxiliar:"", descripcion:"COCA COLA 500ML", detalle: "", tipoItem: "FISICO", tipoIvaSRI:"15%", codigoPorcentaje:"4", tarifaIva:15, codigoImpuesto:2, descuento:0, valorIce:0, precioSinIVA: 1.20, precioMinorista: 1.20, precioMayorista: 1.10, precioDistribuidor: 1.00, costoInicial: 0.85, stock: 100, stockMin: 10, stockMax: 200, bodega:"PRINCIPAL", categoria:"PRINCIPAL", unidad:"UND", ubicacion:"", fechaVence:"", porcIce:0, irbpnr:0, subsidio:0, gravaICE:false, manejaStock:true, cuentaContable:"4.1.01", visibleWeb:true, esCombo:false, esFabricado:false, lote: "" }
-      ]);
-    }
+    } else setProductos([]);
+    const headers = { Authorization: `Bearer ${localStorage.getItem("meijsac_token") || ""}` };
+    fetch("/api/inventario/config", { headers }).then((r) => r.ok ? r.json() : null).then((d) => { if (d?.metodoCosteo) setMetodo(d.metodoCosteo); }).catch(() => {});
+    fetch("/api/inventario/kardex", { headers }).then((r) => r.ok ? r.json() : null).then((d) => { if (d?.movimientos) setMovimientos(d.movimientos); }).catch(() => {});
+    fetch("/api/inventario/transferencias", { headers }).then((r) => r.ok ? r.json() : null).then((d) => { if (d?.transferencias) setTransferencias(d.transferencias); }).catch(() => {});
+    fetch("/api/empresa/mia", { headers }).then((r) => r.ok ? r.json() : null).then((d) => {
+      const lista = d?.empresa?.sucursales || d?.sucursales || [];
+      const extras = Array.isArray(lista) ? lista.map((s: any) => ({ id: String(s.id || s.codigo || s.nombre), nombre: String(s.nombre || s.id || "SUCURSAL") })) : [];
+      setSucursales([{ id: "PRINCIPAL", nombre: "PRINCIPAL / Matriz" }, ...extras.filter((s: { id: string }) => s.id && s.id !== "PRINCIPAL")]);
+    }).catch(() => {});
     
     const hoy = new Date();
     setFechasKardex({ 
@@ -304,17 +330,20 @@ export default function ProductosModule() {
     if (!cargado) return;
     localStorage.setItem(`productos_${empresaId}`, JSON.stringify(productos));
     localStorage.setItem(`bodegas_${empresaId}`, JSON.stringify(bodegas));
-    localStorage.setItem(`movimientos_${empresaId}`, JSON.stringify(movimientos));
-  }, [productos, bodegas, movimientos, empresaId, cargado]);
+  }, [productos, bodegas, empresaId, cargado]);
 
-  const productoSeleccionado = form.id ? form : (productos[0] || formInicial);
-  const costo = Number(productoSeleccionado?.costoInicial || 0);
+  const productoSeleccionado = productoSel;
+  const filasCosto = useMemo(() => productoSeleccionado ? calcularKardex(movimientos.filter((m) => m.productoId === productoSeleccionado.id), metodo, productoSeleccionado.bodega || "PRINCIPAL") : [], [movimientos, metodo, productoSeleccionado]);
+  const hayEntradaCosto = filasCosto.some((f) => f.cantidadEntrada > 0);
+  const costo = hayEntradaCosto ? Number(filasCosto[filasCosto.length - 1]?.costoPromedio || 0) : null;
   const precioMinorista = Number(productoSeleccionado?.precioMinorista || 0);
   const precioMayorista = Number(productoSeleccionado?.precioMayorista || 0);
   const precioDistribuidor = Number(productoSeleccionado?.precioDistribuidor || 0);
   const precioActivo = tarifaActiva === "MINORISTA"? precioMinorista : tarifaActiva === "MAYORISTA"? precioMayorista : precioDistribuidor;
-  const utilidadReal = precioActivo - costo;
-  const margen = precioActivo > 0? (utilidadReal / precioActivo) * 100 : 0;
+  const tasaIva = !productoSeleccionado ? 0 : productoSeleccionado.tipoIvaSRI === "15%" ? 0.15 : productoSeleccionado.tipoIvaSRI === "12%" ? 0.12 : productoSeleccionado.tipoIvaSRI === "14%" ? 0.14 : productoSeleccionado.tipoIvaSRI === "5%" ? 0.05 : productoSeleccionado.tipoIvaSRI === "DIFERENCIADO" ? Number(productoSeleccionado.tarifaIva || 0) / 100 : 0;
+  const pvp = (precio: number) => precio * (1 + tasaIva);
+  const utilidadReal = costo === null ? null : precioActivo - costo;
+  const margen = costo !== null && precioActivo > 0 && utilidadReal !== null ? (utilidadReal / precioActivo) * 100 : 0;
 
   const filtrados = useMemo(() => productos.filter(p => {
     const porTexto = p.nombre.toLowerCase().includes(busqueda.toLowerCase()) || p.codigo.toLowerCase().includes(busqueda.toLowerCase());
@@ -328,32 +357,45 @@ export default function ProductosModule() {
     return filtrados.reduce((totales, prod) => {
       if (prod.tipoItem === 'SERVICIO') return totales; // Los servicios no tienen valor de bodega
       return {
-        costoTotal: totales.costoTotal + (prod.costoInicial * prod.stock),
+        costoTotal: totales.costoTotal + ((calcularKardex(movimientos.filter((m) => m.productoId === prod.id), metodo, prod.bodega || "PRINCIPAL").at(-1)?.costoPromedio || 0) * prod.stock),
         pvpEstimado: totales.pvpEstimado + (prod.precioMinorista * prod.stock)
       };
     }, { costoTotal: 0, pvpEstimado: 0 });
-  }, [filtrados]);
+  }, [filtrados, movimientos, metodo]);
 
   const movimientosFiltrados = useMemo(() => {
     if (!productoSel) return [];
-    return movimientos
-      .filter(m => m.productoId === productoSel.id)
-      .filter(m => {
-        if (!fechasKardex.desde && !fechasKardex.hasta) return true;
-        if (fechasKardex.desde && m.fecha < fechasKardex.desde) return false;
-        if (fechasKardex.hasta && m.fecha > fechasKardex.hasta) return false;
-        return true;
-      })
-      .sort((a, b) => new Date(b.fecha).getTime() - new Date(a.fecha).getTime());
-  }, [movimientos, productoSel, fechasKardex]);
+    const delProducto = movimientos.filter((m) => m.productoId === productoSel.id);
+    const lugares = [...new Set(delProducto.map((m) => m.sucursal || "PRINCIPAL"))];
+    const calculados = lugares.flatMap((lugar) => calcularKardex(delProducto, metodo, lugar)).sort((a, b) => a.fecha.localeCompare(b.fecha) || a.id.localeCompare(b.id));
+    return calculados.filter((m) => {
+      const dia = m.fecha.slice(0, 10);
+      if (fechasKardex.desde && dia < fechasKardex.desde) return false;
+      if (fechasKardex.hasta && dia > fechasKardex.hasta) return false;
+      return true;
+    });
+  }, [movimientos, productoSel, fechasKardex, metodo]);
 
-  const crearMovimientoKardex = (prodId: string, tipo: "INGRESO"|"EGRESO", cant: number, saldoAnt: number, motivo: string, doc: string) => {
-    const mov: KardexMov = {
-      id: `MOV_${Date.now()}`, productoId: prodId, fecha: new Date().toISOString().split('T')[0],
-      tipo, cant, saldoAnterior: saldoAnt, saldoNuevo: tipo === "INGRESO" ? saldoAnt + cant : saldoAnt - cant,
-      motivo, doc, usuario: "Admin"
-    };
-    setMovimientos(prev => [mov, ...prev]);
+  const guardarMetodo = async (siguiente: MetodoCosteo) => {
+    setMetodo(siguiente);
+    await fetch("/api/inventario/config", { method: "PUT", headers: authHeaders(), body: JSON.stringify({ metodoCosteo: siguiente }) });
+  };
+
+  const crearMovimientoKardex = async (prod: Producto, tipo: "ENTRADA" | "SALIDA", cant: number, costoEntrada: number, detalle: string) => {
+    const res = await fetch("/api/inventario/kardex", {
+      method: "POST",
+      headers: authHeaders(),
+      body: JSON.stringify({
+        productoId: prod.id, productoCodigo: prod.codigo, productoNombre: prod.nombre,
+        sucursal: prod.bodega || "PRINCIPAL", tipo, detalle,
+        cantidadEntrada: tipo === "ENTRADA" ? cant : 0,
+        cantidadSalida: tipo === "SALIDA" ? cant : 0,
+        costoEntrada,
+      }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) return alert(data.error || "No se pudo guardar el kárdex");
+    setMovimientos((prev) => [...prev, ...(data.movimientos || [])]);
   };
 
   const handleGuardar = () => {
@@ -363,9 +405,7 @@ export default function ProductosModule() {
     
     if (esNuevo) {
       setProductos(ps => [nuevo, ...ps]);
-      if (nuevo.stock > 0 && nuevo.tipoItem === "FISICO") {
-        crearMovimientoKardex(nuevo.id, "INGRESO", nuevo.stock, 0, "Inventario Inicial", "Apertura de sistema");
-      }
+      if (nuevo.stock > 0 && nuevo.tipoItem === "FISICO") crearMovimientoKardex(nuevo, "ENTRADA", nuevo.stock, Number(nuevo.costoInicial) || 0, "Inventario inicial");
     } else {
       setProductos(ps => ps.map(p => p.id === form.id ? nuevo : p));
     }
@@ -373,17 +413,57 @@ export default function ProductosModule() {
     setProductoSel(null);
   };
 
+  const stockEn = (prod: Producto, sucursal: string) => {
+    if (prod.stockPorSucursal && prod.stockPorSucursal[sucursal] !== undefined) return Number(prod.stockPorSucursal[sucursal]) || 0;
+    return sucursal === "PRINCIPAL" || sucursal === (prod.bodega || "PRINCIPAL") ? Number(prod.stock) || 0 : 0;
+  };
+
   const handleAjusteInventario = () => {
     if (!productoSel) return;
     if (ajusteForm.cant <= 0) return alert("La cantidad debe ser mayor a 0");
-    const saldoAnt = productoSel.stock;
+    const bodega = productoSel.bodega || "PRINCIPAL";
+    const saldoAnt = stockEn(productoSel, bodega);
     if (ajusteForm.tipo === "EGRESO" && saldoAnt < ajusteForm.cant) return alert("No hay suficiente stock físico disponible para realizar este egreso.");
-
+    const salida = costoParaSalida(movimientos.filter((m) => m.productoId === productoSel.id), metodo, bodega, ajusteForm.cant);
+    const costoMov = ajusteForm.tipo === "INGRESO" ? Number(ajusteForm.costo) || 0 : salida.ok ? salida.costoUnitario : 0;
     const nuevoSaldo = ajusteForm.tipo === "INGRESO" ? saldoAnt + ajusteForm.cant : saldoAnt - ajusteForm.cant;
-    setProductos(ps => ps.map(p => p.id === productoSel.id ? { ...p, stock: nuevoSaldo } : p));
-    crearMovimientoKardex(productoSel.id, ajusteForm.tipo as any, ajusteForm.cant, saldoAnt, ajusteForm.motivo, "Ajuste Físico");
-    setProductoSel({ ...productoSel, stock: nuevoSaldo });
-    setAjusteForm({ tipo: "EGRESO", cant: 1, motivo: "Mermas / Daños" });
+    const mapa = { ...(productoSel.stockPorSucursal || { [bodega]: productoSel.stock }), [bodega]: nuevoSaldo };
+    const actualizado = { ...productoSel, stock: bodega === "PRINCIPAL" ? nuevoSaldo : Number(mapa.PRINCIPAL ?? productoSel.stock), stockPorSucursal: mapa };
+    setProductos(ps => ps.map(p => p.id === productoSel.id ? actualizado : p));
+    crearMovimientoKardex(productoSel, ajusteForm.tipo === "INGRESO" ? "ENTRADA" : "SALIDA", ajusteForm.cant, costoMov, ajusteForm.motivo);
+    setProductoSel(actualizado);
+    setAjusteForm({ tipo: "EGRESO", cant: 1, costo: 0, motivo: "Mermas / Daños" });
+  };
+
+  const confirmarTransferencia = async () => {
+    if (!transferir) return;
+    const origen = transferForm.origen || "PRINCIPAL";
+    const destino = transferForm.destino;
+    if (!destino || destino === origen) return alert("Elige una sucursal destino distinta del origen");
+    if (transferForm.cantidad <= 0) return alert("La cantidad debe ser mayor a 0");
+    if (stockEn(transferir, origen) < transferForm.cantidad) return alert(origen === "PRINCIPAL" ? "Stock insuficiente en Matriz" : `Stock insuficiente en ${origen}`);
+    const res = await fetch("/api/inventario/transferencias", {
+      method: "POST",
+      headers: authHeaders(),
+      body: JSON.stringify({
+        origen, destino, cantidad: transferForm.cantidad, motivo: transferForm.motivo,
+        productoId: transferir.id, productoCodigo: transferir.codigo, productoNombre: transferir.nombre,
+        stockOrigen: stockEn(transferir, origen),
+      }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) return alert(data.error || "No se pudo transferir");
+    setMovimientos((prev) => [...prev, ...(data.movimientos || [])]);
+    setTransferencias((prev) => [data.transferencia, ...prev]);
+    setProductos((ps) => ps.map((p) => {
+      if (p.id !== transferir.id) return p;
+      const mapa = { ...(p.stockPorSucursal || { [p.bodega || "PRINCIPAL"]: p.stock }) };
+      if (mapa[origen] === undefined) mapa[origen] = stockEn(p, origen);
+      mapa[origen] = Number(mapa[origen]) - transferForm.cantidad;
+      mapa[destino] = Number(mapa[destino] || 0) + transferForm.cantidad;
+      return { ...p, stockPorSucursal: mapa, stock: Number(mapa.PRINCIPAL ?? 0) };
+    }));
+    setTransferir(null);
   };
 
   const handleCrearBodega = () => {
@@ -423,7 +503,7 @@ export default function ProductosModule() {
 
         <div className="space-y-2">
           <div><label className="text-[9px] text-white/60 font-bold mb-1 block" title="El código interno que usarás para buscar rápido.">Código Principal / SKU *</label><input value={form.codigo} onChange={e=>setForm({...form, codigo:e.target.value})} placeholder="Ej: 001" className="w-full bg-black border border-white/10 rounded-lg px-2.5 py-2 text-[11px] font-bold focus:border-[#00f5d4] outline-none transition-colors" /></div>
-          <div><label className="text-[9px] text-white/60 font-bold mb-1 block">Nombre Producto *</label><input value={form.nombre} onChange={e=>setForm({...form, nombre:e.target.value})} placeholder="Ej: COCA COLA 500ML" className="w-full bg-black border border-white/10 rounded-lg px-2.5 py-2 text-[11px] focus:border-[#00f5d4] outline-none transition-colors" /></div>
+          <div><label className="text-[9px] text-white/60 font-bold mb-1 block">Nombre Producto *</label><input value={form.nombre} onChange={e=>setForm({...form, nombre:e.target.value})} placeholder="Nombre del producto" className="w-full bg-black border border-white/10 rounded-lg px-2.5 py-2 text-[11px] focus:border-[#00f5d4] outline-none transition-colors" /></div>
           <div><label className="text-[9px] text-[#00f5d4]/70 font-bold mb-1 block" title="Este texto extra saldrá impreso en la factura electrónica.">Detalle Adicional (Para impresión/factura)</label><textarea value={form.detalle} onChange={e=>setForm({...form, detalle:e.target.value})} placeholder="Ej: Bebida gaseosa 500ml retornable..." rows={2} className="w-full bg-black border border-[#00f5d4]/30 rounded-lg px-2.5 py-2 text-[11px] resize-none focus:border-[#00f5d4] outline-none transition-colors" /></div>
         </div>
 
@@ -482,7 +562,7 @@ export default function ProductosModule() {
       {/* PANEL DERECHO - LISTADO / KARDEX */}
       <div className="w-[65%] flex flex-col gap-3">
         <div className="flex gap-2 bg-[#0f172a]/50 p-1.5 rounded-full w-max border border-white/5">
-          <button onClick={()=>{setTab("FICHA"); setProductoSel(null);}} className={`px-5 py-2 rounded-full text-[10px] font-bold transition-all ${tab==="FICHA"? "bg-white text-black shadow-lg" : "bg-transparent text-white/50 hover:text-white"}`}>📊 INVENTARIO Y FICHA</button>
+          <button onClick={()=>setTab("FICHA")} className={`px-5 py-2 rounded-full text-[10px] font-bold transition-all ${tab==="FICHA"? "bg-white text-black shadow-lg" : "bg-transparent text-white/50 hover:text-white"}`}>📊 INVENTARIO Y FICHA</button>
           <button onClick={()=>{if(!productoSel) alert("Primero selecciona un producto en la tabla (icono ⚙️) para ver su Kárdex"); else setTab("KARDEX");}} className={`px-5 py-2 rounded-full text-[10px] font-bold transition-all ${tab==="KARDEX"? "bg-[#00f5d4] text-black shadow-[0_0_15px_rgba(0,245,212,0.3)]" : "bg-transparent text-white/50 hover:text-white"}`}>📋 KÁRDEX: {productoSel ? productoSel.nombre : "Seleccione ítem"}</button>
         </div>
 
@@ -490,31 +570,32 @@ export default function ProductosModule() {
         <div className="flex flex-col gap-3 h-full">
           {/* FICHA RESUMEN FINANCIERA */}
           <div className="bg-[#0f172a]/50 border border-white/10 rounded-xl p-4 shadow-lg">
+            {!productoSeleccionado && <p className="text-[12px] font-bold mb-3">Selecciona un producto para ver su ficha</p>}
             <div className="grid grid-cols-3 gap-3">
               <div onClick={()=>setTarifaActiva("MINORISTA")} className={`bg-black border rounded-xl p-3 cursor-pointer transition-all ${tarifaActiva==="MINORISTA"? "border-[#00f5d4] shadow-[0_0_15px_rgba(0,245,212,0.15)] scale-[1.02]" : "border-white/5 hover:border-white/20"}`}>
                 <p className="text-[9px] text-white/40 font-bold mb-1">MINORISTA (Sin IVA)</p>
-                <p className="text-[24px] font-black text-white">${(productoSeleccionado.precioMinorista||0).toFixed(2)}</p>
+                <p className="text-[24px] font-black text-white">${precioMinorista.toFixed(2)}</p>
                 <div className="flex justify-between mt-2 pt-2 border-t border-white/5">
-                  <p className="text-[9px] text-[#00f5d4] font-bold" title="Precio final cobrado en caja">PVP IVA: ${((productoSeleccionado.precioMinorista||0)*1.15).toFixed(2)}</p>
-                  <p className="text-[9px] text-white/50">Ganas: ${((productoSeleccionado.precioMinorista||0) - costo).toFixed(2)}</p>
+                  <p className="text-[9px] text-[#00f5d4] font-bold" title="Precio final cobrado en caja">PVP IVA: ${pvp(precioMinorista).toFixed(2)}</p>
+                  <p className="text-[9px] text-white/50">Ganas: {!productoSeleccionado ? "$0.00" : costo === null ? "Sin costo registrado" : `$${(precioMinorista - costo).toFixed(2)}`}</p>
                 </div>
               </div>
               
               <div onClick={()=>setTarifaActiva("MAYORISTA")} className={`bg-black border rounded-xl p-3 cursor-pointer transition-all ${tarifaActiva==="MAYORISTA"? "border-yellow-400 shadow-[0_0_15px_rgba(250,204,21,0.15)] scale-[1.02]" : "border-white/5 hover:border-white/20"}`}>
                 <p className="text-[9px] text-yellow-400/60 font-bold mb-1">MAYORISTA (Sin IVA)</p>
-                <p className="text-[24px] font-black text-yellow-400">${(productoSeleccionado.precioMayorista||0).toFixed(2)}</p>
+                <p className="text-[24px] font-black text-yellow-400">${precioMayorista.toFixed(2)}</p>
                 <div className="flex justify-between mt-2 pt-2 border-t border-white/5">
-                  <p className="text-[9px] text-white/70">PVP IVA: ${((productoSeleccionado.precioMayorista||0)*1.15).toFixed(2)}</p>
-                  <p className="text-[9px] text-white/50">Ganas: ${((productoSeleccionado.precioMayorista||0) - costo).toFixed(2)}</p>
+                  <p className="text-[9px] text-white/70">PVP IVA: ${pvp(precioMayorista).toFixed(2)}</p>
+                  <p className="text-[9px] text-white/50">Ganas: {!productoSeleccionado ? "$0.00" : costo === null ? "Sin costo registrado" : `$${(precioMayorista - costo).toFixed(2)}`}</p>
                 </div>
               </div>
               
               <div onClick={()=>setTarifaActiva("DISTRIBUIDOR")} className={`bg-black border rounded-xl p-3 cursor-pointer transition-all ${tarifaActiva==="DISTRIBUIDOR"? "border-white shadow-[0_0_15px_rgba(255,255,255,0.15)] scale-[1.02]" : "border-white/5 hover:border-white/20"}`}>
                 <p className="text-[9px] text-white/40 font-bold mb-1">DISTRIBUIDOR (Sin IVA)</p>
-                <p className="text-[24px] font-black text-white">${(productoSeleccionado.precioDistribuidor||0).toFixed(2)}</p>
+                <p className="text-[24px] font-black text-white">${precioDistribuidor.toFixed(2)}</p>
                 <div className="flex justify-between mt-2 pt-2 border-t border-white/5">
-                  <p className="text-[9px] text-white/70">PVP IVA: ${((productoSeleccionado.precioDistribuidor||0)*1.15).toFixed(2)}</p>
-                  <p className="text-[9px] text-white/50">Ganas: ${((productoSeleccionado.precioDistribuidor||0) - costo).toFixed(2)}</p>
+                  <p className="text-[9px] text-white/70">PVP IVA: ${pvp(precioDistribuidor).toFixed(2)}</p>
+                  <p className="text-[9px] text-white/50">Ganas: {!productoSeleccionado ? "$0.00" : costo === null ? "Sin costo registrado" : `$${(precioDistribuidor - costo).toFixed(2)}`}</p>
                 </div>
               </div>
             </div>
@@ -522,10 +603,10 @@ export default function ProductosModule() {
             <div className="bg-gradient-to-r from-black to-[#00f5d4]/5 border border-[#00f5d4]/20 rounded-xl p-3 mt-3 flex justify-between items-center">
               <div>
                 <p className="text-[10px] font-bold text-[#00f5d4]">UTILIDAD REAL Y MARGEN (Tarifa: {tarifaActiva})</p>
-                <p className="text-[11px] text-white/50 mt-1">Precio ${precioActivo.toFixed(2)} - Costo${costo.toFixed(2)}</p>
+                <p className="text-[11px] text-white/50 mt-1">{!productoSeleccionado ? "Precio $0.00 - Costo $0.00" : costo === null ? "Sin costo registrado" : `Precio $${precioActivo.toFixed(2)} - Costo $${costo.toFixed(2)}`}</p>
               </div>
               <div className="text-right">
-                <p className="text-[20px] font-black">${utilidadReal.toFixed(2)}</p>
+                <p className="text-[20px] font-black">{utilidadReal === null ? "$0.00" : `$${utilidadReal.toFixed(2)}`}</p>
                 <div className="w-full bg-black/50 h-1.5 rounded-full mt-1.5 w-[100px] overflow-hidden flex justify-end">
                   <div className="h-full bg-yellow-400 transition-all" style={{ width: `${Math.min(margen,100)}%` }}></div>
                 </div>
@@ -613,10 +694,10 @@ export default function ProductosModule() {
                   </thead>
                   <tbody className="divide-y divide-white/5">
                     {filtrados.length === 0 ? (
-                      <tr><td colSpan={13} className="text-center p-8 text-white/30 text-[11px]">No hay productos que coincidan con la búsqueda.</td></tr>
+                      <tr><td colSpan={13} className="text-center p-8 text-white/30 text-[11px]">{productos.length === 0 ? "Sin productos aún" : "No hay productos que coincidan con la búsqueda."}</td></tr>
                     ) : (
                       filtrados.map((prod) => (
-                        <tr key={prod.id} className="hover:bg-white/5 group transition-colors cursor-pointer" onClick={() => setProductoSel(prod)}>
+                        <tr key={prod.id} className="hover:bg-white/5 group transition-colors cursor-pointer" onClick={() => { setProductoSel(prod); setTab("KARDEX"); }}>
                           <td className="p-2.5 text-white/30 font-mono text-[8px]">{prod.id.length > 8 ? prod.id.slice(-6) : prod.id}</td>
                           <td className="p-2.5 font-bold text-white">{prod.codigo}</td>
                           <td className="p-2.5 truncate max-w-[150px] text-white/90" title={prod.nombre}>{prod.nombre}</td>
@@ -660,7 +741,8 @@ export default function ProductosModule() {
                           
                           <td className="p-2.5">
                             <div className="flex gap-1.5 justify-center opacity-40 group-hover:opacity-100 transition-opacity">
-                              <button title="✏️ Editar" onClick={(e) => { e.stopPropagation(); handleEditar(prod); }} className="bg-white/10 hover:bg-[#00f5d4] hover:text-black rounded p-1 text-[11px] transition-colors">✏️</button>
+                              <button title="✏️ Editar" onClick={(e) => { e.stopPropagation(); handleEditar(prod); setTab("FICHA"); }} className="bg-white/10 hover:bg-[#00f5d4] hover:text-black rounded p-1 text-[11px] transition-colors">✏️</button>
+                              <button title="Transferir" onClick={(e) => { e.stopPropagation(); setTransferir(prod); setTransferForm({ origen: "PRINCIPAL", destino: "", cantidad: 1, motivo: "" }); }} className="bg-white/10 hover:bg-[#00f5d4] hover:text-black rounded px-1.5 text-[9px] font-bold">Transferir</button>
                               <button title="⚙️ Kárdex / Movimientos" onClick={(e) => { e.stopPropagation(); setProductoSel(prod); setTab("KARDEX"); }} className="bg-white/10 hover:bg-white hover:text-black rounded p-1 text-[11px] transition-colors">⚙️</button>
                               <button title="🗑️ Eliminar" onClick={(e) => { e.stopPropagation(); handleEliminar(prod.id, prod.nombre); }} className="bg-red-500/20 hover:bg-red-500 text-red-400 hover:text-white rounded p-1 text-[11px] transition-colors">🗑️</button>
                             </div>
@@ -710,6 +792,10 @@ export default function ProductosModule() {
                   <input type="number" min="1" value={ajusteForm.cant} onChange={e=>setAjusteForm({...ajusteForm, cant: Number(e.target.value)})} className="w-full bg-black border border-white/10 rounded px-2 py-1.5 text-[11px] font-bold outline-none" />
                 </div>
                 <div>
+                  <label className="text-[8px] text-white/50 block mb-1">Costo unitario</label>
+                  <input type="number" step="0.01" value={ajusteForm.tipo === "INGRESO" ? ajusteForm.costo : (costoParaSalida(movimientos.filter((m) => m.productoId === productoSel.id), metodo, productoSel.bodega || "PRINCIPAL", Number(ajusteForm.cant) || 0).costoUnitario)} readOnly={ajusteForm.tipo !== "INGRESO"} onChange={e=>setAjusteForm({...ajusteForm, costo: Number(e.target.value)})} className="w-full bg-black border border-white/10 rounded px-2 py-1.5 text-[11px] outline-none" />
+                </div>
+                <div>
                   <label className="text-[8px] text-white/50 block mb-1">Motivo Obligatorio</label>
                   <select value={ajusteForm.motivo} onChange={e=>setAjusteForm({...ajusteForm, motivo: e.target.value})} className="w-full bg-black border border-white/10 rounded px-2 py-1.5 text-[10px] outline-none">
                     {ajusteForm.tipo === 'INGRESO' ? (
@@ -726,8 +812,17 @@ export default function ProductosModule() {
             </div>
 
             <div className="bg-[#0f172a]/50 border border-white/10 rounded-xl p-3 flex-1 flex flex-col min-h-0 shadow-lg">
-              <div className="flex justify-between items-end mb-3 pb-3 border-b border-white/10">
-                <h3 className="text-[12px] font-bold text-[#00f5d4] flex items-center gap-2"><span>📋</span> Libro Mayor de Movimientos</h3>
+              <div className="flex justify-between items-end mb-3 pb-3 border-b border-white/10 gap-3">
+                <div>
+                  <h3 className="text-[12px] font-bold text-[#00f5d4] flex items-center gap-2"><span>📋</span> Libro Mayor de Movimientos</h3>
+                  <label className="text-[9px] text-white/50 mt-2 block">Método de Costeo
+                    <select value={metodo} onChange={(e) => guardarMetodo(e.target.value as MetodoCosteo)} className="ml-2 bg-black border border-white/10 rounded px-2 py-1 text-[10px] text-white">
+                      <option value="PROMEDIO">Promedio Ponderado</option>
+                      <option value="PEPS">PEPS</option>
+                      <option value="UEPS">UEPS</option>
+                    </select>
+                  </label>
+                </div>
                 <div className="flex items-center gap-2">
                   <span className="text-[9px] text-white/50">Filtrar Rango:</span>
                   <input type="date" value={fechasKardex.desde} onChange={e=>setFechasKardex({...fechasKardex, desde: e.target.value})} className="bg-black border border-white/10 rounded px-2 py-1 text-[10px] outline-none text-white/70" />
@@ -742,30 +837,76 @@ export default function ProductosModule() {
                   <thead className="bg-[#11131a] sticky top-0 z-10">
                     <tr className="text-white/40 uppercase tracking-wider text-[8px]">
                       <th className="p-2.5">Fecha</th>
-                      <th className="p-2.5">Documento / Sustento</th>
-                      <th className="p-2.5">Motivo</th>
-                      <th className="p-2.5 text-center border-l border-white/5">Entrada</th>
-                      <th className="p-2.5 text-center border-l border-white/5">Salida</th>
-                      <th className="p-2.5 text-center border-l border-white/5 bg-[#00f5d4]/5 text-[#00f5d4] font-bold">Saldo Físico</th>
+                      <th className="p-2.5">Tipo</th>
+                      <th className="p-2.5">Detalle</th>
+                      <th className="p-2.5">Sucursal</th>
+                      <th className="p-2.5 text-center">Cantidad Entrada</th>
+                      <th className="p-2.5 text-center">Cantidad Salida</th>
+                      <th className="p-2.5 text-center">Saldo Cantidad</th>
+                      <th className="p-2.5 text-right">Costo Unitario</th>
+                      <th className="p-2.5 text-right">Costo Promedio Actual</th>
+                      <th className="p-2.5 text-right">Saldo Valor Total</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-white/5">
                     {movimientosFiltrados.length === 0 ? (
-                      <tr><td colSpan={6} className="text-center p-6 text-white/30">No hay movimientos registrados en este rango de fechas.</td></tr>
+                      <tr><td colSpan={10} className="text-center p-6 text-white/30">No hay movimientos registrados en este rango de fechas.</td></tr>
                     ) : (
                       movimientosFiltrados.map((mov) => (
                         <tr key={mov.id} className="hover:bg-white/5">
-                          <td className="p-2.5 text-white/70">{mov.fecha}</td>
-                          <td className="p-2.5 font-mono text-white/50">{mov.doc}</td>
-                          <td className="p-2.5 text-white/90">{mov.motivo}</td>
-                          <td className="p-2.5 text-center text-green-400 font-bold border-l border-white/5">{mov.tipo === 'INGRESO' ? `+${mov.cant}` : ''}</td>
-                          <td className="p-2.5 text-center text-red-400 font-bold border-l border-white/5">{mov.tipo === 'EGRESO' ? `-${mov.cant}` : ''}</td>
-                          <td className="p-2.5 text-center font-bold border-l border-white/5 bg-[#00f5d4]/5">{mov.saldoNuevo}</td>
+                          <td className="p-2.5 text-white/70">{mov.fecha.slice(0, 10)}</td>
+                          <td className="p-2.5">{mov.tipo === "ENTRADA" ? "Entrada" : mov.tipo === "SALIDA" ? "Salida" : "Transferencia"}</td>
+                          <td className="p-2.5 text-white/90">{mov.detalle}</td>
+                          <td className="p-2.5">{mov.sucursal}</td>
+                          <td className="p-2.5 text-center text-green-400 font-bold">{mov.cantidadEntrada || ""}</td>
+                          <td className="p-2.5 text-center text-red-400 font-bold">{mov.cantidadSalida || ""}</td>
+                          <td className="p-2.5 text-center font-bold">{mov.saldoCantidad}</td>
+                          <td className="p-2.5 text-right">${mov.costoUnitario.toFixed(4)}</td>
+                          <td className="p-2.5 text-right">${mov.costoPromedio.toFixed(4)}</td>
+                          <td className="p-2.5 text-right">${mov.saldoValor.toFixed(2)}</td>
                         </tr>
                       ))
                     )}
                   </tbody>
                 </table>
+              </div>
+              <div className="mt-3">
+                <p className="text-[10px] font-bold text-white/70 mb-1">Historial de Transferencias</p>
+                <div className="max-h-[90px] overflow-auto text-[9px]">
+                  {transferencias.filter((t) => t.productoId === productoSel.id).length === 0 ? <p className="text-white/40">Sin transferencias de este producto.</p> : transferencias.filter((t) => t.productoId === productoSel.id).map((t) => (
+                    <p key={t.id}>{t.fecha.slice(0, 16).replace("T", " ")} · {t.origen} → {t.destino} · {t.productoNombre} · {t.cantidad} · Costo ${Number(t.costo).toFixed(4)} · {t.usuario || "—"} · {t.motivo}</p>
+                  ))}
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+        {transferir && (
+          <div className="fixed inset-0 bg-black/70 z-50 flex items-center justify-center p-4">
+            <div className="bg-[#11131a] border border-white/10 rounded-2xl p-4 w-full max-w-md space-y-2">
+              <p className="font-black text-[13px]">Transferir {transferir.nombre}</p>
+              <label className="text-[9px] block">Sucursal Origen
+                <select value={transferForm.origen} onChange={(e) => setTransferForm({ ...transferForm, origen: e.target.value })} className="w-full bg-black border border-white/10 rounded p-2 text-[11px] mt-1">
+                  {[...sucursales, ...bodegas.filter((b) => !sucursales.some((s) => s.id === b)).map((b) => ({ id: b, nombre: b }))].map((s) => <option key={s.id} value={s.id}>{s.nombre}</option>)}
+                </select>
+              </label>
+              <label className="text-[9px] block">Sucursal Destino
+                <select value={transferForm.destino} onChange={(e) => setTransferForm({ ...transferForm, destino: e.target.value })} className="w-full bg-black border border-white/10 rounded p-2 text-[11px] mt-1">
+                  <option value="">Selecciona</option>
+                  {[...sucursales, ...bodegas.filter((b) => !sucursales.some((s) => s.id === b)).map((b) => ({ id: b, nombre: b }))].filter((s) => s.id !== transferForm.origen).map((s) => <option key={s.id} value={s.id}>{s.nombre}</option>)}
+                </select>
+              </label>
+              <p className="text-[10px]">Producto: {transferir.nombre}</p>
+              <label className="text-[9px] block">Cantidad
+                <input type="number" min="1" value={transferForm.cantidad} onChange={(e) => setTransferForm({ ...transferForm, cantidad: Number(e.target.value) })} className="w-full bg-black border border-white/10 rounded p-2 text-[11px] mt-1" />
+              </label>
+              <p className="text-[10px]">Costo: {(() => { const c = costoParaSalida(movimientos.filter((m) => m.productoId === transferir.id), metodo, transferForm.origen, Number(transferForm.cantidad) || 0); return c.ok ? `$${c.costoUnitario.toFixed(4)}` : "Sin costo registrado"; })()} · según {metodo === "PROMEDIO" ? "Promedio Ponderado" : metodo}. No se escribe a mano.</p>
+              <label className="text-[9px] block">Motivo
+                <input value={transferForm.motivo} onChange={(e) => setTransferForm({ ...transferForm, motivo: e.target.value })} className="w-full bg-black border border-white/10 rounded p-2 text-[11px] mt-1" />
+              </label>
+              <div className="flex gap-2 pt-2">
+                <button onClick={confirmarTransferencia} className="flex-1 bg-[#00f5d4] text-black font-black rounded-lg py-2 text-[11px]">Confirmar</button>
+                <button onClick={() => setTransferir(null)} className="flex-1 bg-white/10 rounded-lg py-2 text-[11px]">Cancelar</button>
               </div>
             </div>
           </div>

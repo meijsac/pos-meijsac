@@ -98,6 +98,67 @@ BEGIN
       ON DELETE CASCADE ON UPDATE CASCADE;
   END IF;
 
+  CREATE TABLE IF NOT EXISTS "inventario_config" (
+    "empresaId" TEXT NOT NULL,
+    "metodoCosteo" TEXT NOT NULL DEFAULT 'PROMEDIO',
+    "updatedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT "inventario_config_pkey" PRIMARY KEY ("empresaId")
+  );
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'inventario_config_empresaId_fkey') THEN
+    ALTER TABLE "inventario_config"
+      ADD CONSTRAINT "inventario_config_empresaId_fkey"
+      FOREIGN KEY ("empresaId") REFERENCES "Empresa"("id")
+      ON DELETE CASCADE ON UPDATE CASCADE;
+  END IF;
+
+  CREATE TABLE IF NOT EXISTS "kardex_movimientos" (
+    "id" TEXT NOT NULL,
+    "empresaId" TEXT NOT NULL,
+    "productoId" TEXT NOT NULL,
+    "productoCodigo" TEXT NOT NULL DEFAULT '',
+    "productoNombre" TEXT NOT NULL DEFAULT '',
+    "sucursal" TEXT NOT NULL DEFAULT 'PRINCIPAL',
+    "fecha" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "tipo" TEXT NOT NULL,
+    "detalle" TEXT NOT NULL DEFAULT '',
+    "cantidadEntrada" DOUBLE PRECISION NOT NULL DEFAULT 0,
+    "cantidadSalida" DOUBLE PRECISION NOT NULL DEFAULT 0,
+    "costoEntrada" DOUBLE PRECISION NOT NULL DEFAULT 0,
+    "usuario" TEXT NOT NULL DEFAULT '',
+    "transferenciaId" TEXT,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT "kardex_movimientos_pkey" PRIMARY KEY ("id")
+  );
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'kardex_movimientos_empresaId_fkey') THEN
+    ALTER TABLE "kardex_movimientos"
+      ADD CONSTRAINT "kardex_movimientos_empresaId_fkey"
+      FOREIGN KEY ("empresaId") REFERENCES "Empresa"("id")
+      ON DELETE CASCADE ON UPDATE CASCADE;
+  END IF;
+
+  CREATE TABLE IF NOT EXISTS "transferencias_inventario" (
+    "id" TEXT NOT NULL,
+    "empresaId" TEXT NOT NULL,
+    "fecha" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "origen" TEXT NOT NULL,
+    "destino" TEXT NOT NULL,
+    "productoId" TEXT NOT NULL,
+    "productoCodigo" TEXT NOT NULL DEFAULT '',
+    "productoNombre" TEXT NOT NULL DEFAULT '',
+    "cantidad" DOUBLE PRECISION NOT NULL,
+    "costo" DOUBLE PRECISION NOT NULL,
+    "motivo" TEXT NOT NULL DEFAULT '',
+    "usuario" TEXT NOT NULL DEFAULT '',
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT "transferencias_inventario_pkey" PRIMARY KEY ("id")
+  );
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'transferencias_inventario_empresaId_fkey') THEN
+    ALTER TABLE "transferencias_inventario"
+      ADD CONSTRAINT "transferencias_inventario_empresaId_fkey"
+      FOREIGN KEY ("empresaId") REFERENCES "Empresa"("id")
+      ON DELETE CASCADE ON UPDATE CASCADE;
+  END IF;
+
   IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'FacturaEmitida_empresaId_fkey') THEN
     ALTER TABLE "FacturaEmitida"
       ADD CONSTRAINT "FacturaEmitida_empresaId_fkey"

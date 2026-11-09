@@ -70,6 +70,36 @@ export const calcularTotalesUniversal = (itemsCarrito: any[]) => {
   }
 }
 
+function MetodoInventario() {
+  const [metodo, setMetodo] = useState("PROMEDIO");
+  const [aviso, setAviso] = useState("");
+  useEffect(() => {
+    const headers = { Authorization: `Bearer ${localStorage.getItem("meijsac_token") || ""}` };
+    fetch("/api/inventario/config", { headers }).then((r) => r.ok ? r.json() : null).then((d) => { if (d?.metodoCosteo) setMetodo(d.metodoCosteo); }).catch(() => {});
+  }, []);
+  const guardar = async (valor: string) => {
+    setMetodo(valor);
+    const res = await fetch("/api/inventario/config", {
+      method: "PUT",
+      headers: { Authorization: `Bearer ${localStorage.getItem("meijsac_token") || ""}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ metodoCosteo: valor }),
+    });
+    setAviso(res.ok ? "Método guardado para esta empresa" : "No se pudo guardar el método");
+  };
+  return (
+    <div className="max-w-md space-y-3">
+      <p className="text-[#00f5d4] font-black text-[12px]">MÉTODO DE COSTEO</p>
+      <p className="text-[10px] text-white/50">Se usa en el kárdex y en las transferencias de matriz a sucursal. Por defecto: Promedio Ponderado.</p>
+      <select value={metodo} onChange={(e) => guardar(e.target.value)} className="w-full bg-black border border-white/10 rounded-xl p-3 text-sm">
+        <option value="PROMEDIO">Promedio Ponderado</option>
+        <option value="PEPS">PEPS</option>
+        <option value="UEPS">UEPS</option>
+      </select>
+      {aviso && <p className="text-[10px] text-[#00f5d4]">{aviso}</p>}
+    </div>
+  );
+}
+
 export default function ConfiguracionAvanzadaSRI() {
     const [tab, setTab] = useState("IDENTIDAD");
     useEffect(() => {
@@ -353,7 +383,7 @@ base.sucursales = datosReales.sucursales || base.sucursales || [];
 
 
             <div className="flex gap-2 mb-4 overflow-x-auto pb-2">
-                {["IDENTIDAD", "FIRMA", "SECUENCIALES", "IMPUESTOS", "MARCA RIDE", "DOCUMENTOS", "PERMISOS", "AMBIENTE SRI"].map(t => (
+                {["IDENTIDAD", "FIRMA", "SECUENCIALES", "IMPUESTOS", "INVENTARIO", "MARCA RIDE", "DOCUMENTOS", "PERMISOS", "AMBIENTE SRI"].map(t => (
                     <button key={t} onClick={() => setTab(t)} className={`px-4 py-2 rounded-xl text-[10px] font-black whitespace-nowrap ${tab === t ? 'bg-[#00f5d4] text-black' : 'bg-[#11131a] border border-white/10'}`}>{t}</button>
                 ))}
             </div>
@@ -576,6 +606,7 @@ base.sucursales = datosReales.sucursales || base.sucursales || [];
                   </div>
                 )}
                 
+                {tab === "INVENTARIO" && <MetodoInventario />}
                 {tab === "DOCUMENTOS" && <DocumentosLegales />}
 
                 {tab === "MARCA RIDE" && (

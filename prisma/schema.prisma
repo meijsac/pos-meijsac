@@ -57,6 +57,9 @@ model Empresa {
   movimientos     MovimientoInventario[]
   facturas        FacturaEmitida[]
   documentosLegales DocumentoLegal[]
+  kardex          KardexMovimiento[]
+  transferencias  TransferenciaInventario[]
+  inventarioConfig InventarioConfig?
 }
 
 model DocumentoLegal {
@@ -167,6 +170,57 @@ model Proveedor {
   empresaId String
   empresa   Empresa  @relation(fields: [empresaId], references: [id], onDelete: Cascade)
   createdAt DateTime @default(now())
+}
+
+model InventarioConfig {
+  empresaId    String   @id
+  empresa      Empresa  @relation(fields: [empresaId], references: [id], onDelete: Cascade)
+  metodoCosteo String   @default("PROMEDIO")
+  updatedAt    DateTime @updatedAt
+
+  @@map("inventario_config")
+}
+
+model KardexMovimiento {
+  id              String   @id @default(cuid())
+  empresaId       String
+  empresa         Empresa  @relation(fields: [empresaId], references: [id], onDelete: Cascade)
+  productoId      String
+  productoCodigo  String   @default("")
+  productoNombre  String   @default("")
+  sucursal        String   @default("PRINCIPAL")
+  fecha           DateTime @default(now())
+  tipo            String
+  detalle         String   @default("")
+  cantidadEntrada Float    @default(0)
+  cantidadSalida  Float    @default(0)
+  costoEntrada    Float    @default(0)
+  usuario         String   @default("")
+  transferenciaId String?
+  createdAt       DateTime @default(now())
+
+  @@index([empresaId, productoId])
+  @@map("kardex_movimientos")
+}
+
+model TransferenciaInventario {
+  id             String   @id @default(cuid())
+  empresaId      String
+  empresa        Empresa  @relation(fields: [empresaId], references: [id], onDelete: Cascade)
+  fecha          DateTime @default(now())
+  origen         String
+  destino        String
+  productoId     String
+  productoCodigo String   @default("")
+  productoNombre String   @default("")
+  cantidad       Float
+  costo          Float
+  motivo         String   @default("")
+  usuario        String   @default("")
+  createdAt      DateTime @default(now())
+
+  @@index([empresaId])
+  @@map("transferencias_inventario")
 }
 
 model MovimientoInventario {
