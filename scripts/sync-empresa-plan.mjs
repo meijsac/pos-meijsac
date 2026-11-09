@@ -19,12 +19,14 @@ const sql = readFileSync(
 // Prisma agrega pgbouncer y connection_limit, que Postgres no entiende.
 // node-postgres, sin lista de valores, usa el protocolo simple: no crea prepared statements.
 const url = new URL(databaseUrl)
-for (const key of ["pgbouncer", "connection_limit", "pool_timeout", "statement_cache_size"]) {
+for (const key of ["pgbouncer", "connection_limit", "pool_timeout", "statement_cache_size", "sslmode"]) {
   url.searchParams.delete(key)
 }
-if (!url.searchParams.has("sslmode")) url.searchParams.set("sslmode", "require")
 
-const client = new pg.Client({ connectionString: url.toString() })
+const client = new pg.Client({
+  connectionString: url.toString(),
+  ssl: { rejectUnauthorized: false },
+})
 await client.connect()
 try {
   await client.query(sql)
