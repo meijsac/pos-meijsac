@@ -211,6 +211,23 @@ export function tipoDesdeCliente(tipoId: string, identificacion: string) {
   return "PASAPORTE"
 }
 
+export const LOTE_CLIENTES = 50
+
+export function partirLotes<T>(filas: T[], tamano = LOTE_CLIENTES) {
+  const lotes: T[][] = []
+  for (let i = 0; i < filas.length; i += tamano) lotes.push(filas.slice(i, i + tamano))
+  return lotes
+}
+
+export function mensajeCarga(guardados: number, fallos: { numero: number; motivo: string }[]) {
+  if (!fallos.length) return `Se guardaron ${guardados} clientes correctamente`
+  if (fallos.length === 1) {
+    return `Se guardaron ${guardados}, 1 falló en la fila ${fallos[0].numero} porque ${fallos[0].motivo}`
+  }
+  const detalle = fallos.map((f) => `fila ${f.numero} porque ${f.motivo}`).join("; ")
+  return `Se guardaron ${guardados}, ${fallos.length} fallaron: ${detalle}`
+}
+
 export function datosGuardables(fila: FilaCliente) {
   return {
     tipoId: fila.codigo_tipo_identificacion || tipoIdDe(fila.tipo_identificacion),

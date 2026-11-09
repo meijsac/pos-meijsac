@@ -2,7 +2,7 @@ import ExcelJS from "exceljs"
 import { NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
 import { usuarioConEmpresaDesdeRequest } from "@/lib/empresa-sesion"
-import { COLUMNAS_CLIENTE, datosGuardables, matrizDesdeCsv, revisarTabla, textoCelda } from "@/lib/clientes-masivo"
+import { COLUMNAS_CLIENTE, datosGuardables, erroresDeFila, LOTE_CLIENTES, matrizDesdeCsv, revisarTabla, textoCelda, type FilaCliente } from "@/lib/clientes-masivo"
 
 export const dynamic = "force-dynamic"
 export const maxDuration = 60
@@ -24,9 +24,79 @@ async function matrizDelArchivo(file: File) {
   return matriz
 }
 
+function filaEntrada(cruda: Record<string, unknown>, numero: number): FilaCliente & { numero: number } {
+  return {
+    numero,
+    codigo_tipo_identificacion: String(cruda.codigo_tipo_identificacion || ""),
+    tipo_identificacion: String(cruda.tipo_identificacion || ""),
+    identificacion: String(cruda.identificacion || ""),
+    nombre_razon_social: String(cruda.nombre_razon_social || ""),
+    email: String(cruda.email || ""),
+    telefono: String(cruda.telefono || ""),
+    direccion: String(cruda.direccion || ""),
+    ciudad: String(cruda.ciudad || ""),
+    es_cliente_frecuente: String(cruda.es_cliente_frecuente || ""),
+  }
+}
+
+async function guardarLote(empresaId: string, filas: (FilaCliente & { numero: number })[]) {
+  const fallos: { numero: number; motivo: string }[] = []
+  const validas: (FilaCliente & { numero: number })[] = []
+  for (const fila of filas) {
+    const errores = erroresDeFila(fila)
+    if (errores.length) fallos.push({ numero: fila.numero, motivo: errores.join(", ") })
+    else validas.push(fila)
+  }
+  const ids = validas.map((f) => f.identificacion)
+  const ya = ids.length
+    ? await prisma.cliente.findMany({
+        where: { empresaId, identificacion: { in: ids } },
+        select: { identificacion: true },
+      })
+    : []
+  const existentes = new Set(ya.map((c) => c.identificacion))
+  let nuevos = 0
+  let actualizados = 0
+  for (const fila of validas) {
+    const data = datosGuardables(fila)
+    try {
+      await prisma.cliente.upsert({
+        where: { identificacion_empresaId: { identificacion: data.identificacion, empresaId } },
+        update: data,
+        create: { ...data, empresaId, provincia: "PICHINCHA" },
+      })
+      if (existentes.has(data.identificacion)) actualizados++
+      else {
+        nuevos++
+        existentes.add(data.identificacion)
+      }
+    } catch (e) {
+      const motivo = e instanceof Error ? e.message : "no se pudo guardar"
+      fallos.push({ numero: fila.numero, motivo })
+    }
+  }
+  const total = nuevos + actualizados
+  return { ok: fallos.length === 0, total, nuevos, actualizados, fallos }
+}
+
 export async function POST(req: Request) {
   const sesion = await usuarioConEmpresaDesdeRequest(req)
   if ("error" in sesion) return NextResponse.json({ error: sesion.error }, { status: sesion.status })
+  const tipo = req.headers.get("content-type") || ""
+  if (tipo.includes("application/json")) {
+    const body = await req.json().catch(() => null)
+    const crudas = Array.isArray(body?.filas) ? body.filas : []
+    if (!crudas.length) return NextResponse.json({ error: "No hay clientes en el lote" }, { status: 400 })
+    if (crudas.length > LOTE_CLIENTES) return NextResponse.json({ error: "El lote máximo es 50" }, { status: 400 })
+    const filas = crudas.map((fila: Record<string, unknown>, i: number) => filaEntrada(fila, Number(fila?.numero) || i + 1))
+    try {
+      const resultado = await guardarLote(sesion.empresa.id, filas)
+      return NextResponse.json(resultado)
+    } catch (e) {
+      const motivo = e instanceof Error ? e.message : "No se pudo guardar el lote"
+      return NextResponse.json({ error: motivo, fallos: [] }, { status: 500 })
+    }
+  }
   const form = await req.formData()
   const file = form.get("archivo")
   const confirmar = String(form.get("confirmar") || "") === "1"
@@ -47,6 +117,7 @@ export async function POST(req: Request) {
   const conError = revision.filas.filter((f) => f.errores.length)
   const vista = revision.filas.map((f) => ({
     numero: f.numero,
+    codigo_tipo_identificacion: f.datos.codigo_tipo_identificacion,
     tipo_identificacion: f.datos.tipo_identificacion,
     identificacion: f.datos.identificacion,
     nombre_razon_social: f.datos.nombre_razon_social,
@@ -66,41 +137,18 @@ export async function POST(req: Request) {
       filas: vista,
     }, { status: conError.length && confirmar ? 400 : 200 })
   }
-
-  const empresaId = sesion.empresa.id
-  const ids = revision.filas.map((f) => f.datos.identificacion)
-  let nuevos = 0
-  let actualizados = 0
-  await prisma.$transaction(async (tx) => {
-    const ya = await tx.cliente.findMany({
-      where: { empresaId, identificacion: { in: ids } },
-      select: { identificacion: true },
+  if (revision.filas.length > LOTE_CLIENTES) {
+    return NextResponse.json({ error: "El lote máximo es 50" }, { status: 400 })
+  }
+  try {
+    const resultado = await guardarLote(sesion.empresa.id, revision.filas.map((f) => ({ ...f.datos, numero: f.numero })))
+    return NextResponse.json({
+      ...resultado,
+      mensaje: `Se cargaron ${resultado.total} clientes correctamente`,
+      detalle: `${resultado.nuevos} nuevos, ${resultado.actualizados} actualizados`,
     })
-    const existentes = new Set(ya.map((c) => c.identificacion))
-    for (const fila of revision.filas) {
-      const data = datosGuardables(fila.datos)
-      if (existentes.has(data.identificacion)) {
-        await tx.cliente.update({
-          where: { identificacion_empresaId: { identificacion: data.identificacion, empresaId } },
-          data,
-        })
-        actualizados++
-      } else {
-        await tx.cliente.create({
-          data: { ...data, empresaId, provincia: "PICHINCHA" },
-        })
-        nuevos++
-      }
-    }
-  }, { timeout: 120000, maxWait: 15000 })
-
-  const total = nuevos + actualizados
-  return NextResponse.json({
-    ok: true,
-    total,
-    nuevos,
-    actualizados,
-    mensaje: `Se cargaron ${total} clientes correctamente`,
-    detalle: `${nuevos} nuevos, ${actualizados} actualizados`,
-  })
+  } catch (e) {
+    const motivo = e instanceof Error ? e.message : "No se pudo guardar el lote"
+    return NextResponse.json({ error: motivo, fallos: [] }, { status: 500 })
+  }
 }

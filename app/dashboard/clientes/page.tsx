@@ -1,5 +1,6 @@
 "use client";
-import { useState, useMemo, useEffect } from "react";
+import { useState, useMemo, useEffect, useRef } from "react";
+import { mensajeCarga, partirLotes } from "@/lib/clientes-masivo";
 
 type TipoId = "04" | "05" | "06" | "07" | "08";
 interface Sucursal { id: string; clienteId: string; codigo: string; nombre: string; direccion: string; provincia: string; ciudad: string; telefono?: string; esMatriz: boolean; }
@@ -80,7 +81,10 @@ export default function ClientesModule() {
   const [busca, setBusca] = useState("");
   const [avisoMasivo, setAvisoMasivo] = useState("");
   const [cargandoMasivo, setCargandoMasivo] = useState(false);
-  const [vistaMasiva, setVistaMasiva] = useState<{ total: number; errores: number; mensaje: string; filas: { numero: number; tipo_identificacion: string; identificacion: string; nombre_razon_social: string; email: string; errores: string[] }[] } | null>(null);
+  const [progresoMasivo, setProgresoMasivo] = useState<{ hechos: number; total: number } | null>(null);
+  const guardandoRef = useRef(false);
+  type FilaVista = { numero: number; codigo_tipo_identificacion: string; tipo_identificacion: string; identificacion: string; nombre_razon_social: string; email: string; telefono: string; direccion: string; ciudad: string; es_cliente_frecuente: string; errores: string[] };
+  const [vistaMasiva, setVistaMasiva] = useState<{ total: number; errores: number; mensaje: string; filas: FilaVista[] } | null>(null);
   const [archivoMasivo, setArchivoMasivo] = useState<File | null>(null);
   const [form, setForm] = useState<Cliente>({
     id: "", tipoId: "05", identificacion: "", razonSocial: "", nombreComercial: "", tipoCliente: "NATURAL", email: "", telefono: "", direccion: "", provincia: "PICHINCHA", ciudad: "QUITO", diasCredito: 0, limiteCredito: 0, categoria: "DETALLISTA", descuento: 0
@@ -223,7 +227,7 @@ export default function ClientesModule() {
       const fd = new FormData();
       fd.append("archivo", file);
       fd.append("confirmar", confirmar ? "1" : "0");
-      const res = await fetch("/api/clientes/masivo", { method: "POST", body: fd });
+      const res = await fetch("/api/clientes/masivo", { method: "POST", body: fd, credentials: "same-origin" });
       const data = await res.json();
       if (!res.ok && data.error && !(data.filas || []).length) {
         setVistaMasiva(null);
@@ -231,18 +235,61 @@ export default function ClientesModule() {
         return;
       }
       if (Array.isArray(data.filas)) setVistaMasiva({ total: data.total || data.filas.length, errores: data.errores || 0, mensaje: data.mensaje || "", filas: data.filas });
-      if (confirmar && data.ok) {
-        setAvisoMasivo(`${data.mensaje}. ${data.detalle}`);
-        setVistaMasiva(null);
-        setArchivoMasivo(null);
-        await cargarClientes();
-      } else if (data.mensaje) {
-        setAvisoMasivo(data.mensaje);
-      }
+      else if (data.mensaje) setAvisoMasivo(data.mensaje);
     } catch {
       setAvisoMasivo("No se pudo cargar el archivo");
     } finally {
       setCargandoMasivo(false);
+    }
+  };
+
+  const guardarLotes = async () => {
+    if (guardandoRef.current || !vistaMasiva || vistaMasiva.errores > 0) return;
+    guardandoRef.current = true;
+    setCargandoMasivo(true);
+    setAvisoMasivo("");
+    const filas = vistaMasiva.filas;
+    const total = filas.length;
+    let guardados = 0;
+    const fallos: { numero: number; motivo: string }[] = [];
+    try {
+      let avance = 0;
+      for (const lote of partirLotes(filas)) {
+        avance += lote.length;
+        setProgresoMasivo({ hechos: avance, total });
+        const ctrl = new AbortController();
+        const timer = window.setTimeout(() => ctrl.abort(), 60000);
+        let res: Response;
+        try {
+          res = await fetch("/api/clientes/masivo", {
+            method: "POST",
+            credentials: "same-origin",
+            headers: { "Content-Type": "application/json" },
+            signal: ctrl.signal,
+            body: JSON.stringify({ filas: lote }),
+          });
+        } catch {
+          setAvisoMasivo("Se demoró, inténtalo de nuevo");
+          return;
+        } finally {
+          clearTimeout(timer);
+        }
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) {
+          setAvisoMasivo(data.error || "Se demoró, inténtalo de nuevo");
+          return;
+        }
+        guardados += Number(data.total || 0);
+        if (Array.isArray(data.fallos)) fallos.push(...data.fallos);
+      }
+      setAvisoMasivo(mensajeCarga(guardados, fallos));
+      setVistaMasiva(null);
+      setArchivoMasivo(null);
+      await cargarClientes();
+    } finally {
+      guardandoRef.current = false;
+      setCargandoMasivo(false);
+      setProgresoMasivo(null);
     }
   };
 
@@ -490,12 +537,19 @@ export default function ClientesModule() {
                 {vistaMasiva.errores > 0 && <p className="text-red-400 font-bold text-[12px]">Hay {vistaMasiva.errores} filas con error, corrígelas</p>}
               </div>
               <div className="flex gap-2">
-                {vistaMasiva.errores === 0 && archivoMasivo && (
-                  <button disabled={cargandoMasivo} onClick={() => leerMasivo(archivoMasivo, true)} className="bg-[#00f5d4] text-black font-black text-[11px] px-4 py-2 rounded-full disabled:opacity-50">{cargandoMasivo ? "Guardando..." : "Guardar todos"}</button>
+                {vistaMasiva.errores === 0 && (
+                  <button disabled={cargandoMasivo} onClick={() => { void guardarLotes() }} className="bg-[#00f5d4] text-black font-black text-[11px] px-4 py-2 rounded-full disabled:opacity-50">{progresoMasivo ? `Guardando ${progresoMasivo.hechos} de ${progresoMasivo.total}...` : "Guardar todos"}</button>
                 )}
-                <button onClick={() => { setVistaMasiva(null); setArchivoMasivo(null); }} className="bg-white/10 px-4 py-2 rounded-full text-[11px]">Cerrar</button>
+                <button disabled={cargandoMasivo} onClick={() => { setVistaMasiva(null); setArchivoMasivo(null); }} className="bg-white/10 px-4 py-2 rounded-full text-[11px] disabled:opacity-40">Cerrar</button>
               </div>
             </div>
+            {progresoMasivo && (
+              <div className="mb-3">
+                <div className="h-2 bg-white/10 rounded-full overflow-hidden">
+                  <div className="h-2 bg-[#00f5d4]" style={{ width: `${Math.min(100, Math.round((progresoMasivo.hechos / progresoMasivo.total) * 100))}%` }} />
+                </div>
+              </div>
+            )}
             <div className="overflow-auto">
               <table className="w-full text-[11px]">
                 <thead className="text-white/40"><tr><th className="text-left p-2">Fila</th><th className="text-left">Tipo</th><th className="text-left">Identificación</th><th className="text-left">Nombre</th><th className="text-left">Email</th><th className="text-left">Estado</th></tr></thead>
