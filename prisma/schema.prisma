@@ -11,10 +11,16 @@ datasource db {
 model PlanComercial {
   id                 String    @id @default(cuid())
   nombre             String
+  descripcion        String    @default("")
   precio             Float     @default(0)
+  precioAnual        Float     @default(0)
   duracionDias       Int
+  trialDias          Int       @default(0)
   limiteComprobantes Int
   limiteUsuarios     Int
+  documentosAnio     Int       @default(0)
+  badge              String    @default("")
+  activo             Boolean   @default(true)
   modulos            String    @default("")
   createdAt          DateTime  @default(now())
   updatedAt          DateTime  @updatedAt

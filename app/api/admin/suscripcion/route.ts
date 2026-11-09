@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
-import { rangoPlan } from "@/lib/suscripcion"
+import { asegurarPlanInicial, vigenciaPlan } from "@/lib/plan-inicial"
 
 const PAGOS = ["manual", "transferencia", "efectivo"]
 
@@ -11,27 +11,53 @@ export async function PATCH(req: Request) {
   const empresa = await prisma.empresa.findUnique({ where: { id }, include: { plan: true } })
   if (!empresa) return NextResponse.json({ error: "Cliente no encontrado" }, { status: 404 })
 
-  if (accion === "asignar" || accion === "cambiar") {
-    const plan = await prisma.planComercial.findUnique({ where: { id: String(body.planId || "") } })
+  if (accion === "asignar" || accion === "cambiar" || accion === "inicial") {
+    const plan = accion === "inicial"
+      ? await asegurarPlanInicial()
+      : await prisma.planComercial.findUnique({ where: { id: String(body.planId || "") } })
     if (!plan) return NextResponse.json({ error: "Elige un plan" }, { status: 400 })
-    const metodo = String(body.metodoPago || "")
-    if (!PAGOS.includes(metodo)) return NextResponse.json({ error: "Elige forma de pago: manual, transferencia o efectivo" }, { status: 400 })
-    let rango: { inicio: Date; fin: Date }
-    try {
-      rango = rangoPlan(String(body.fechaInicio || ""), Number(body.duracionDias || plan.duracionDias))
-    } catch (e: any) {
-      return NextResponse.json({ error: e.message }, { status: 400 })
-    }
+    if (plan.activo === false) return NextResponse.json({ error: "Ese plan está inactivo" }, { status: 400 })
+    const metodo = PAGOS.includes(String(body.metodoPago || "")) ? String(body.metodoPago) : "manual"
+    const { inicio, fin } = vigenciaPlan(plan)
     const actualizada = await prisma.empresa.update({
       where: { id },
       data: {
         planId: plan.id,
         planEstado: "ACTIVO",
-        planInicio: rango.inicio,
-        planFin: rango.fin,
+        planInicio: inicio,
+        planFin: fin,
         metodoPago: metodo,
         comprobantesUsados: 0,
       },
+      include: { plan: true },
+    })
+    return NextResponse.json(actualizada)
+  }
+
+  if (accion === "suspender") {
+    const actualizada = await prisma.empresa.update({
+      where: { id },
+      data: { planEstado: "SUSPENDIDO" },
+      include: { plan: true },
+    })
+    return NextResponse.json(actualizada)
+  }
+
+  if (accion === "reactivar") {
+    const vigente = empresa.plan && empresa.planFin && empresa.planFin.getTime() >= Date.now()
+    if (!vigente) {
+      const plan = await asegurarPlanInicial()
+      const { inicio, fin } = vigenciaPlan(plan)
+      const actualizada = await prisma.empresa.update({
+        where: { id },
+        data: { planId: plan.id, planEstado: "ACTIVO", planInicio: inicio, planFin: fin, metodoPago: "manual" },
+        include: { plan: true },
+      })
+      return NextResponse.json(actualizada)
+    }
+    const actualizada = await prisma.empresa.update({
+      where: { id },
+      data: { planEstado: "ACTIVO" },
       include: { plan: true },
     })
     return NextResponse.json(actualizada)

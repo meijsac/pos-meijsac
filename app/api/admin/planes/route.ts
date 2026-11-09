@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
+import { asegurarPlanInicial } from "@/lib/plan-inicial"
 import { MODULOS_MEIJSAC } from "@/lib/suscripcion"
 
 function limpiar(body: any) {
@@ -17,21 +18,35 @@ function limpiar(body: any) {
   if (!Number.isFinite(duracionDias) || duracionDias < 1) return { error: "La duración debe ser de al menos 1 día" }
   if (!Number.isFinite(limiteComprobantes) || limiteComprobantes < -1) return { error: "Límite de comprobantes inválido. -1 es ilimitado" }
   if (!Number.isFinite(limiteUsuarios) || limiteUsuarios < 1) return { error: "El plan debe permitir al menos 1 usuario" }
-  if (modulos.length === 0) return { error: "Elige al menos un módulo" }
+  const documentosAnio = Math.round(Number(body?.documentosAnio ?? limiteComprobantes))
+  const trialDias = Math.round(Number(body?.trialDias ?? 0))
+  const precioAnual = Number(body?.precioAnual ?? 0)
+  const badge = String(body?.badge || "").trim()
+  const gratuito = /gratuito/i.test(badge)
+  if (!Number.isFinite(documentosAnio) || documentosAnio < 0) return { error: "Documentos por año inválido" }
+  if (!Number.isFinite(trialDias) || trialDias < 0) return { error: "Los días de trial no pueden ser negativos" }
+  if (!Number.isFinite(precioAnual) || precioAnual < 0) return { error: "El precio anual puede ser 0 o mayor" }
 
   return {
     data: {
       nombre,
-      precio,
+      descripcion: String(body?.descripcion || "").trim(),
+      precio: gratuito ? 0 : precio,
+      precioAnual: gratuito ? 0 : precioAnual,
       duracionDias,
-      limiteComprobantes,
+      trialDias,
+      limiteComprobantes: gratuito && documentosAnio > 0 ? documentosAnio : limiteComprobantes,
       limiteUsuarios,
-      modulos: modulos.join(","),
+      documentosAnio: documentosAnio || limiteComprobantes,
+      badge,
+      activo: body?.activo !== false,
+      modulos: (modulos.length ? modulos : [...MODULOS_MEIJSAC]).join(","),
     },
   }
 }
 
 export async function GET() {
+  await asegurarPlanInicial()
   const planes = await prisma.planComercial.findMany({ orderBy: { createdAt: "asc" } })
   return NextResponse.json(planes.map((p) => ({ ...p, modulos: p.modulos.split(",").filter(Boolean) })))
 }
@@ -47,6 +62,10 @@ export async function PATCH(req: Request) {
   const body = await req.json().catch(() => ({}))
   const id = String(body?.id || "")
   if (!id) return NextResponse.json({ error: "Falta el plan" }, { status: 400 })
+  if (typeof body?.activo === "boolean" && !body?.nombre) {
+    const plan = await prisma.planComercial.update({ where: { id }, data: { activo: body.activo } })
+    return NextResponse.json(plan)
+  }
   const parsed = limpiar(body)
   if ("error" in parsed && parsed.error) return NextResponse.json({ error: parsed.error }, { status: 400 })
   const existe = await prisma.planComercial.findUnique({ where: { id } })
@@ -58,9 +77,9 @@ export async function PATCH(req: Request) {
 export async function DELETE(req: Request) {
   const id = new URL(req.url).searchParams.get("id") || ""
   if (!id) return NextResponse.json({ error: "Falta el plan" }, { status: 400 })
-  const enUso = await prisma.empresa.count({ where: { planId: id, planEstado: "ACTIVO" } })
+  const enUso = await prisma.empresa.count({ where: { planId: id } })
   if (enUso > 0) {
-    return NextResponse.json({ error: "Ese plan tiene clientes activos. Quítalo de esos clientes antes de eliminarlo." }, { status: 409 })
+    return NextResponse.json({ error: `No se puede eliminar porque tiene ${enUso} clientes asignados. Primero cambia esos clientes a otro plan.` }, { status: 409 })
   }
   await prisma.planComercial.delete({ where: { id } })
   return NextResponse.json({ ok: true })

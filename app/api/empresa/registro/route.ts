@@ -2,6 +2,7 @@ import bcrypt from "bcryptjs"
 import { NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
 import { empresaParaCliente, firmarSesion } from "@/lib/empresa-sesion"
+import { asegurarPlanInicial, vigenciaPlan } from "@/lib/plan-inicial"
 
 export async function POST(req: Request) {
   try {
@@ -48,6 +49,13 @@ export async function POST(req: Request) {
       return NextResponse.json({ ok: true, id: existe.id, yaExistia: true, empresaId: usuario.empresaId })
     }
 
+    let planInicial
+    try {
+      planInicial = await asegurarPlanInicial()
+    } catch {
+      return NextResponse.json({ error: "No hay Plan Inicial activo. No se creó la empresa." }, { status: 500 })
+    }
+    const vigencia = vigenciaPlan(planInicial)
     const empresa = await prisma.empresa.create({
       data: {
         ruc,
@@ -58,8 +66,12 @@ export async function POST(req: Request) {
         telefono: body?.telefono || body?.celular || null,
         email: body?.email || body?.correo || null,
         datosRegistro,
-        planEstado: "PRUEBA",
-        pruebaInicio: new Date(),
+        planId: planInicial.id,
+        planEstado: "ACTIVO",
+        planInicio: vigencia.inicio,
+        planFin: vigencia.fin,
+        metodoPago: "manual",
+        pruebaInicio: vigencia.inicio,
         comprobantesUsados: 0,
         usuarios: {
           create: {
@@ -80,7 +92,7 @@ export async function POST(req: Request) {
     return NextResponse.json({
       ok: true,
       id: empresa.id,
-      estado: "PRUEBA",
+      estado: "ACTIVO",
       token,
       empresa: empresaParaCliente(empresa, usuario),
     })

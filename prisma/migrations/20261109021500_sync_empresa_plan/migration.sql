@@ -66,6 +66,13 @@ BEGIN
     );
   END IF;
 
+  ALTER TABLE "PlanComercial" ADD COLUMN IF NOT EXISTS "descripcion" TEXT NOT NULL DEFAULT '';
+  ALTER TABLE "PlanComercial" ADD COLUMN IF NOT EXISTS "precioAnual" DOUBLE PRECISION NOT NULL DEFAULT 0;
+  ALTER TABLE "PlanComercial" ADD COLUMN IF NOT EXISTS "trialDias" INTEGER NOT NULL DEFAULT 0;
+  ALTER TABLE "PlanComercial" ADD COLUMN IF NOT EXISTS "documentosAnio" INTEGER NOT NULL DEFAULT 0;
+  ALTER TABLE "PlanComercial" ADD COLUMN IF NOT EXISTS "badge" TEXT NOT NULL DEFAULT '';
+  ALTER TABLE "PlanComercial" ADD COLUMN IF NOT EXISTS "activo" BOOLEAN NOT NULL DEFAULT true;
+
   IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'FacturaEmitida_empresaId_fkey') THEN
     ALTER TABLE "FacturaEmitida"
       ADD CONSTRAINT "FacturaEmitida_empresaId_fkey"

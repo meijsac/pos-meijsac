@@ -5,7 +5,7 @@ import { resumenEmpresa } from "@/lib/empresa-plan";
 export async function GET() {
   try {
     const empresas = await prisma.empresa.findMany({
-    
+      include: { plan: true },
       orderBy: { createdAt: "desc" },
     });
     return NextResponse.json(empresas.map(resumenEmpresa));

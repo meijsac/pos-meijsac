@@ -209,7 +209,7 @@ export default function DashboardMeijsac(){
           </div>
           <div className="flex items-center gap-2">
             <div className={`text-[9px] px-2.5 py-1 rounded-full border flex items-center gap-1.5 ${colFirma.bg}`}><span className={`w-1.5 h-1.5 rounded-full animate-pulse ${colFirma.dot}`}></span> FIRMA {colFirma.label}</div>
-            <div className={`text-[9px] px-2.5 py-1 rounded-full border flex items-center gap-1.5 ${colPlan.bg}`}><span className={`w-1.5 h-1.5 rounded-full animate-pulse ${colPlan.dot}`}></span> PLAN {colPlan.label}</div>
+            <div className={`text-[9px] px-2.5 py-1 rounded-full border flex items-center gap-1.5 ${colPlan.bg}`}><span className={`w-1.5 h-1.5 rounded-full animate-pulse ${colPlan.dot}`}></span> {accesoPlan?.planNombre || "PLAN"} · {colPlan.label}</div>
             <div className="h-6 w-[1px] bg-white/10 mx-1"></div>
             <div className="flex items-center gap-2 bg-[#12141d] border border-white/10 rounded-full pl-1 pr-1 py-1 relative">
               <div className="w-7 h-7 rounded-full bg-white/10 grid place-items-center text-[11px] font-black overflow-hidden">
