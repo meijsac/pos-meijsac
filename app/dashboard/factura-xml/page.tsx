@@ -888,7 +888,7 @@ const total = subtotalSin + iva15 + ivaDiferenciado + valorICE + valorIRBPNR + p
         receptorIdentificacion: facturaPendiente.cliente?.identificacion,
         receptorNombre: facturaPendiente.cliente?.razon,
         valorTotal: facturaPendiente.totales?.total,
-        estadoSRI: facturaPendiente.estadoSRI,
+        estadoSRI: "AUTORIZADO",
         xmlContent: facturaPendiente.xmlContent || "",
         tipo_cobro: facturaPendiente.tipo_cobro,
         estado_pago: facturaPendiente.estado_pago,
@@ -897,7 +897,7 @@ const total = subtotalSin + iva15 + ivaDiferenciado + valorICE + valorIRBPNR + p
         cuotas: facturaPendiente.cuotas,
         fecha_vencimiento: facturaPendiente.fecha_vencimiento,
       }
-      ;["meijsac_comprobantes_emitidos", "meijsac_enviados_sri"].forEach((clave) => {
+      ;["meijsac_comprobantes_emitidos", "meijsac_enviados_sri", "meijsac_comprobantes_sri"].forEach((clave) => {
         const previa = JSON.parse(localStorage.getItem(clave) || "[]")
         localStorage.setItem(clave, JSON.stringify([...previa, listaDoc]))
       })

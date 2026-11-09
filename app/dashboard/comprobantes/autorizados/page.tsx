@@ -59,6 +59,11 @@ export default function EmitidosPage(){
       ...get("meijsac_ventas_pos"), // <- TU POS DE CHIFA ESTABA AQUÍ
       ...get("meijsac_restaurante_facturas"), // <- Y AQUÍ
       ...get("meijsac_enviados_sri"),
+      ...get("meijsac_autorizados"),
+      ...get("meijsac_emitidos"),
+      ...get("meijsac_facturas_emitidas"),
+      ...get("meijsac_guias_06"),
+      ...get("meijsac_liquidaciones_03"),
       ...get("meijsac_retenciones").map((r:any)=>({
         id: r.id, tipoComprobante:'07', secuencial:r.numRetencion||r.secuencial,
         claveAcceso: r.claveAccesoSustento||r.clave, fechaEmision: r.fechaGeneracion||r.fecha,
@@ -77,7 +82,7 @@ export default function EmitidosPage(){
       receptorIdentificacion: d.receptorIdentificacion || d.ruc || d.rucProveedor || d.receptorRuc || "9999999999999",
       receptorNombre: d.receptorNombre || d.razon || d.proveedor || d.proveedorNombre || "CONSUMIDOR FINAL",
       valorTotal: Number(d.valorTotal ?? d.total ?? d.valorRetenido ?? 0),
-      estadoSRI: d.estadoSRI || d.estado || 'AUTORIZADO',
+      estadoSRI: String(d.estadoSRI || d.estado || "AUTORIZADO").toUpperCase().includes("ANUL") ? "ANULADO" : "AUTORIZADO",
       xmlContent: d.xmlContent || d.xml || "",
       motivoAnulacion: d.motivoAnulacion,
       fechaAnulacion: d.fechaAnulacion,
@@ -87,10 +92,15 @@ export default function EmitidosPage(){
       facturaId: d.facturaId || ""
     }))
     try {
-      const res = await fetch("/api/facturas", { headers: { Authorization: `Bearer ${localStorage.getItem("meijsac_token") || ""}` } })
+      const res = await fetch("/api/facturas", { credentials: "same-origin", headers: { Authorization: `Bearer ${localStorage.getItem("meijsac_token") || ""}` } })
       if (res.ok) {
         const remotas = await res.json()
-        if (Array.isArray(remotas)) unificados.push(...remotas)
+        if (Array.isArray(remotas)) {
+          unificados.push(...remotas.map((d: any) => ({
+            ...d,
+            estadoSRI: String(d.estadoSRI || d.estado || "AUTORIZADO").toUpperCase().includes("ANUL") ? "ANULADO" : "AUTORIZADO",
+          })))
+        }
       }
     } catch {}
 
@@ -100,10 +110,28 @@ export default function EmitidosPage(){
       if (!prev) map.set(d.secuencial, d)
       else map.set(d.secuencial, { ...prev, ...d, tipo_cobro: d.tipo_cobro || prev.tipo_cobro, estado_pago: d.estado_pago || prev.estado_pago, facturaId: d.facturaId || prev.facturaId, fecha_vencimiento: d.fecha_vencimiento || prev.fecha_vencimiento })
     })
-    setDocs(Array.from(map.values()).reverse())
+    const lista = Array.from(map.values()).reverse()
+    const previa = get("meijsac_comprobantes_sri")
+    const porClave = new Map(previa.map((d: any) => [d.claveAcceso || d.secuencial, d]))
+    lista.forEach((d) => {
+      if (d.estadoSRI === "ANULADO") return
+      const clave = d.claveAcceso || d.secuencial
+      if (!porClave.has(clave)) porClave.set(clave, { ...d, estadoSRI: "AUTORIZADO" })
+    })
+    localStorage.setItem("meijsac_comprobantes_sri", JSON.stringify(Array.from(porClave.values())))
+    setDocs(lista)
   }
 
-  useEffect(()=>{ cargar() },[])
+  useEffect(()=>{
+    cargar()
+    const alVolver = () => { if (document.visibilityState === "visible") cargar() }
+    window.addEventListener("focus", cargar)
+    document.addEventListener("visibilitychange", alVolver)
+    return () => {
+      window.removeEventListener("focus", cargar)
+      document.removeEventListener("visibilitychange", alVolver)
+    }
+  },[])
 
   // 2. BOTONERA DE DESPACHO
   const descargarXML = (doc:ComprobanteHistorialSRI)=>{
@@ -167,7 +195,7 @@ export default function EmitidosPage(){
     <div className="min-h-screen bg-[#060608] text-white p-6">
       <div className="flex justify-between items-center mb-6">
         <Chismoso texto="Regresa al menú donde ves 15 DOCS en amarillo y 167 COMPRAS. Tu hub principal"><button onClick={()=>router.push("/dashboard/comprobantes")} className="bg-white text-black px-4 py-2 rounded-xl text-xs font-bold">← Volver a COMPROBANTES</button></Chismoso>
-        <Chismoso texto="Historial maestro unificado: aquí llegan facturas 01 del POS chifa + retenciones 07 de CHUBB ATS 2.0. Todo en orden descendente"><h1 className="font-black tracking-tight">COMPROBANTES EMITIDOS - {docs.length} DOCS</h1></Chismoso>
+        <Chismoso texto="Historial maestro unificado: aquí llegan facturas 01 del POS chifa + retenciones 07 de CHUBB ATS 2.0. Todo en orden descendente"><h1 className="font-black tracking-tight">COMPROBANTES AUTORIZADOS</h1></Chismoso>
         <Chismoso texto="Filtra por secuencial 001-001-000000007 o por cliente CHUBB, UNIK, ARCACONTINENTAL"><input value={filtro} onChange={e=>setFiltro(e.target.value)} placeholder="Buscar secuencial / cliente" className="bg-black border border-white/10 rounded-xl px-4 py-2 text-xs w-[240px]" /></Chismoso>
       </div>
       <div className="flex gap-2 mb-4 flex-wrap">
@@ -193,7 +221,7 @@ export default function EmitidosPage(){
             <div className="col-span-2"><Chismoso texto={`Clave Acceso 49 dígitos: ${d.claveAcceso.slice(0,22)}... Esta clave es tu autorización SRI`}><span className="font-mono font-bold text-[#ffbe0a]">{d.secuencial}</span></Chismoso></div>
             <div className="col-span-2 truncate"><Chismoso texto={`RUC: ${d.receptorIdentificacion} | Fecha: ${d.fechaEmision} | Clave completa en PDF`}><span>{d.receptorNombre} <span className="opacity-30">{d.receptorIdentificacion.slice(0,10)}</span></span></Chismoso></div>
             <div className="col-span-1"><Chismoso texto={d.estadoSRI==='ANULADO'?'Ya no suma en reportes ni ATS. Queda en $0.00':'Valor exacto que declaras al SRI y a tu contador'}><span className="font-black">${d.estadoSRI==='ANULADO'?'0.00':d.valorTotal.toFixed(2)}</span></Chismoso></div>
-            <div className="col-span-1"><Chismoso texto={d.estadoSRI==='AUTORIZADO'?'✓ Autorizado por SRI con numeroAutorizacion':'🚫 Ya anulado en SRI en Línea - conservado por secuencia'}><span className={`px-2 py-1 rounded-full text-[9px] font-black ${d.estadoSRI==='AUTORIZADO'?'bg-emerald-500/20 text-emerald-400': d.estadoSRI==='ANULADO'?'bg-zinc-700 text-zinc-400':'bg-yellow-500/20 text-yellow-400'}`}>{d.estadoSRI==='ANULADO'?'🚫 ANULADO':`✓ ${d.estadoSRI}`}</span></Chismoso></div>
+            <div className="col-span-1"><Chismoso texto={d.estadoSRI==='AUTORIZADO'?'✓ Autorizado por SRI con numeroAutorizacion':'🚫 Ya anulado en SRI en Línea - conservado por secuencia'}><span className={`px-2 py-1 rounded-full text-[9px] font-black ${d.estadoSRI==='ANULADO'?'bg-zinc-700 text-zinc-400':'bg-emerald-500/20 text-emerald-400'}`}>{d.estadoSRI==='ANULADO'?'🚫 ANULADO':'✓ AUTORIZADO'}</span></Chismoso></div>
             <div className="col-span-2"><span className="text-[10px]">{d.tipo_cobro || "EFECTIVO"}</span></div>
             <div className="col-span-2">{(() => { const e = etiquetaCobro(d); if (!e.texto) return null; return <button onClick={() => { if (e.clave !== "pagado") setPagoDoc(d) }} className={`px-2 py-1 rounded-full text-[9px] font-black ${e.clase}`}>{e.texto}</button> })()}</div>
             <div className="col-span-1 flex justify-end gap-1 flex-wrap">
@@ -251,7 +279,7 @@ export default function EmitidosPage(){
       )}
 
       <div className="mt-6 text-[10px] opacity-30 leading-relaxed max-w-3xl">
-        <b>Fix POS:</b> Ahora todos tus facturadores (POS restaurante, facturador general y ATS retenciones) deben hacer <code className="bg-white/10 px-1 rounded">localStorage.setItem("meijsac_comprobantes_sri", JSON.stringify([...prev, nuevoDoc]))</code> al emitir. Así tu factura de chifa ya no se queda aislada en <code>meijsac_ventas_pos</code>.
+        En esta sección solo ves los comprobantes que ya fueron autorizados por el SRI.
       </div>
     </div>
   )
