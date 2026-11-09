@@ -19,7 +19,7 @@ export function AuthCard({ dark, setDark, onOpenRegister }: { dark: boolean; set
     if (loading) return
     const rucValue = ruc.trim()
     if (!captcha) {
-      setError("Resuelve el captcha para entrar")
+      setError("COMPLETA EL CAPTCHA")
       return
     }
     if (rucValue.length !== 13 || !/^[0-9]+$/.test(rucValue)) {
@@ -92,10 +92,16 @@ export function AuthCard({ dark, setDark, onOpenRegister }: { dark: boolean; set
           <label className={`text-[10px] font-bold tracking-widest ${dark ? "text-white/60" : "text-black/60"}`}>CONTRASEÑA PRINCIPAL</label>
           <input id="clave" type="password" value={clave} onChange={(e) => setClave(e.target.value)} className={`w-full mt-2 p-4 rounded-2xl border outline-none text-sm ${dark ? "bg-black/60 border-white/10 text-white focus:border-[#ff00a8]" : "bg-gray-100 border-black/10 text-black focus:border-[#ff00a8]"}`} />
         </div>
+        <Turnstile
+          sitekey={process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY}
+          onVerify={(token) => { setCaptcha(token); setError("") }}
+          onExpire={() => setCaptcha("")}
+          onError={(mensaje) => { setCaptcha(""); setError(mensaje) }}
+          options={{ theme: "dark", size: "normal" }}
+        />
         <button type="submit" disabled={loading || !captcha} className={`w-full py-4 rounded-2xl font-black tracking-wide transition disabled:cursor-not-allowed ${captcha ? "bg-green-500 text-black" : "bg-white/15 text-white/70"}`}>
-          {loading ? "VERIFICANDO EN MEIJSAC.COM..." : captcha ? "ENTRAR" : "Resuelve el captcha para entrar"}
+          {loading ? "VERIFICANDO..." : captcha ? "ENTRAR" : "COMPLETA EL CAPTCHA"}
         </button>
-        <Turnstile onToken={setCaptcha} />
         {error && <p className="text-sm font-bold text-red-400">{error}</p>}
         <div className="flex justify-between text-[11px] mt-3">
           <span className={dark ? "text-white/50" : "text-black/50"}>✓ Recordarme</span>
