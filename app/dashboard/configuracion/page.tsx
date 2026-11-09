@@ -124,13 +124,6 @@ export default function ConfiguracionAvanzadaSRI() {
 
         if (!res.ok) throw new Error(`Error ${res.status}`);
         localStorage.setItem("meijsac_config_pro", JSON.stringify(payload));
-        if (payload?.ruc && payload?.firma?.expira) {
-          await fetch("/api/empresa/firma", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ ruc: payload.ruc, firmaExpira: payload.firma.expira }),
-          });
-        }
         alert(`✅ Guardado en ${cfg?.ambiente || "PRUEBAS"}`);
       } catch (e:any) {
         alert("❌ " + e.message);
@@ -277,13 +270,6 @@ base.sucursales = datosReales.sucursales || base.sucursales || [];
         localStorage.setItem("meijsac_logs", JSON.stringify(all));
         setLogs(all);
         alert(`✓ ${accion} - Ambiente: ${wsActual.nombre} - ${wsActual.url}`);
-    };
-
-    const validarFirma = (e: any) => {
-        const file = e.target.files[0]; if (!file) return;
-        if (!file.name.endsWith(".p12") && !file.name.endsWith(".pfx")) return alert("Solo .p12 / .pfx SRI");
-        const expira = new Date(); expira.setDate(expira.getDate() + 15);
-        setCfg({ ...cfg, firma: { ...cfg.firma, nombre: file.name, expira: expira.toLocaleDateString(), diasRestantes: 15 } });
     };
 
     return (

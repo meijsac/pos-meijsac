@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import * as forge from 'node-forge';
+import { prisma } from '@/lib/prisma';
 
 export const dynamic = "force-dynamic"
 
@@ -47,6 +48,14 @@ const rucEnFirma = cedulaEnFirma;
 const rucCoincide = rucEmpresa && rucEnFirma
   ? (rucEmpresa.startsWith(rucEnFirma) || rucEnFirma.startsWith(rucEmpresa))
   : false;
+
+const ruc = String(rucEmpresa || "").trim()
+if (ruc) {
+  await prisma.empresa.updateMany({
+    where: { ruc },
+    data: { firmaExpira: fechaExp },
+  })
+}
 
 return NextResponse.json({
   ok: true,

@@ -4,7 +4,7 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
-    "build": "next build",
+    "build": "node scripts/sync-empresa-plan.mjs && next build",
     "start": "next start",
     "build:apk": "npx cap copy android && npx cap open android"
   },
