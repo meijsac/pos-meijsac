@@ -66,7 +66,7 @@ function resumenContable(d: any) {
 
 function htmlResumen(d: any) {
   const r = resumenContable(d)
-  const usd = (n: number) => `$${n.toFixed(2)}`
+  const usd = (n: number) => `$${((Number(n) || 0)).toFixed(2)}`
   const filas: [string, string][] = [
     ["Subtotal sin Impuestos:", usd(r.subtotalSin)],
     ["Subtotal IVA 15% (o vig.):", usd(r.base15)],
@@ -220,7 +220,7 @@ export default function EstadoSRI(){
       alert(`No se emite el RIDE. Hay valores vacíos que no se pueden calcular: ${[...new Set(errores)].join(", ")}.`)
       return
     }
-    const usd = (n: number) => `$${n.toFixed(2)}`
+    const usd = (n: number) => `$${((Number(n) || 0)).toFixed(2)}`
     const avisoCobro = (doc: any, monto: number | null) => {
       const saldo = usd(monto || 0)
       if (doc?.tipo_cobro === "PENDIENTE_DE_PAGO") return `<div style="font-size:14px;font-weight:900;margin:4px 0">PENDIENTE DE PAGO - Saldo Pendiente ${saldo}</div>`
@@ -319,7 +319,16 @@ export default function EstadoSRI(){
         <div class="pagos">
           ${avisoCobro(d, total)}
           <div><b>FORMAS DE PAGO (Tabla 24)</b></div>
-          <div class="pago">${cobro.formaPago} ${usd(d?.tipo_cobro === "PENDIENTE_DE_PAGO" || d?.tipo_cobro === "CREDITO" ? 0 : total!)}</div>
+          ${(Array.isArray(d.formasPago) && d.formasPago.length ? d.formasPago : [
+            { nombre: "01 - SIN UTILIZACION DEL SISTEMA FINANCIERO", monto: d?.pagos?.efectivo },
+            { nombre: "19 - TARJETA DE CREDITO", monto: d?.pagos?.tarjeta },
+            { nombre: "20 - OTROS CON UTILIZACION DEL SISTEMA FINANCIERO", monto: d?.pagos?.redBancaria },
+            { nombre: "16 - TARJETA DE DEBITO", monto: d?.pagos?.debito },
+            { nombre: "15 - COMPENSACION DE DEUDAS", monto: d?.pagos?.compensacion },
+            { nombre: "17 - DINERO ELECTRONICO", monto: d?.pagos?.dineroElec },
+            { nombre: "18 - TARJETA PREPAGO", monto: d?.pagos?.prepago },
+            { nombre: "21 - ENDOSO DE TITULOS", monto: d?.pagos?.endoso },
+          ].filter((f: any) => Number(f.monto) > 0).map((f: any) => ({ nombre: f.nombre, monto: f.monto }))).map((f: any) => `<div class="pago">${f.codigo ? f.codigo + " - " + f.nombre : f.nombre} ${usd(Number(f.monto) || 0)}</div>`).join("")}
           <div class="pago">ENTREGADO: ${usd(cobro.entregado)}</div>
           <div class="vuelto">VUELTO: ${usd(cobro.vuelto)}</div>
         </div>
@@ -360,7 +369,7 @@ export default function EstadoSRI(){
     <div class="b">RESUMEN CONTABLE FACTURA (SRI)</div>
     ${htmlResumen(d).filas.map(([nombre, valor]) => `<div${nombre.startsWith("VALOR") ? ' class="b"' : ""}>${nombre} ${valor}</div>`).join("")}
     <div class="line"></div>
-    <div>FORMA PAGO: ${formaPagoTxt} $${d?.tipo_cobro === "PENDIENTE_DE_PAGO" || d?.tipo_cobro === "CREDITO" ? "0.00" : Number(d.totales?.total || 0).toFixed(2)}</div>
+    <div>FORMA PAGO:<br/>${(Array.isArray(d.formasPago) ? d.formasPago : []).filter((f: any) => Number(f.monto) > 0).map((f: any) => `${f.codigo} - ${f.nombre} $${(Number(f.monto) || 0).toFixed(2)}`).join("<br/>") || formaPagoTxt}</div>
     ${d?.tipo_cobro === "PENDIENTE_DE_PAGO" ? `<div class="b">PENDIENTE DE PAGO - Saldo Pendiente $${Number(d.totales?.total || 0).toFixed(2)}</div>` : ""}
     ${d?.tipo_cobro === "CREDITO" ? `<div class="b">CRÉDITO - Plazo: ${d.plazo} ${d.unidad_plazo}, Cuotas: ${d.cuotas}, Vence: ${d.fecha_vencimiento ? new Date(d.fecha_vencimiento).toLocaleDateString("es-EC") : ""}, Saldo Pendiente $${Number(d.totales?.total || 0).toFixed(2)}</div>` : ""}
     <div>ENTREGADO: $${entregado.toFixed(2)}</div>

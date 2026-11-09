@@ -869,7 +869,7 @@ base.sucursales = datosReales.sucursales || base.sucursales || [];
                       </div>
 
                       <div
-                        onClick={() => { if(confirm("Activar PRODUCCION REAL? El XML usará las URLs de producción. No se envía nada hasta que lo autorices.")) setCfg((p:any)=>({...p, ambiente:"PRODUCCIÓN", firma:{...p.firma, ambiente:"2"}})) }}
+                        onClick={() => setCfg((p:any)=>({...p, ambiente:"PRODUCCIÓN", firma:{...p.firma, ambiente:"2"}}))}
                         className={`rounded-xl p-4 border-2 cursor-pointer transition-all ${
                           cfg?.ambiente==='PRODUCCIÓN'
                            ? 'bg-[#0f172a] border-[#00ff5d] shadow-[0_0_20px_rgba(0,255,93,0.4)] scale-[1.02]'
@@ -877,13 +877,13 @@ base.sucursales = datosReales.sucursales || base.sucursales || [];
                         }`}
                       >
                         <p className="text-[11px] font-bold text-white">🚀 PRODUCCIÓN REAL</p>
-                        <p className="text-[9px] text-white/50 mt-1">Bloqueada. No se envía nada hasta que lo autorices.</p>
-                        <span className={`mt-2 inline-block text-[8px] px-2 py-0.5 rounded-full font-bold ${cfg?.ambiente==='PRODUCCIÓN'?'bg-[#00ff5d] text-black':'bg-white/10 text-white/30'}`}>{cfg?.ambiente==='PRODUCCIÓN'?'ACTIVO':'INACTIVO'}</span>
+                        <p className="text-[9px] text-white/50 mt-1">Encendido. Envía a cel.sri.gob.ec cuando esta opción está seleccionada.</p>
+                        <span className={`mt-2 inline-block text-[8px] px-2 py-0.5 rounded-full font-bold ${cfg?.ambiente==='PRODUCCIÓN'?'bg-[#00ff5d] text-black':'bg-white/10 text-white/30'}`}>{cfg?.ambiente==='PRODUCCIÓN'?'SELECCIONADO':'DISPONIBLE'}</span>
                       </div>
                     </div>
 
                     <div className={`p-3 rounded-lg border text-[9px] ${cfg?.ambiente==='PRODUCCIÓN'?'bg-[#00ff5d]/10 border-[#00ff5d]/30 text-[#00ff5d]':'bg-[#00f5d4]/10 border-[#00f5d4]/20 text-[#00f5d4]'}`}>
-                      {(cfg?.ambiente === "PRODUCCIÓN") ? "Producción bloqueada. No se envía ningún comprobante a cel.sri.gob.ec." : "Pruebas encendido. El XML firmado se envía a celcer.sri.gob.ec al presionar ENVIAR A SRI PRUEBAS."}
+                      {(cfg?.ambiente === "PRODUCCIÓN") ? "Seleccionado: PRODUCCIÓN. El XML firmado se envía a cel.sri.gob.ec." : "Seleccionado: PRUEBAS. El XML firmado se envía a celcer.sri.gob.ec."}
                     </div>
                     <div className="bg-black border border-white/10 rounded-xl p-3 text-[10px] space-y-1 break-all">
                       <p className="text-white font-bold">Recepción: {SRI_URLS[((cfg?.ambiente==='PRODUCCIÓN' || cfg?.firma?.ambiente==='2') ? '2' : '1')].url}</p>

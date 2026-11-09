@@ -1,4 +1,4 @@
-import { ambienteSri, envioSriPermitido, type CodigoAmbiente } from "@/lib/sri/ambiente"
+import { ambienteSri, type CodigoAmbiente } from "@/lib/sri/ambiente"
 
 const ESPERA_MS = 25000
 const REINTENTOS = 2
@@ -73,15 +73,6 @@ function zona(xml: string, tag: string) {
 }
 
 export async function enviarComprobante(entrada: { xmlFirmado: string; claveAcceso: string; ambiente: CodigoAmbiente }): Promise<ResultadoSri> {
-  if (!envioSriPermitido(entrada.ambiente)) {
-    return {
-      enviado: false,
-      bloqueado: true,
-      estado: "PENDIENTE_DE_AUTORIZAR",
-      mensaje: "Producción bloqueada. No se envió ningún comprobante al SRI.",
-      mensajes: [],
-    }
-  }
   const urls = ambienteSri(entrada.ambiente)
   let recepcion = ""
   try {

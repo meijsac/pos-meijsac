@@ -5,7 +5,7 @@ import { accesoEmpresa, ipDe, navegadorDe, puede, sanitizarTexto } from "@/lib/s
 import { anotarFacturaCaja } from "@/lib/login-memoria"
 import { FaltanDatosSri, armarXmlFactura } from "@/lib/sri/xml-factura"
 import { firmarFacturaXml } from "@/lib/sri/firmar"
-import { codigoAmbiente, envioSriPermitido } from "@/lib/sri/ambiente"
+import { codigoAmbiente } from "@/lib/sri/ambiente"
 import { enviarComprobante } from "@/lib/sri/soap"
 import { desencriptarBytes } from "@/lib/seguridad"
 
@@ -34,19 +34,16 @@ export async function POST(req: Request) {
       ? sesion.empresa.datosRegistro as Record<string, unknown>
       : {}
     const ambiente = codigoAmbiente(extra.ambiente || extra.ambienteCodigo || body?.configEmisor?.ambiente)
-    const enviar = envioSriPermitido(ambiente)
     let xml = armado.xml
     let firmado = false
-    if (enviar) {
-      if (!claveFirma) return NextResponse.json({ error: "Escribe la contraseña del .p12. Se usa solo para firmar este envío y no se guarda." }, { status: 400 })
-      const firma = await prisma.firmaElectronica.findUnique({ where: { empresaId: sesion.empresa.id } })
-      if (!firma) return NextResponse.json({ error: "Falta el archivo .p12. Súbelo en Configuración, pestaña Firma." }, { status: 400 })
-      try {
-        xml = firmarFacturaXml(xml, desencriptarBytes(firma.p12Cifrado), claveFirma)
-        firmado = true
-      } catch (e: any) {
-        return NextResponse.json({ error: e.message || "No se pudo firmar el XML" }, { status: 400 })
-      }
+    if (!claveFirma) return NextResponse.json({ error: "Escribe la contraseña del .p12. Se usa solo para firmar este envío y no se guarda." }, { status: 400 })
+    const firma = await prisma.firmaElectronica.findUnique({ where: { empresaId: sesion.empresa.id } })
+    if (!firma) return NextResponse.json({ error: "Falta el archivo .p12. Súbelo en Configuración, pestaña Firma." }, { status: 400 })
+    try {
+      xml = firmarFacturaXml(xml, desencriptarBytes(firma.p12Cifrado), claveFirma)
+      firmado = true
+    } catch (e: any) {
+      return NextResponse.json({ error: e.message || "No se pudo firmar el XML" }, { status: 400 })
     }
     body.claveAcceso = armado.claveAcceso
     body.establecimiento = `${armado.estab}-${armado.pto}`
@@ -54,7 +51,7 @@ export async function POST(req: Request) {
     body.xmlContent = xml
     body.firmado = firmado
     body.estadoSRI = "PENDIENTE_DE_AUTORIZAR"
-    body.envioSri = enviar ? (ambiente === "1" ? "PRUEBAS" : "PRODUCCION") : "PRODUCCION_BLOQUEADA"
+    body.envioSri = ambiente === "2" ? "PRODUCCION" : "PRUEBAS"
     body.auditoria = { ip: ipDe(req), dispositivo: navegadorDe(req), usuario: sesion.usuario.nombre, caja, fecha: new Date().toISOString() }
     const plazo = Number(body.plazo)
     const cuotas = Number(body.cuotas)
@@ -81,9 +78,7 @@ export async function POST(req: Request) {
         data: { datosRegistro: { ...prev, modo_negocio: body.modo_negocio } },
       })
     }
-    const resultado = enviar
-      ? await enviarComprobante({ xmlFirmado: xml, claveAcceso: armado.claveAcceso, ambiente })
-      : { enviado: false, bloqueado: true, estado: "PENDIENTE_DE_AUTORIZAR" as const, mensaje: "Producción bloqueada. No se envió ningún comprobante al SRI.", mensajes: [] as string[], numeroAutorizacion: "", fechaAutorizacion: "" }
+    const resultado = await enviarComprobante({ xmlFirmado: xml, claveAcceso: armado.claveAcceso, ambiente })
     body.estadoSRI = resultado.estado
     body.mensajeSri = resultado.mensaje
     body.mensajesSri = resultado.mensajes

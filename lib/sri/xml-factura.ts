@@ -42,12 +42,6 @@ function tipoIdentificacion(id: string) {
   return "06"
 }
 
-function codigoPago(valor: unknown) {
-  const texto = String(valor || "")
-  const encontrado = texto.match(/\b(01|15|16|17|18|19|20|21)\b/)
-  return encontrado ? encontrado[1] : "01"
-}
-
 export function armarXmlFactura(empresa: {
   ruc?: string | null
   razonSocial?: string | null
@@ -121,8 +115,26 @@ export function armarXmlFactura(empresa: {
   const importe = totalSin + totalIva + propina
   const totalesXml = Object.entries(grupos).map(([cod, g]) => `<totalImpuesto><codigo>2</codigo><codigoPorcentaje>${cod}</codigoPorcentaje><baseImponible>${dinero(g.base)}</baseImponible><valor>${dinero(g.valor)}</valor></totalImpuesto>`).join("")
 
-  const forma = body?.tipo_cobro === "CREDITO" ? "20" : codigoPago(body?.formaPago)
-  const pagos = `<pago><formaPago>${forma}</formaPago><total>${dinero(importe)}</total></pago>`
+  const montoPago = (valor: unknown) => {
+    const n = Number(valor)
+    if (!Number.isFinite(n) || n <= 0) return 0
+    return Math.round(n * 100) / 100
+  }
+  const listaPagos: Array<[string, number]> = body?.tipo_cobro === "CREDITO"
+    ? [["20", importe]]
+    : [
+        ["01", montoPago(body?.pagos?.efectivo)],
+        ["15", montoPago(body?.pagos?.compensacion)],
+        ["16", montoPago(body?.pagos?.debito)],
+        ["17", montoPago(body?.pagos?.dineroElec)],
+        ["18", montoPago(body?.pagos?.prepago)],
+        ["19", montoPago(body?.pagos?.tarjeta)],
+        ["20", montoPago(body?.pagos?.redBancaria)],
+        ["21", montoPago(body?.pagos?.endoso)],
+      ].filter((fila): fila is [string, number] => Number(fila[1]) > 0)
+  const pagos = (listaPagos.length ? listaPagos : [["01", importe] as [string, number]])
+    .map(([codigo, monto]) => `<pago><formaPago>${codigo}</formaPago><total>${dinero(monto)}</total></pago>`)
+    .join("")
   const email = String(body?.cliente?.email || "").trim()
 
   const documento = `<?xml version="1.0" encoding="UTF-8"?><factura id="comprobante" version="1.1.0"><infoTributaria><ambiente>${ambiente}</ambiente><tipoEmision>1</tipoEmision><razonSocial>${xml(razon)}</razonSocial>${comercial ? `<nombreComercial>${xml(comercial)}</nombreComercial>` : ""}<ruc>${ruc}</ruc><claveAcceso>${clave}</claveAcceso><codDoc>01</codDoc><estab>${estab}</estab><ptoEmi>${pto}</ptoEmi><secuencial>${secuencial}</secuencial><dirMatriz>${xml(direccion)}</dirMatriz></infoTributaria><infoFactura><fechaEmision>${fecha}</fechaEmision><dirEstablecimiento>${xml(dirEstablecimiento)}</dirEstablecimiento><obligadoContabilidad>${obligado}</obligadoContabilidad><tipoIdentificacionComprador>${tipoIdentificacion(compradorId)}</tipoIdentificacionComprador><razonSocialComprador>${xml(comprador)}</razonSocialComprador><identificacionComprador>${xml(compradorId)}</identificacionComprador><totalSinImpuestos>${dinero(totalSin)}</totalSinImpuestos><totalDescuento>${dinero(totalDescuento)}</totalDescuento><totalConImpuestos>${totalesXml}</totalConImpuestos><propina>${dinero(propina)}</propina><importeTotal>${dinero(importe)}</importeTotal><moneda>DOLAR</moneda><pagos>${pagos}</pagos></infoFactura><detalles>${detalles}</detalles>${email ? `<infoAdicional><campoAdicional nombre="Email">${xml(email)}</campoAdicional></infoAdicional>` : ""}</factura>`

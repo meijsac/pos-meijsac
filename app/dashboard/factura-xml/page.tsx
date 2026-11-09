@@ -603,9 +603,27 @@ const total = subtotalSin + iva15 + ivaDiferenciado + valorICE + valorIRBPNR + p
   const avisoConsumidorFinal = "Según la norma del SRI, no se permite emitir facturas a Consumidor Final por valores iguales o superiores a $50.00"
   const bloqueoConsumidorFinal = String(cliente.identificacion || "").trim() === "9999999999999" && total >= 50
 
-  const sumaOtrosPagos = pagos.redBancaria + pagos.tarjeta + pagos.debito + pagos.compensacion + pagos.dineroElec + pagos.prepago + pagos.endoso
-  const efectivoCalculado = total - sumaOtrosPagos
-  const pagosReales = {...pagos, efectivo: efectivoCalculado < 0? 0 : efectivoCalculado}
+  const plata = (valor: unknown) => {
+    const n = Number(valor)
+    if (!Number.isFinite(n)) {
+      console.error("Valor NaN en factura", valor)
+      return 0
+    }
+    return n < 0 ? 0 : n
+  }
+  const sumaOtrosPagos = plata(pagos.redBancaria) + plata(pagos.tarjeta) + plata(pagos.debito) + plata(pagos.compensacion) + plata(pagos.dineroElec) + plata(pagos.prepago) + plata(pagos.endoso)
+  let efectivoCalculado = plata(total) - sumaOtrosPagos
+  if (!Number.isFinite(efectivoCalculado)) {
+    console.error("01 NaN", { total, sumaOtrosPagos })
+    efectivoCalculado = 0
+  }
+  if (efectivoCalculado < 0) efectivoCalculado = 0
+  const pagosReales = {...pagos, redBancaria: plata(pagos.redBancaria), tarjeta: plata(pagos.tarjeta), debito: plata(pagos.debito), compensacion: plata(pagos.compensacion), dineroElec: plata(pagos.dineroElec), prepago: plata(pagos.prepago), endoso: plata(pagos.endoso), efectivo: efectivoCalculado}
+  const guardarMonto = (campo: string, texto: string) => {
+    const n = Number(texto)
+    if (!Number.isFinite(n)) console.error("Pago NaN", campo, texto)
+    setPagos((prev: any) => ({ ...prev, [campo]: Number.isFinite(n) && n > 0 ? n : 0 }))
+  }
   const totalPagado = pagosReales.efectivo + sumaOtrosPagos
   const vuelto = totalPagado - total
   const saldoPendiente = total - totalPagado
@@ -681,7 +699,7 @@ const total = subtotalSin + iva15 + ivaDiferenciado + valorICE + valorIRBPNR + p
   
   const emitirComprobante = async () => {
     const esProduccion = configEmisor.ambiente === "PRODUCCIÓN"
-    if (!esProduccion && !claveFirma.trim()) return alert("Escribe la contraseña del .p12 para firmar y enviar a pruebas. No se guarda.")
+    if (!claveFirma.trim()) return alert("Escribe la contraseña del .p12 para firmar. No se guarda.")
     if (bloqueoConsumidorFinal) return alert(avisoConsumidorFinal)
     if (!emisorListo) return alert("Faltan datos del emisor en Configuración")
     if (itemSinTarifa) return alert("Hay un producto sin tarifa IVA. No se puede emitir.")
@@ -701,7 +719,7 @@ const total = subtotalSin + iva15 + ivaDiferenciado + valorICE + valorIRBPNR + p
       const n = Number(monto)
       if (Number.isFinite(n) && n > 0) formasEmit.push(`${codigo} - ${nombre}`)
     }
-    anotarForma("01", "SIN UTILIZACION DEL SISTEMA FINANCIERO", netoEmit)
+    anotarForma("01", "SIN UTILIZACION DEL SISTEMA FINANCIERO", pagosReales.efectivo)
     anotarForma("15", "COMPENSACION DE DEUDAS", pagosReales.compensacion)
     anotarForma("16", "TARJETA DE DEBITO", pagosReales.debito)
     anotarForma("17", "DINERO ELECTRONICO", pagosReales.dineroElec)
@@ -766,7 +784,17 @@ const total = subtotalSin + iva15 + ivaDiferenciado + valorICE + valorIRBPNR + p
       efectivoRecibido: entregadoEmit,
       vuelto: vueltoEmit,
       caja: { efectivo: sinCobro ? 0 : Number(abonos.efectivo || 0), transfer: sinCobro ? 0 : Number(abonos.transfer || 0), tarjeta: sinCobro ? 0 : Number(abonos.tarjeta || 0), credito: 0 },
-      pagos: { ...pagosReales, efectivo: netoEmit, cambio: vueltoEmit, vuelto: vueltoEmit, entregado: entregadoEmit, efectivoRecibido: entregadoEmit, formaPago: formaPagoEmit },
+      formasPago: [
+        { codigo: "01", nombre: "SIN UTILIZACION DEL SISTEMA FINANCIERO", monto: plata(pagosReales.efectivo) },
+        { codigo: "15", nombre: "COMPENSACION DE DEUDAS", monto: plata(pagosReales.compensacion) },
+        { codigo: "16", nombre: "TARJETA DE DEBITO", monto: plata(pagosReales.debito) },
+        { codigo: "17", nombre: "DINERO ELECTRONICO", monto: plata(pagosReales.dineroElec) },
+        { codigo: "18", nombre: "TARJETA PREPAGO", monto: plata(pagosReales.prepago) },
+        { codigo: "19", nombre: "TARJETA DE CREDITO", monto: plata(pagosReales.tarjeta) },
+        { codigo: "20", nombre: "OTROS CON UTILIZACION DEL SISTEMA FINANCIERO", monto: plata(pagosReales.redBancaria) },
+        { codigo: "21", nombre: "ENDOSO DE TITULOS", monto: plata(pagosReales.endoso) },
+      ].filter((f) => f.monto > 0),
+      pagos: { ...pagosReales, efectivo: plata(pagosReales.efectivo), cambio: vueltoEmit, vuelto: vueltoEmit, entregado: entregadoEmit, efectivoRecibido: entregadoEmit, formaPago: formaPagoEmit },
       refs: { refTarjeta, refTransfer, tipoCobro, plazoElegido },
       transito: transitoActual,
       mesaOrigenId: transitoActual?.mesaOrigenId || null,
@@ -823,7 +851,7 @@ const total = subtotalSin + iva15 + ivaDiferenciado + valorICE + valorIRBPNR + p
     }
 
     try {
-      const guardado = await fetch("/api/facturas", { method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${localStorage.getItem("meijsac_token") || ""}` }, body: JSON.stringify({ ...facturaPendiente, estadoSRI: "PENDIENTE_DE_AUTORIZAR", claveFirma: esProduccion ? "" : claveFirma }) })
+      const guardado = await fetch("/api/facturas", { method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${localStorage.getItem("meijsac_token") || ""}` }, body: JSON.stringify({ ...facturaPendiente, estadoSRI: "PENDIENTE_DE_AUTORIZAR", claveFirma }) })
       if (!guardado.ok) {
         const err = await guardado.json().catch(() => ({}))
         const faltan = Array.isArray(err.faltantes) ? `\n${err.faltantes.join("\n")}` : ""
@@ -1223,17 +1251,17 @@ const total = subtotalSin + iva15 + ivaDiferenciado + valorICE + valorIRBPNR + p
           <div className="grid grid-cols-3 gap-2">
             <div className="bg-[#00f5d4]/10 rounded-lg p-2 border border-[#00f5d4]/30">
               <div className="text-[9px] opacity-60">01 - SIN UTILIZACION DEL SISTEMA FINANCIERO</div>
-              <div className="font-black text-[#00f5d4] text-xl">${pagosReales.efectivo.toFixed(2)}</div>
+              <div className="font-black text-[#00f5d4] text-xl">${plata(pagosReales.efectivo).toFixed(2)}</div>
               <div className="text-[8px] opacity-40">Auto = Total - otros</div>
             </div>
             <label className="bg-black/40 rounded-lg p-2 border border-white/5 cursor-pointer hover:border-white/20">
               <div className="text-[8px] opacity-60">20 - OTROS CON UTILIZACION DEL SISTEMA FINANCIERO</div>
-              <input type="number" value={pagos.redBancaria||''} onChange={e=>setPagos({...pagos, redBancaria: parseFloat(e.target.value)||0})} className="w-full bg-transparent font-bold outline-none text-sm" placeholder="0.00" />
+              <input type="number" min="0" step="0.01" value={plata(pagos.redBancaria)} onChange={(e) => guardarMonto("redBancaria", e.target.value)} className="w-full bg-transparent font-bold outline-none text-sm" />
               <div className="text-[7px] opacity-30">Transfer / Depósito / Cheque</div>
             </label>
             <label className="bg-black/40 rounded-lg p-2 border border-white/5 cursor-pointer hover:border-white/20">
-              <div className="text-[8px] opacity-60">19 - TARJETA DE CREDITO / 16 - DEBITO</div>
-              <input type="number" value={pagos.tarjeta||''} onChange={e=>setPagos({...pagos, tarjeta: parseFloat(e.target.value)||0})} className="w-full bg-transparent font-bold outline-none text-sm" placeholder="0.00" />
+              <div className="text-[8px] opacity-60">19 - TARJETA DE CREDITO</div>
+              <input type="number" min="0" step="0.01" value={plata(pagos.tarjeta)} onChange={(e) => guardarMonto("tarjeta", e.target.value)} className="w-full bg-transparent font-bold outline-none text-sm" />
               <div className="text-[7px] opacity-30">Datafast / Medianet</div>
             </label>
           </div>
@@ -1245,23 +1273,23 @@ const total = subtotalSin + iva15 + ivaDiferenciado + valorICE + valorIRBPNR + p
             <div className="grid grid-cols-4 gap-2 mt-2">
               <label className="bg-black/30 rounded-lg p-2 border border-white/10">
                 <div className="text-[7px] opacity-60">15 - COMPENSACION DE DEUDAS</div>
-                <input type="number" value={pagos.compensacion||''} onChange={e=>setPagos({...pagos, compensacion: parseFloat(e.target.value)||0})} className="w-full bg-transparent font-bold outline-none text-[11px]" placeholder="0.00" />
+                <input type="number" min="0" step="0.01" value={plata(pagos.compensacion)} onChange={(e) => guardarMonto("compensacion", e.target.value)} className="w-full bg-transparent font-bold outline-none text-[11px]" />
               </label>
               <label className="bg-black/30 rounded-lg p-2 border border-white/10">
                 <div className="text-[7px] opacity-60">16 - TARJETA DE DEBITO</div>
-                <input type="number" value={pagos.debito||''} onChange={e=>setPagos({...pagos, debito: parseFloat(e.target.value)||0})} className="w-full bg-transparent font-bold outline-none text-[11px]" placeholder="0.00" />
+                <input type="number" min="0" step="0.01" value={plata(pagos.debito)} onChange={(e) => guardarMonto("debito", e.target.value)} className="w-full bg-transparent font-bold outline-none text-[11px]" />
               </label>
               <label className="bg-black/30 rounded-lg p-2 border border-white/10">
                 <div className="text-[7px] opacity-60">17 - DINERO ELECTRONICO</div>
-                <input type="number" value={pagos.dineroElec||''} onChange={e=>setPagos({...pagos, dineroElec: parseFloat(e.target.value)||0})} className="w-full bg-transparent font-bold outline-none text-[11px]" placeholder="0.00" />
+                <input type="number" min="0" step="0.01" value={plata(pagos.dineroElec)} onChange={(e) => guardarMonto("dineroElec", e.target.value)} className="w-full bg-transparent font-bold outline-none text-[11px]" />
               </label>
               <label className="bg-black/30 rounded-lg p-2 border border-white/10">
                 <div className="text-[7px] opacity-60">18 - TARJETA PREPAGO</div>
-                <input type="number" value={pagos.prepago||''} onChange={e=>setPagos({...pagos, prepago: parseFloat(e.target.value)||0})} className="w-full bg-transparent font-bold outline-none text-[11px]" placeholder="0.00" />
+                <input type="number" min="0" step="0.01" value={plata(pagos.prepago)} onChange={(e) => guardarMonto("prepago", e.target.value)} className="w-full bg-transparent font-bold outline-none text-[11px]" />
               </label>
               <label className="bg-black/30 rounded-lg p-2 border border-white/10 col-span-1">
                 <div className="text-[7px] opacity-60">21 - ENDOSO DE TITULOS</div>
-                <input type="number" value={pagos.endoso||''} onChange={e=>setPagos({...pagos, endoso: parseFloat(e.target.value)||0})} className="w-full bg-transparent font-bold outline-none text-[11px]" placeholder="0.00" />
+                <input type="number" min="0" step="0.01" value={plata(pagos.endoso)} onChange={(e) => guardarMonto("endoso", e.target.value)} className="w-full bg-transparent font-bold outline-none text-[11px]" />
               </label>
             </div>
           </details>
@@ -1286,24 +1314,22 @@ const total = subtotalSin + iva15 + ivaDiferenciado + valorICE + valorIRBPNR + p
         <div className="bg-[#1e293b] p-3 rounded-xl border-t-4 border-t-[#7c3aed] border border-white/10">
           <b>RESUMEN CONTABLE FACTURA (SRI)</b>
           <div className="space-y-1 mt-2">
-            <div className="flex justify-between"><span>Subtotal sin Impuestos:</span><b>${subtotalSin.toFixed(2)}</b></div>
-            <div className="flex justify-between"><span>Subtotal IVA 15% (o vig.):</span><b>${base15.toFixed(2)}</b></div>
-            <div className="flex justify-between"><span>Subtotal IVA 0%:</span><b>${base0.toFixed(2)}</b></div>
-            <div className="flex justify-between"><span>Subtotal No objeto de IVA:</span><b>${baseNoObjeto.toFixed(2)}</b></div>
-            <div className="flex justify-between"><span>Subtotal Exento de IVA:</span><b>${baseExento.toFixed(2)}</b></div>
-            <div className="flex justify-between"><span>Subtotal IVA Diferenciado:</span><b>${baseDiferenciado.toFixed(2)}</b></div>
-            <div className="flex justify-between"><span>Total Descuentos:</span><b className="text-red-400">-${descuento.toFixed(2)}</b></div>
-            <div className="flex justify-between"><span>Valor ICE:</span><b>${valorICE.toFixed(2)}</b></div>
-            <div className="flex justify-between"><span>Valor IRBPNR (Plásticos):</span><b>${valorIRBPNR.toFixed(2)}</b></div>
-            <div className="flex justify-between"><span>IVA Oficial:</span><b className="text-[#00f5d4]">${iva15.toFixed(2)}</b></div>
-            <div className="flex justify-between items-center border-t border-white/10 pt-1"><label className="flex items-center gap-2"><input type="checkbox" checked={propinaCheck} onChange={e=>setPropinaCheck(e.target.checked)} /> Propina 10%:</label><b>${propina.toFixed(2)}</b></div>
-            <div className="flex justify-between text-lg border-t border-white/10 pt-2 mt-2"><span className="font-black">VALOR TOTAL A PAGAR:</span><b className="text-[#00f5d4] text-xl">${total.toFixed(2)}</b></div>
+            <div className="flex justify-between"><span>Subtotal sin Impuestos:</span><b>${plata(subtotalSin).toFixed(2)}</b></div>
+            <div className="flex justify-between"><span>Subtotal IVA 15% (o vig.):</span><b>${plata(base15).toFixed(2)}</b></div>
+            <div className="flex justify-between"><span>Subtotal IVA 0%:</span><b>${plata(base0).toFixed(2)}</b></div>
+            <div className="flex justify-between"><span>Subtotal No objeto de IVA:</span><b>${plata(baseNoObjeto).toFixed(2)}</b></div>
+            <div className="flex justify-between"><span>Subtotal Exento de IVA:</span><b>${plata(baseExento).toFixed(2)}</b></div>
+            <div className="flex justify-between"><span>Subtotal IVA Diferenciado:</span><b>${plata(baseDiferenciado).toFixed(2)}</b></div>
+            <div className="flex justify-between"><span>Total Descuentos:</span><b className="text-red-400">-${plata(descuento).toFixed(2)}</b></div>
+            <div className="flex justify-between"><span>Valor ICE:</span><b>${plata(valorICE).toFixed(2)}</b></div>
+            <div className="flex justify-between"><span>Valor IRBPNR (Plásticos):</span><b>${plata(valorIRBPNR).toFixed(2)}</b></div>
+            <div className="flex justify-between"><span>IVA Oficial:</span><b className="text-[#00f5d4]">${plata(iva15).toFixed(2)}</b></div>
+            <div className="flex justify-between items-center border-t border-white/10 pt-1"><label className="flex items-center gap-2"><input type="checkbox" checked={propinaCheck} onChange={e=>setPropinaCheck(e.target.checked)} /> Propina 10%:</label><b>${plata(propina).toFixed(2)}</b></div>
+            <div className="flex justify-between text-lg border-t border-white/10 pt-2 mt-2"><span className="font-black">VALOR TOTAL A PAGAR:</span><b className="text-[#00f5d4] text-xl">${plata(total).toFixed(2)}</b></div>
             {items.length === 0 || total <= 0 ? <div className="text-right text-[11px] font-black text-white/40">Sin productos</div> : null}
           </div>
 
-{configEmisor.ambiente !== "PRODUCCIÓN" && (
-  <input type="password" autoComplete="new-password" value={claveFirma} onChange={(e) => setClaveFirma(e.target.value)} placeholder="Contraseña del .p12 (solo para firmar, no se guarda)" className="w-full mt-3 bg-black border border-white/10 rounded-xl p-3 text-xs text-white" />
-)}
+<input type="password" autoComplete="new-password" value={claveFirma} onChange={(e) => setClaveFirma(e.target.value)} placeholder="Contraseña del .p12 (solo para firmar, no se guarda)" className="w-full mt-3 bg-black border border-white/10 rounded-xl p-3 text-xs text-white" />
 <div className="grid grid-cols-3 gap-2 mt-3">
   <button type="button" onClick={() => { if (bloqueoConsumidorFinal) return; setCajaAbierta(true) }} disabled={bloqueoConsumidorFinal} className={`font-black py-3 rounded-xl text-xs ${bloqueoConsumidorFinal ? "bg-white/10 text-white/30" : "bg-[#00f5d4] text-black"}`}>
     CAJA Y COBRO
@@ -1312,7 +1338,7 @@ const total = subtotalSin + iva15 + ivaDiferenciado + valorICE + valorIRBPNR + p
     📝 BORRADOR
   </button>
   <button type="button" onClick={() => emitirComprobante()} disabled={!pagoRealizado || bloqueoConsumidorFinal || !emisorListo || itemSinTarifa} className={`font-black py-3 rounded-xl text-xs ${pagoRealizado && !bloqueoConsumidorFinal && emisorListo && !itemSinTarifa ? 'bg-white text-black' : 'bg-white/10 text-white/20'}`}>
-    {configEmisor.ambiente === "PRODUCCIÓN" ? "EMITIR" : "ENVIAR A SRI PRUEBAS"}
+    {configEmisor.ambiente === "PRODUCCIÓN" ? "ENVIAR A SRI PRODUCCIÓN" : "ENVIAR A SRI PRUEBAS"}
   </button>
 </div>
 
@@ -1474,7 +1500,6 @@ const total = subtotalSin + iva15 + ivaDiferenciado + valorICE + valorIRBPNR + p
         {(() => {
           if (tipoCobro === "pendiente") {
             return <button type="button" disabled={bloqueoConsumidorFinal} onClick={() => {
-              setPagos({ efectivo: 0, redBancaria: 0, tarjeta: 0, credito: 0, cambio: 0 })
               setPagoRealizado(true); setCajaAbierta(false)
             }} className="bg-amber-300 text-black p-4 rounded-xl font-black text-[11px] disabled:opacity-40">CONFIRMAR PENDIENTE DE PAGO</button>
           }
@@ -1485,7 +1510,6 @@ const total = subtotalSin + iva15 + ivaDiferenciado + valorICE + valorIRBPNR + p
                 return
               }
               setAvisoCredito("")
-              setPagos({ efectivo: 0, redBancaria: 0, tarjeta: 0, credito: 0, cambio: 0 })
               setPagoRealizado(true); setCajaAbierta(false)
             }} className="bg-violet-400 text-black p-4 rounded-xl font-black text-[11px] disabled:opacity-40">CONFIRMAR CRÉDITO</button>
           }
@@ -1501,7 +1525,6 @@ const total = subtotalSin + iva15 + ivaDiferenciado + valorICE + valorIRBPNR + p
               <button type="button" disabled={bloqueoConsumidorFinal} onClick={()=>{
                 if (bloqueoConsumidorFinal) return
                 const cambio = diff
-                setPagos({efectivo:abonos.efectivo - cambio, redBancaria:abonos.transfer, tarjeta:abonos.tarjeta, credito:abonos.credito, cambio:cambio})
                 setPagoRealizado(true); setCajaAbierta(false)
               }} className="bg-[#00f5d4] text-black p-4 rounded-xl font-black text-[11px] shadow-[0_0_20px_rgba(0,245,212,0.6)] disabled:opacity-40">
                 ✓ ENTREGAR VUELTO ${diff.toFixed(2)}
@@ -1511,7 +1534,6 @@ const total = subtotalSin + iva15 + ivaDiferenciado + valorICE + valorIRBPNR + p
           return (
             <button type="button" disabled={bloqueoConsumidorFinal} onClick={()=>{
               if (bloqueoConsumidorFinal) return
-              setPagos({efectivo:abonos.efectivo, redBancaria:abonos.transfer, tarjeta:abonos.tarjeta, credito:abonos.credito, cambio:0})
               setPagoRealizado(true); setCajaAbierta(false)
             }} className="bg-[#00f5d4] text-black p-4 rounded-xl font-black disabled:opacity-40">
               ✓ CONFIRMAR PAGO MIXTO
