@@ -14,6 +14,10 @@ function numeroGuardado(v: unknown): number | null {
 function cobroGuardado(d: any) {
   const pagos = d?.pagos || {}
   const total = numeroGuardado(d?.totales?.total) ?? 0
+  const tipo = d?.tipo_cobro || d?.refs?.tipoCobro
+  if (tipo === "PENDIENTE_DE_PAGO" || tipo === "CREDITO" || tipo === "pendiente" || tipo === "credito") {
+    return { formaPago: pagos.formaPago || d?.formaPago || FORMA_PAGO_DEFECTO, entregado: 0, efectivoRecibido: 0, vuelto: 0 }
+  }
   const caja = d?.caja || {}
   const sumaCaja = [caja.efectivo, caja.transfer, caja.tarjeta, caja.credito].reduce((s: number, v: unknown) => s + (numeroGuardado(v) ?? 0), 0)
   let entregado = numeroGuardado(d?.montoEntregado) ?? numeroGuardado(pagos.entregado)
@@ -173,6 +177,23 @@ export default function EstadoSRI(){
       return
     }
     const usd = (n: number) => `$${n.toFixed(2)}`
+    const avisoCobro = (doc: any, monto: number | null) => {
+      const saldo = usd(monto || 0)
+      if (doc?.tipo_cobro === "PENDIENTE_DE_PAGO") return `<div style="font-size:14px;font-weight:900;margin:4px 0">PENDIENTE DE PAGO - Saldo Pendiente ${saldo}</div>`
+      if (doc?.tipo_cobro === "CREDITO") {
+        const vence = doc.fecha_vencimiento ? new Date(doc.fecha_vencimiento).toLocaleDateString("es-EC") : ""
+        return `<div style="font-size:13px;font-weight:900;margin:4px 0">CRÉDITO - Plazo: ${doc.plazo} ${doc.unidad_plazo}, Cuotas: ${doc.cuotas}, Vence: ${vence}, Saldo Pendiente ${saldo}</div>`
+      }
+      return ""
+    }
+    const bloqueTransferencia = (doc: any) => {
+      let cfg: any = {}
+      try { cfg = JSON.parse(localStorage.getItem("meijsac_config_pro") || "{}") } catch { cfg = {} }
+      const datos = doc?.configEmisor?.datosTransferencia || cfg.datosTransferencia || cfg.transferencia
+      const activo = doc?.configEmisor?.datosTransferenciaActivo || cfg.datosTransferenciaActivo || cfg.transferenciaActiva || datos?.activo
+      if (!activo || !datos) return ""
+      return `<div class="borde" style="margin-top:3mm"><b>Datos para Transferencia</b><div>${datos.banco || ""} ${datos.tipoCuenta || ""} ${datos.cuenta || datos.numero || ""}</div><div>${datos.titular || ""} ${datos.identificacion || ""}</div></div>`
+    }
     const cobro = cobroGuardado(d)
     const clave = String(d.claveAcceso || "")
     const autorizacion = d.numeroAutorizacion ? String(d.numeroAutorizacion) : (estado === "AUTORIZADO" ? clave : "PENDIENTE DE AUTORIZACION")
@@ -258,11 +279,13 @@ export default function EstadoSRI(){
         <div class="linea"><span>PROPINA 10%</span><b>${usd(propina!)}</b></div>
         <div class="linea total"><span>VALOR TOTAL</span><b>${usd(total!)}</b></div>
         <div class="pagos">
+          ${avisoCobro(d, total)}
           <div><b>FORMAS DE PAGO (Tabla 24)</b></div>
-          <div class="pago">${cobro.formaPago} ${usd(total!)}</div>
+          <div class="pago">${cobro.formaPago} ${usd(d?.tipo_cobro === "PENDIENTE_DE_PAGO" || d?.tipo_cobro === "CREDITO" ? 0 : total!)}</div>
           <div class="pago">ENTREGADO: ${usd(cobro.entregado)}</div>
           <div class="vuelto">VUELTO: ${usd(cobro.vuelto)}</div>
         </div>
+        ${d?.tipo_cobro === "PENDIENTE_DE_PAGO" ? bloqueTransferencia(d) : ""}
       </div>
     </div>
     </body></html>`
@@ -303,7 +326,9 @@ export default function EstadoSRI(){
     <div>IVA 15%: $${Number(iva).toFixed(2)}</div>
     <div class="b" style="font-size:13px">TOTAL: $${d.totales?.total?.toFixed(2)}</div>
     <div class="line"></div>
-    <div>FORMA PAGO: ${formaPagoTxt} $${Number(d.totales?.total || 0).toFixed(2)}</div>
+    <div>FORMA PAGO: ${formaPagoTxt} $${d?.tipo_cobro === "PENDIENTE_DE_PAGO" || d?.tipo_cobro === "CREDITO" ? "0.00" : Number(d.totales?.total || 0).toFixed(2)}</div>
+    ${d?.tipo_cobro === "PENDIENTE_DE_PAGO" ? `<div class="b">PENDIENTE DE PAGO - Saldo Pendiente $${Number(d.totales?.total || 0).toFixed(2)}</div>` : ""}
+    ${d?.tipo_cobro === "CREDITO" ? `<div class="b">CRÉDITO - Plazo: ${d.plazo} ${d.unidad_plazo}, Cuotas: ${d.cuotas}, Vence: ${d.fecha_vencimiento ? new Date(d.fecha_vencimiento).toLocaleDateString("es-EC") : ""}, Saldo Pendiente $${Number(d.totales?.total || 0).toFixed(2)}</div>` : ""}
     <div>ENTREGADO: $${entregado.toFixed(2)}</div>
     <div class="b" style="background:#000;color:#fff;padding:4px;font-size:13px">VUELTO: $${cambio.toFixed(2)}</div>
     <div>EFECTIVO EN CAJA: $${entregado.toFixed(2)}</div>

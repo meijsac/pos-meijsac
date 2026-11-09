@@ -73,6 +73,13 @@ BEGIN
   ALTER TABLE "PlanComercial" ADD COLUMN IF NOT EXISTS "badge" TEXT NOT NULL DEFAULT '';
   ALTER TABLE "PlanComercial" ADD COLUMN IF NOT EXISTS "activo" BOOLEAN NOT NULL DEFAULT true;
 
+  ALTER TABLE "FacturaEmitida" ADD COLUMN IF NOT EXISTS "tipo_cobro" TEXT;
+  ALTER TABLE "FacturaEmitida" ADD COLUMN IF NOT EXISTS "estado_pago" TEXT;
+  ALTER TABLE "FacturaEmitida" ADD COLUMN IF NOT EXISTS "plazo" INTEGER;
+  ALTER TABLE "FacturaEmitida" ADD COLUMN IF NOT EXISTS "unidad_plazo" TEXT;
+  ALTER TABLE "FacturaEmitida" ADD COLUMN IF NOT EXISTS "cuotas" INTEGER;
+  ALTER TABLE "FacturaEmitida" ADD COLUMN IF NOT EXISTS "fecha_vencimiento" TIMESTAMP(3);
+
   IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'FacturaEmitida_empresaId_fkey') THEN
     ALTER TABLE "FacturaEmitida"
       ADD CONSTRAINT "FacturaEmitida_empresaId_fkey"

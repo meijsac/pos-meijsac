@@ -59,12 +59,18 @@ model Empresa {
 }
 
 model FacturaEmitida {
-  id        String   @id @default(cuid())
-  empresaId String
-  empresa   Empresa  @relation(fields: [empresaId], references: [id], onDelete: Cascade)
-  estado    String
-  payload   Json
-  createdAt DateTime @default(now())
+  id               String    @id @default(cuid())
+  empresaId        String
+  empresa          Empresa   @relation(fields: [empresaId], references: [id], onDelete: Cascade)
+  estado           String
+  payload          Json
+  tipoCobro        String?   @map("tipo_cobro")
+  estadoPago       String?   @map("estado_pago")
+  plazo            Int?
+  unidadPlazo      String?   @map("unidad_plazo")
+  cuotas           Int?
+  fechaVencimiento DateTime? @map("fecha_vencimiento")
+  createdAt        DateTime  @default(now())
 }
 
 model Usuario {

@@ -1,6 +1,7 @@
 "use client"
 import { useState, useEffect, useMemo } from "react"
 import { useRouter } from "next/navigation"
+import { etiquetaCobro, marcarPagadoLocal, pasaFiltroCobro } from "@/lib/cobro-etiqueta"
 
 // === AUMENTADO: COMPONENTE CHISMOSO - NO BORRA NADA ===
 function Chismoso({ children, texto, pos="top" }:{children:any, texto:string, pos?:string}){
@@ -30,16 +31,22 @@ interface ComprobanteHistorialSRI {
   motivoAnulacion?: string;
   fechaAnulacion?: string;
   xmlContent?: string;
+  tipo_cobro?: string;
+  estado_pago?: string;
+  fecha_vencimiento?: string;
+  facturaId?: string;
 }
 
 export default function EmitidosPage(){
   const router = useRouter()
   const [docs,setDocs]=useState<ComprobanteHistorialSRI[]>([])
   const [filtro,setFiltro]=useState("")
+  const [filtroCobro,setFiltroCobro]=useState("todos")
+  const [pagoDoc,setPagoDoc]=useState<ComprobanteHistorialSRI|null>(null)
   const [showAnular,setShowAnular]=useState<ComprobanteHistorialSRI|null>(null)
 
   // 1. INYECCION UNIFICADA - Aquí está la solución al POS
-  const cargar = ()=>{
+  const cargar = async ()=>{
     const get = (k:string)=>{ try{ return JSON.parse(localStorage.getItem(k)||"[]") }catch{ return [] } }
     
     // LEEMOS TODAS LAS LLAVES POSIBLES
@@ -72,11 +79,26 @@ export default function EmitidosPage(){
       estadoSRI: d.estadoSRI || d.estado || 'AUTORIZADO',
       xmlContent: d.xmlContent || d.xml || "",
       motivoAnulacion: d.motivoAnulacion,
-      fechaAnulacion: d.fechaAnulacion
+      fechaAnulacion: d.fechaAnulacion,
+      tipo_cobro: d.tipo_cobro || d.tipoCobro || "",
+      estado_pago: d.estado_pago || d.estadoPago || "",
+      fecha_vencimiento: d.fecha_vencimiento || d.fechaVencimiento || "",
+      facturaId: d.facturaId || ""
     }))
+    try {
+      const res = await fetch("/api/facturas", { headers: { Authorization: `Bearer ${localStorage.getItem("meijsac_token") || ""}` } })
+      if (res.ok) {
+        const remotas = await res.json()
+        if (Array.isArray(remotas)) unificados.push(...remotas)
+      }
+    } catch {}
 
     const map = new Map()
-    unificados.forEach(d=>{ if(!map.has(d.secuencial)) map.set(d.secuencial,d) })
+    unificados.forEach(d=>{
+      const prev = map.get(d.secuencial)
+      if (!prev) map.set(d.secuencial, d)
+      else map.set(d.secuencial, { ...prev, ...d, tipo_cobro: d.tipo_cobro || prev.tipo_cobro, estado_pago: d.estado_pago || prev.estado_pago, facturaId: d.facturaId || prev.facturaId, fecha_vencimiento: d.fecha_vencimiento || prev.fecha_vencimiento })
+    })
     setDocs(Array.from(map.values()).reverse())
   }
 
@@ -129,7 +151,13 @@ export default function EmitidosPage(){
     cargar()
   }
 
-  const filtrados = useMemo(()=>docs.filter(d=> d.secuencial.includes(filtro) || d.receptorNombre.toLowerCase().includes(filtro.toLowerCase())),[docs,filtro])
+  const filtrados = useMemo(()=>docs.filter(d=> (d.secuencial.includes(filtro) || d.receptorNombre.toLowerCase().includes(filtro.toLowerCase())) && pasaFiltroCobro(d, filtroCobro)),[docs,filtro,filtroCobro])
+  const registrarPago = async (doc: ComprobanteHistorialSRI) => {
+    marcarPagadoLocal(doc)
+    if (doc.facturaId) await fetch("/api/facturas", { method: "PATCH", headers: { "Content-Type": "application/json", Authorization: `Bearer ${localStorage.getItem("meijsac_token") || ""}` }, body: JSON.stringify({ id: doc.facturaId }) })
+    setPagoDoc(null)
+    cargar()
+  }
 
   return (
     <div className="min-h-screen bg-[#060608] text-white p-6">
@@ -138,24 +166,33 @@ export default function EmitidosPage(){
         <Chismoso texto="Historial maestro unificado: aquí llegan facturas 01 del POS chifa + retenciones 07 de CHUBB ATS 2.0. Todo en orden descendente"><h1 className="font-black tracking-tight">COMPROBANTES EMITIDOS - {docs.length} DOCS</h1></Chismoso>
         <Chismoso texto="Filtra por secuencial 001-001-000000007 o por cliente CHUBB, UNIK, ARCACONTINENTAL"><input value={filtro} onChange={e=>setFiltro(e.target.value)} placeholder="Buscar secuencial / cliente" className="bg-black border border-white/10 rounded-xl px-4 py-2 text-xs w-[240px]" /></Chismoso>
       </div>
+      <div className="flex gap-2 mb-4 flex-wrap">
+        {[["todos","Todos"],["pagado","Pagados"],["pendiente","Pendientes de Pago"],["credito","Crédito"]].map(([id,label]) => (
+          <button key={id} onClick={()=>setFiltroCobro(id)} className={`px-3 py-1 rounded-full text-[10px] font-black ${filtroCobro===id?"bg-[#00f5d4] text-black":"bg-white/10"}`}>{label}</button>
+        ))}
+      </div>
 
       <div className="bg-[#11131a] rounded-[20px] border border-white/10 overflow-hidden">
         <div className="grid grid-cols-12 p-3 text-[10px] opacity-40 font-black tracking-widest">
           <div className="col-span-1"><Chismoso texto="01=Factura venta, 04=Nota Crédito anula, 05=Nota Débito cobra interés, 06=Guía transporte, 07=Retención SRI" pos="bottom">TIPO ⓘ</Chismoso></div>
           <div className="col-span-2"><Chismoso texto="Numeración SRI 001-001-000000007. Si borras uno te multan por salto de folio" pos="bottom">SECUENCIAL ⓘ</Chismoso></div>
-          <div className="col-span-3"><Chismoso texto="Receptor: cliente si es 01, proveedor si es 07. Ej: BEBIDAS ARCACONTINENTAL" pos="bottom">RECEPTOR ⓘ</Chismoso></div>
+          <div className="col-span-2"><Chismoso texto="Receptor: cliente si es 01, proveedor si es 07. Ej: BEBIDAS ARCACONTINENTAL" pos="bottom">RECEPTOR ⓘ</Chismoso></div>
           <div className="col-span-1"><Chismoso texto="Valor líquido. Si está ANULADO automáticamente pasa a $0.00 en tus reportes de ventas" pos="bottom">TOTAL ⓘ</Chismoso></div>
           <div className="col-span-1"><Chismoso texto="AUTORIZADO=SRI lo aceptó. ANULADO=Ya anulado en portal y no suma. PENDIENTE=Sin enviar" pos="bottom">ESTADO ⓘ</Chismoso></div>
-          <div className="col-span-4 text-right"><Chismoso texto="Botones de despacho: descarga física para cliente y contador" pos="bottom">ACCIONES ⓘ</Chismoso></div>
+          <div className="col-span-2">TIPO DE COBRO</div>
+          <div className="col-span-2">ESTADO DE PAGO</div>
+          <div className="col-span-1 text-right"><Chismoso texto="Botones de despacho: descarga física para cliente y contador" pos="bottom">ACCIONES ⓘ</Chismoso></div>
         </div>
         {filtrados.map((d,i)=>(
           <div key={i} className={`grid grid-cols-12 p-3 border-t border-white/5 text-[11px] items-center hover:bg-white/[0.03] ${d.estadoSRI==='ANULADO'?'opacity-40 grayscale':''}`}>
             <div className="col-span-1"><Chismoso texto={d.tipoComprobante==='07'?'Esta retención 07 ya está indexada y le retuviste a tu proveedor':'Factura 01 emitida desde POS chifa o facturador'}><span className={`px-2 py-1 rounded-full text-[9px] font-black ${d.tipoComprobante==='07'?'bg-orange-500/20 text-orange-400 border border-orange-500/30': d.estadoSRI==='ANULADO'?'bg-red-500/20 text-red-400' : 'bg-[#ffbe0a]/20 text-[#ffbe0a]'}`}>{d.tipoComprobante} - {d.tipoComprobante==='07'?'RETENCIÓN':d.tipoComprobante==='01'?'FACTURA':'DOC'}</span></Chismoso></div>
             <div className="col-span-2"><Chismoso texto={`Clave Acceso 49 dígitos: ${d.claveAcceso.slice(0,22)}... Esta clave es tu autorización SRI`}><span className="font-mono font-bold text-[#ffbe0a]">{d.secuencial}</span></Chismoso></div>
-            <div className="col-span-3 truncate"><Chismoso texto={`RUC: ${d.receptorIdentificacion} | Fecha: ${d.fechaEmision} | Clave completa en PDF`}><span>{d.receptorNombre} <span className="opacity-30">{d.receptorIdentificacion.slice(0,10)}</span></span></Chismoso></div>
+            <div className="col-span-2 truncate"><Chismoso texto={`RUC: ${d.receptorIdentificacion} | Fecha: ${d.fechaEmision} | Clave completa en PDF`}><span>{d.receptorNombre} <span className="opacity-30">{d.receptorIdentificacion.slice(0,10)}</span></span></Chismoso></div>
             <div className="col-span-1"><Chismoso texto={d.estadoSRI==='ANULADO'?'Ya no suma en reportes ni ATS. Queda en $0.00':'Valor exacto que declaras al SRI y a tu contador'}><span className="font-black">${d.estadoSRI==='ANULADO'?'0.00':d.valorTotal.toFixed(2)}</span></Chismoso></div>
             <div className="col-span-1"><Chismoso texto={d.estadoSRI==='AUTORIZADO'?'✓ Autorizado por SRI con numeroAutorizacion':'🚫 Ya anulado en SRI en Línea - conservado por secuencia'}><span className={`px-2 py-1 rounded-full text-[9px] font-black ${d.estadoSRI==='AUTORIZADO'?'bg-emerald-500/20 text-emerald-400': d.estadoSRI==='ANULADO'?'bg-zinc-700 text-zinc-400':'bg-yellow-500/20 text-yellow-400'}`}>{d.estadoSRI==='ANULADO'?'🚫 ANULADO':`✓ ${d.estadoSRI}`}</span></Chismoso></div>
-            <div className="col-span-4 flex justify-end gap-1">
+            <div className="col-span-2"><span className="text-[10px]">{d.tipo_cobro || "EFECTIVO"}</span></div>
+            <div className="col-span-2">{(() => { const e = etiquetaCobro(d); return <button onClick={() => { if (e.clave !== "pagado") setPagoDoc(d) }} className={`px-2 py-1 rounded-full text-[9px] font-black ${e.clase}`}>{e.texto}</button> })()}</div>
+            <div className="col-span-1 flex justify-end gap-1 flex-wrap">
               <Chismoso texto="RIDE A4 oficial con código de barras, bloques SRI, válido para cliente y contabilidad"><button onClick={()=>descargarPDF(d)} className="bg-white text-black px-2 py-1 rounded-lg text-[10px] font-bold hover:scale-105">📄 PDF</button></Chismoso>
               <Chismoso texto={d.tipoComprobante==='07'?'Retención 07 y Guía 06 SIEMPRE en A4 corporativo, SRI no permite ticket':'Ticket 80mm térmico para impresora del chifa - solo facturas 01'}><button onClick={()=>descargarTicket(d)} className={`px-2 py-1 rounded-lg text-[10px] font-bold ${d.tipoComprobante==='01'?'bg-[#00f5d4] text-black hover:scale-105':'bg-white/10 text-white/20 cursor-not-allowed'}`}>🧾 TICK</button></Chismoso>
               <Chismoso texto="XML fuente con firma XAdES-BES y <numeroAutorizacion>. Este es el archivo que audita el SRI y pide el contador para ATS"><button onClick={()=>descargarXML(d)} className="bg-[#3a86ff] text-white px-2 py-1 rounded-lg text-[10px] font-bold hover:scale-105">📁 XML</button></Chismoso>
@@ -166,6 +203,18 @@ export default function EmitidosPage(){
         ))}
       </div>
 
+      {pagoDoc && (
+        <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-4">
+          <div className="bg-[#11131a] border border-white/10 rounded-2xl p-5 max-w-sm w-full">
+            <h2 className="font-black mb-2">Registrar Pago</h2>
+            <p className="text-xs opacity-70 mb-4">{pagoDoc.receptorNombre} · {pagoDoc.secuencial} · ${pagoDoc.valorTotal.toFixed(2)}</p>
+            <div className="flex gap-2">
+              <button onClick={() => setPagoDoc(null)} className="flex-1 bg-white/10 py-3 rounded-xl text-xs">Cancelar</button>
+              <button onClick={() => registrarPago(pagoDoc)} className="flex-1 bg-emerald-400 text-black py-3 rounded-xl text-xs font-black">Pasar a PAGADO</button>
+            </div>
+          </div>
+        </div>
+      )}
       {showAnular && (
         <div className="fixed inset-0 bg-black/80 backdrop-blur flex items-center justify-center z-50 p-4">
           <div className="bg-[#11131a] border border-red-500/30 rounded-[24px] p-6 max-w-[460px] w-full shadow-2xl">

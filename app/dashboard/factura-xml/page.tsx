@@ -111,6 +111,8 @@ export default function FacturadorXMLReal(){
         regimen: conTexto(cfg.regimen, empresa.regimen),
         ambiente,
         logo: [cfg.logo_url, cfg.logoUrl, cfg.marca?.logo, empresa.logo_url, empresa.logoUrl].map(v => String(v || "").trim()).find(v => v.startsWith("http") || v.startsWith("data:")) || "",
+        datosTransferencia: cfg.datosTransferencia || cfg.transferencia || null,
+        datosTransferenciaActivo: Boolean(cfg.datosTransferenciaActivo || cfg.transferenciaActiva || cfg.datosTransferencia?.activo || cfg.transferencia?.activo),
       }
       if (!vivo) return
       setConfigEmisor(emisor)
@@ -318,10 +320,16 @@ const toggleTurismoFeriado = (checked: boolean) => {
   const [conteoCaja, setConteoCaja] = useState({ "100":0,"50":0,"20":0,"10":0,"5":0,"1":0,"0.50":0,"0.25":0,"0.10":0,"0.05":0,"0.01":0 } as any)
   const [pagoRealizado, setPagoRealizado] = useState(false)
   const [cajaAbierta, setCajaAbierta] = useState(false)
-  const [tipoCobro, setTipoCobro] = useState<'efectivo'|'tarjeta'|'transfer'|'credito'>('efectivo')
+  const [tipoCobro, setTipoCobro] = useState<'efectivo'|'tarjeta'|'transfer'|'pendiente'|'credito'>('efectivo')
   const [refTarjeta, setRefTarjeta] = useState("")
   const [refTransfer, setRefTransfer] = useState("")
   const [plazoElegido, setPlazoElegido] = useState(30)
+  const [formaPendiente, setFormaPendiente] = useState("01 - SIN UTILIZACION DEL SISTEMA FINANCIERO")
+  const [plazoCredito, setPlazoCredito] = useState(0)
+  const [unidadPlazo, setUnidadPlazo] = useState<"Días" | "Meses">("Días")
+  const [cuotasCredito, setCuotasCredito] = useState(0)
+  const [valorCredito, setValorCredito] = useState(0)
+  const [avisoCredito, setAvisoCredito] = useState("")
   const bufferLector = useRef("")
 
   useEffect(()=>{ setPlazoElegido(cliente.diasCredito) }, [cliente.diasCredito])
@@ -550,12 +558,16 @@ const total = subtotalSin + iva15 + ivaDiferenciado + valorICE + valorIRBPNR + p
     if(tipoCobro==='efectivo') return totalEfectivoEntregado >= total && total>0
     if(tipoCobro==='tarjeta') return refTarjeta.trim().length >= 3
     if(tipoCobro==='transfer') return refTransfer.trim().length >= 3
-    if(tipoCobro==='credito'){
-      if(cliente.politicaCredito==="BLOQUEADO") return false
-      if(cliente.politicaCredito==="VIP") return total>0 && plazoElegido>0
-      return total <= cliente.limiteCredito && total>0 && plazoElegido<=cliente.diasCredito
-    }
+    if(tipoCobro==='pendiente') return total > 0
+    if(tipoCobro==='credito') return total > 0 && plazoCredito > 0 && cuotasCredito >= 1
     return false
+  }
+
+  const fechaVencimientoCredito = () => {
+    const fecha = new Date()
+    if (unidadPlazo === "Meses") fecha.setMonth(fecha.getMonth() + plazoCredito)
+    else fecha.setDate(fecha.getDate() + plazoCredito)
+    return fecha
   }
 
   // === NUEVO - CLAVE 49 DIGITOS MODULO 11 ===
@@ -612,14 +624,16 @@ const total = subtotalSin + iva15 + ivaDiferenciado + valorICE + valorIRBPNR + p
     if (!emisorListo) return alert("Faltan datos del emisor en Configuración")
     if (itemSinTarifa) return alert("Hay un producto sin tarifa IVA. No se puede emitir.")
     if(!pagoRealizado) return alert("Primero cobra en CAJA")
+    if (tipoCobro === "credito" && (!(plazoCredito > 0) || !(cuotasCredito >= 1))) return alert("Para crédito debes poner plazo y cuotas")
     const { emisionBloqueada, rucLocal } = await import("@/lib/plan-cliente")
     const avisoPlan = await emisionBloqueada(configEmisor?.ruc || rucLocal())
     if (avisoPlan) return alert(avisoPlan)
     if (!Number.isFinite(total)) return alert("No se puede emitir: faltan valores de la factura que no se pueden calcular.")
-    const netoEmit = Number.isFinite(Number(pagosReales.efectivo)) ? Number(pagosReales.efectivo) : 0
-    const entregadoCaja = Number(abonos.efectivo || 0) + Number(abonos.transfer || 0) + Number(abonos.tarjeta || 0) + Number(abonos.credito || 0)
-    const vueltoEmit = entregadoCaja > total + 0.009 ? Math.round((entregadoCaja - total) * 100) / 100 : 0
-    const entregadoEmit = entregadoCaja > 0 ? Math.round(entregadoCaja * 100) / 100 : total
+    const sinCobro = tipoCobro === "pendiente" || tipoCobro === "credito"
+    const netoEmit = sinCobro ? 0 : (Number.isFinite(Number(pagosReales.efectivo)) ? Number(pagosReales.efectivo) : 0)
+    const entregadoCaja = Number(abonos.efectivo || 0) + Number(abonos.transfer || 0) + Number(abonos.tarjeta || 0)
+    const vueltoEmit = sinCobro ? 0 : (entregadoCaja > total + 0.009 ? Math.round((entregadoCaja - total) * 100) / 100 : 0)
+    const entregadoEmit = sinCobro ? 0 : (entregadoCaja > 0 ? Math.round(entregadoCaja * 100) / 100 : total)
     const formasEmit: string[] = []
     const anotarForma = (codigo: string, nombre: string, monto: unknown) => {
       const n = Number(monto)
@@ -631,9 +645,16 @@ const total = subtotalSin + iva15 + ivaDiferenciado + valorICE + valorIRBPNR + p
     anotarForma("17", "DINERO ELECTRONICO", pagosReales.dineroElec)
     anotarForma("18", "TARJETA PREPAGO", pagosReales.prepago)
     anotarForma("19", "TARJETA DE CREDITO", pagosReales.tarjeta)
-    anotarForma("20", "OTROS CON UTILIZACION DEL SISTEMA FINANCIERO", (Number(pagosReales.redBancaria) || 0) + (Number(pagosReales.credito) || 0))
+    anotarForma("20", "OTROS CON UTILIZACION DEL SISTEMA FINANCIERO", pagosReales.redBancaria)
     anotarForma("21", "ENDOSO DE TITULOS", pagosReales.endoso)
-    const formaPagoEmit = formasEmit.length ? formasEmit.join(" | ") : "01 - SIN UTILIZACION DEL SISTEMA FINANCIERO"
+    const venceCredito = tipoCobro === "credito" ? fechaVencimientoCredito() : null
+    const formaPagoEmit = tipoCobro === "pendiente"
+      ? formaPendiente
+      : tipoCobro === "credito"
+        ? "20 - OTROS CON UTILIZACION DEL SISTEMA FINANCIERO"
+        : (formasEmit.length ? formasEmit.join(" | ") : "01 - SIN UTILIZACION DEL SISTEMA FINANCIERO")
+    const tipoCobroGuardado = tipoCobro === "pendiente" ? "PENDIENTE_DE_PAGO" : tipoCobro === "credito" ? "CREDITO" : tipoCobro === "tarjeta" ? "TARJETA" : tipoCobro === "transfer" ? "TRANSF" : "EFECTIVO"
+    const estadoPagoGuardado = tipoCobro === "pendiente" ? "PENDIENTE DE PAGO" : tipoCobro === "credito" ? "PENDIENTE DE PAGO - CRÉDITO" : "PAGADO"
     console.log('Generando XML con pagos:', pagosReales, ' refs:', refTarjeta, refTransfer)
 
     // --- CORRECCIÓN 1: CLAVE 49 + DV MODULO 11 - FICHA TÉCNICA SRI ---
@@ -656,10 +677,18 @@ const total = subtotalSin + iva15 + ivaDiferenciado + valorICE + valorIRBPNR + p
       items: items,
       totales: { bruto, descuento, subtotalSin, base15, base0, baseNoObjeto, baseExento, baseDiferenciado, valorICE, valorIRBPNR, iva15, ivaDiferenciado, propina, total },
       formaPago: formaPagoEmit,
+      tipo_cobro: tipoCobroGuardado,
+      estado_pago: estadoPagoGuardado,
+      plazo: tipoCobro === "credito" ? plazoCredito : null,
+      unidad_plazo: tipoCobro === "credito" ? unidadPlazo : null,
+      cuotas: tipoCobro === "credito" ? cuotasCredito : null,
+      fecha_vencimiento: venceCredito ? venceCredito.toISOString() : null,
+      valor_credito: tipoCobro === "credito" ? (valorCredito > 0 ? valorCredito : total) : 0,
+      saldo_pendiente: sinCobro ? total : 0,
       montoEntregado: entregadoEmit,
       efectivoRecibido: entregadoEmit,
       vuelto: vueltoEmit,
-      caja: { efectivo: Number(abonos.efectivo || 0), transfer: Number(abonos.transfer || 0), tarjeta: Number(abonos.tarjeta || 0), credito: Number(abonos.credito || 0) },
+      caja: { efectivo: sinCobro ? 0 : Number(abonos.efectivo || 0), transfer: sinCobro ? 0 : Number(abonos.transfer || 0), tarjeta: sinCobro ? 0 : Number(abonos.tarjeta || 0), credito: 0 },
       pagos: { ...pagosReales, efectivo: netoEmit, cambio: vueltoEmit, vuelto: vueltoEmit, entregado: entregadoEmit, efectivoRecibido: entregadoEmit, formaPago: formaPagoEmit },
       refs: { refTarjeta, refTransfer, tipoCobro, plazoElegido },
       transito: transitoActual,
@@ -721,6 +750,31 @@ const total = subtotalSin + iva15 + ivaDiferenciado + valorICE + valorIRBPNR + p
         alert(err.error || "No se pudo guardar la factura en la base.")
         return
       }
+      const guardada = await guardado.json().catch(() => ({}))
+      facturaPendiente.facturaId = guardada.id
+      const listaDoc = {
+        id: guardada.id || facturaPendiente.id,
+        facturaId: guardada.id,
+        tipoComprobante: "01",
+        secuencial: `${facturaPendiente.establecimiento}-${facturaPendiente.secuencial}`,
+        claveAcceso: facturaPendiente.claveAcceso,
+        fechaEmision: facturaPendiente.fechaEmisionFormato,
+        receptorIdentificacion: facturaPendiente.cliente?.identificacion,
+        receptorNombre: facturaPendiente.cliente?.razon,
+        valorTotal: facturaPendiente.totales?.total,
+        estadoSRI: "EMITIDA",
+        tipo_cobro: facturaPendiente.tipo_cobro,
+        estado_pago: facturaPendiente.estado_pago,
+        plazo: facturaPendiente.plazo,
+        unidad_plazo: facturaPendiente.unidad_plazo,
+        cuotas: facturaPendiente.cuotas,
+        fecha_vencimiento: facturaPendiente.fecha_vencimiento,
+      }
+      ;["meijsac_comprobantes_emitidos", "meijsac_enviados_sri"].forEach((clave) => {
+        const previa = JSON.parse(localStorage.getItem(clave) || "[]")
+        localStorage.setItem(clave, JSON.stringify([...previa, listaDoc]))
+      })
+      localStorage.setItem("meijsac_ultima_factura_pendiente", JSON.stringify(facturaPendiente))
     } catch {
       alert("No se pudo guardar la factura en la base.")
       return
@@ -1170,7 +1224,7 @@ const total = subtotalSin + iva15 + ivaDiferenciado + valorICE + valorIRBPNR + p
       
       {/* === BLOQUE CORREGIDO: TOTAL / PAGADO / VUELTO EN VIVO === */}
       {(() => {
-        const pagado = (abonos.efectivo||0) + (abonos.transfer||0) + (abonos.tarjeta||0) + (abonos.credito||0)
+        const pagado = tipoCobro === "pendiente" || tipoCobro === "credito" ? 0 : (abonos.efectivo||0) + (abonos.transfer||0) + (abonos.tarjeta||0)
         const diff = pagado - total
         const falta = diff < -0.01
         const vuelto = diff > 0.01
@@ -1185,11 +1239,12 @@ const total = subtotalSin + iva15 + ivaDiferenciado + valorICE + valorIRBPNR + p
         )
       })()}
 
-      <div className="flex gap-2 mt-4">
-        <button onClick={()=>setTipoCobro('efectivo')} className={`flex-1 py-2 rounded-xl text-[11px] font-black ${tipoCobro==='efectivo'?"bg-[#00f5d4] text-black":"bg-white/10"}`}>EFECTIVO</button>
-        <button onClick={()=>setTipoCobro('tarjeta')} className={`flex-1 py-2 rounded-xl text-[11px] font-black ${tipoCobro==='tarjeta'?"bg-[#00f5d4] text-black":"bg-white/10"}`}>TARJETA</button>
-        <button onClick={()=>setTipoCobro('transfer')} className={`flex-1 py-2 rounded-xl text-[11px] font-black ${tipoCobro==='transfer'?"bg-[#00f5d4] text-black":"bg-white/10"}`}>TRANSF</button>
-        <button onClick={()=>setTipoCobro('credito')} className={`flex-1 py-2 rounded-xl text-[11px] font-black ${tipoCobro==='credito'?"bg-[#00f5d4] text-black":"bg-white/10"}`}>CREDITO</button>
+      <div className="flex gap-1 mt-4">
+        <button onClick={()=>setTipoCobro('efectivo')} className={`flex-1 py-2 rounded-xl text-[9px] font-black ${tipoCobro==='efectivo'?"bg-[#00f5d4] text-black":"bg-white/10"}`}>EFECTIVO</button>
+        <button onClick={()=>setTipoCobro('tarjeta')} className={`flex-1 py-2 rounded-xl text-[9px] font-black ${tipoCobro==='tarjeta'?"bg-[#00f5d4] text-black":"bg-white/10"}`}>TARJETA</button>
+        <button onClick={()=>setTipoCobro('transfer')} className={`flex-1 py-2 rounded-xl text-[9px] font-black ${tipoCobro==='transfer'?"bg-[#00f5d4] text-black":"bg-white/10"}`}>TRANSF</button>
+        <button onClick={()=>{ setTipoCobro('pendiente'); setAbonos({ efectivo: 0, transfer: 0, tarjeta: 0, credito: 0 }) }} className={`flex-1 py-2 rounded-xl text-[9px] font-black ${tipoCobro==='pendiente'?"bg-amber-300 text-black":"bg-white/10"}`}>PENDIENTE DE PAGO</button>
+        <button onClick={()=>{ setTipoCobro('credito'); setAbonos({ efectivo: 0, transfer: 0, tarjeta: 0, credito: 0 }); setValorCredito(total); setAvisoCredito("") }} className={`flex-1 py-2 rounded-xl text-[9px] font-black ${tipoCobro==='credito'?"bg-violet-400 text-black":"bg-white/10"}`}>CREDITO</button>
       </div>
 
       <div className="mt-4 bg-black/50 p-4 rounded-xl border border-white/10">
@@ -1291,14 +1346,53 @@ const total = subtotalSin + iva15 + ivaDiferenciado + valorICE + valorIRBPNR + p
             <button type="button" onClick={()=>setAbonos({...abonos, transfer: total - abonos.efectivo - abonos.tarjeta - abonos.credito})} className="text-[10px] bg-white/10 px-3 py-1 rounded-full">Usar saldo restante</button>
           </div>
         )}
-        {tipoCobro==='credito' && <input type="number" placeholder="Valor Crédito" className="w-full bg-[#1a2a44] p-3 rounded-xl font-black" value={abonos.credito||""} onChange={e=>setAbonos({...abonos, credito:Number(e.target.value)})} />}
+        {tipoCobro==='pendiente' && (
+          <div className="space-y-2 text-sm">
+            <div className="flex justify-between"><span>Total</span><b>${total.toFixed(2)}</b></div>
+            <div className="flex justify-between"><span>Pagado</span><b>$0.00</b></div>
+            <div className="flex justify-between text-amber-300 font-black"><span>Saldo Pendiente</span><b>${total.toFixed(2)}</b></div>
+            <select value={formaPendiente} onChange={(e) => setFormaPendiente(e.target.value)} className="w-full bg-[#1a2a44] p-3 rounded-xl text-xs">
+              <option value="01 - SIN UTILIZACION DEL SISTEMA FINANCIERO">01 - Sin utilización del sistema financiero</option>
+              <option value="20 - OTROS CON UTILIZACION DEL SISTEMA FINANCIERO">20 - Otros con utilización del sistema financiero</option>
+            </select>
+          </div>
+        )}
+        {tipoCobro==='credito' && (
+          <div className="space-y-2">
+            <div className="grid grid-cols-2 gap-2">
+              <label className="text-[10px]">Plazo<input type="number" min="1" value={plazoCredito || ""} onChange={(e) => setPlazoCredito(Number(e.target.value))} className="w-full bg-[#1a2a44] p-3 rounded-xl font-black" /></label>
+              <label className="text-[10px]">Unidad<select value={unidadPlazo} onChange={(e) => setUnidadPlazo(e.target.value as "Días" | "Meses")} className="w-full bg-[#1a2a44] p-3 rounded-xl"><option>Días</option><option>Meses</option></select></label>
+            </div>
+            <label className="text-[10px] block">Número de cuotas<input type="number" min="1" value={cuotasCredito || ""} onChange={(e) => setCuotasCredito(Number(e.target.value))} className="w-full bg-[#1a2a44] p-3 rounded-xl font-black" /></label>
+            <div className="text-xs">Fecha de vencimiento: <b>{plazoCredito > 0 ? fechaVencimientoCredito().toLocaleDateString("es-EC") : "—"}</b></div>
+            <label className="text-[10px] block">Valor Crédito<input type="number" value={valorCredito || total} onChange={(e) => setValorCredito(Number(e.target.value))} className="w-full bg-[#1a2a44] p-3 rounded-xl font-black" /></label>
+            {avisoCredito && <div className="text-red-400 text-xs font-black">{avisoCredito}</div>}
+          </div>
+        )}
       </div>
 
       {/* === BOTONES CORREGIDOS: PERMITEN VUELTO === */}
       <div className="grid grid-cols-2 gap-2 mt-4">
         <button onClick={()=>setCajaAbierta(false)} className="bg-white/10 p-4 rounded-xl">Cancelar</button>
         {(() => {
-          const pagado = (abonos.efectivo||0) + (abonos.transfer||0) + (abonos.tarjeta||0) + (abonos.credito||0)
+          if (tipoCobro === "pendiente") {
+            return <button type="button" disabled={bloqueoConsumidorFinal} onClick={() => {
+              setPagos({ efectivo: 0, redBancaria: 0, tarjeta: 0, credito: 0, cambio: 0 })
+              setPagoRealizado(true); setCajaAbierta(false)
+            }} className="bg-amber-300 text-black p-4 rounded-xl font-black text-[11px] disabled:opacity-40">CONFIRMAR PENDIENTE DE PAGO</button>
+          }
+          if (tipoCobro === "credito") {
+            return <button type="button" disabled={bloqueoConsumidorFinal} onClick={() => {
+              if (!(plazoCredito > 0) || !(cuotasCredito >= 1)) {
+                setAvisoCredito("Para crédito debes poner plazo y cuotas")
+                return
+              }
+              setAvisoCredito("")
+              setPagos({ efectivo: 0, redBancaria: 0, tarjeta: 0, credito: 0, cambio: 0 })
+              setPagoRealizado(true); setCajaAbierta(false)
+            }} className="bg-violet-400 text-black p-4 rounded-xl font-black text-[11px] disabled:opacity-40">CONFIRMAR CRÉDITO</button>
+          }
+          const pagado = (abonos.efectivo||0) + (abonos.transfer||0) + (abonos.tarjeta||0)
           const diff = pagado - total
           const falta = total - pagado
 
