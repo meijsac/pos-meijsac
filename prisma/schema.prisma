@@ -60,6 +60,19 @@ model Empresa {
   kardex          KardexMovimiento[]
   transferencias  TransferenciaInventario[]
   inventarioConfig InventarioConfig?
+  firmaElectronica FirmaElectronica?
+}
+
+model FirmaElectronica {
+  empresaId  String   @id
+  empresa    Empresa  @relation(fields: [empresaId], references: [id], onDelete: Cascade)
+  nombre     String
+  p12Cifrado String   @db.Text
+  titular    String   @default("")
+  expira     DateTime
+  updatedAt  DateTime @updatedAt
+
+  @@map("firma_electronica")
 }
 
 model DocumentoLegal {

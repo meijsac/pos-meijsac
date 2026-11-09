@@ -820,14 +820,19 @@ const total = subtotalSin + iva15 + ivaDiferenciado + valorICE + valorIRBPNR + p
     }
 
     try {
-      const guardado = await fetch("/api/facturas", { method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${localStorage.getItem("meijsac_token") || ""}` }, body: JSON.stringify({ ...facturaPendiente, estadoSRI: "EMITIDA" }) })
+      const guardado = await fetch("/api/facturas", { method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${localStorage.getItem("meijsac_token") || ""}` }, body: JSON.stringify({ ...facturaPendiente, estadoSRI: "PENDIENTE_DE_AUTORIZAR" }) })
       if (!guardado.ok) {
         const err = await guardado.json().catch(() => ({}))
-        alert(err.error || "No se pudo guardar la factura en la base.")
+        const faltan = Array.isArray(err.faltantes) ? `\n${err.faltantes.join("\n")}` : ""
+        alert((err.error || "No se pudo guardar la factura en la base.") + faltan)
         return
       }
       const guardada = await guardado.json().catch(() => ({}))
       facturaPendiente.facturaId = guardada.id
+      if (guardada.claveAcceso) facturaPendiente.claveAcceso = guardada.claveAcceso
+      if (guardada.xml) facturaPendiente.xmlContent = guardada.xml
+      facturaPendiente.estadoSRI = "PENDIENTE_DE_AUTORIZAR"
+      facturaPendiente.firmado = Boolean(guardada.firmado)
       const listaDoc = {
         id: guardada.id || facturaPendiente.id,
         facturaId: guardada.id,
@@ -838,7 +843,8 @@ const total = subtotalSin + iva15 + ivaDiferenciado + valorICE + valorIRBPNR + p
         receptorIdentificacion: facturaPendiente.cliente?.identificacion,
         receptorNombre: facturaPendiente.cliente?.razon,
         valorTotal: facturaPendiente.totales?.total,
-        estadoSRI: "EMITIDA",
+        estadoSRI: "PENDIENTE_DE_AUTORIZAR",
+        xmlContent: facturaPendiente.xmlContent || "",
         tipo_cobro: facturaPendiente.tipo_cobro,
         estado_pago: facturaPendiente.estado_pago,
         plazo: facturaPendiente.plazo,

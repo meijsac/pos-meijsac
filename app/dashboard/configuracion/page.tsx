@@ -171,11 +171,18 @@ export default function ConfiguracionAvanzadaSRI() {
         const pedido = new URLSearchParams(window.location.search).get("tab");
         if (pedido === "DOCUMENTOS") setTab("DOCUMENTOS");
     }, []);
+    useEffect(() => {
+        if (tab !== "AMBIENTE SRI") return;
+        let vivo = true;
+        fetch("/api/sri/conexion").then(r => r.json()).then(data => { if (vivo) setSriConexion(data) }).catch(() => {});
+        return () => { vivo = false };
+    }, [tab]);
     const [cfg, setCfg] = useState<any>(null);
     const [logs, setLogs] = useState<any[]>([]);
     const [infoFirma, setInfoFirma] = useState<any>(null);
     const [guardando, setGuardando] = useState(false);
     const [avisoLogo, setAvisoLogo] = useState("");
+    const [sriConexion, setSriConexion] = useState<any>(null);
     const firmaSubida = !!(cfg?.firma?.nombre || cfg?.firma?.expira || infoFirma?.ok);
 
     const handleFirmaChange = async (e:any) => {
@@ -199,7 +206,7 @@ export default function ConfiguracionAvanzadaSRI() {
 
   if(data.ok){
     // CLAVE CORRECTA: SÍ se guarda
-    setCfg((prev:any)=>({...prev, firma:{...prev.firma, nombre: file.name, expira: data.fechaExpiracion, diasRestantes: data.diasRestantes, rucDetectado: data.rucEnFirma}}));
+    setCfg((prev:any)=>({...prev, firma:{...prev.firma, clave: "", nombre: file.name, expira: data.fechaExpiracion, diasRestantes: data.diasRestantes, rucDetectado: data.rucEnFirma, guardada: data.guardada}}));
   } else {
     // CLAVE INCORRECTA: NO SE GUARDA NADA
     alert("❌ Clave incorrecta. La firma NO se guardó.");
@@ -253,6 +260,7 @@ export default function ConfiguracionAvanzadaSRI() {
         }
         delete payload.logoFile;
         delete payload.firmaFile;
+        if (payload.firma) payload.firma = { ...payload.firma, clave: "" };
 
         const res = await fetch("/api/configuracion", {
           method: "POST",
@@ -568,7 +576,7 @@ base.sucursales = datosReales.sucursales || base.sucursales || [];
                       </div>
                     )}
 
-                    <div><label className="text-[9px] text-white/40">Clave Firma.p12 * (oculto)</label><input type="password" value={cfg?.firma?.clave || ""} onChange={(e:any)=> setCfg((p:any)=>({...p, firma:{...p.firma, clave: e.target.value}}))} className="w-full bg-black border border-white/10 rounded p-2 text-[11px] text-white" /></div>
+                    <div><label className="text-[9px] text-white/40">Clave Firma.p12 * (oculto, no se guarda)</label><input type="password" value={cfg?.firma?.clave || ""} onChange={(e:any)=> setCfg((p:any)=>({...p, firma:{...p.firma, clave: e.target.value}}))} className="w-full bg-black border border-white/10 rounded p-2 text-[11px] text-white" /><p className="text-[8px] text-white/40 mt-1">Se usa solo para abrir el certificado. No queda en la base ni en el navegador al guardar.</p></div>
                   </div>
                 )}
                 
@@ -848,7 +856,7 @@ base.sucursales = datosReales.sucursales || base.sucursales || [];
 
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       <div
-                        onClick={()=> setCfg((p:any)=>({...p, ambiente:'PRUEBAS'}))}
+                        onClick={()=> setCfg((p:any)=>({...p, ambiente:'PRUEBAS', firma:{...p.firma, ambiente:'1'}}))}
                         className={`rounded-xl p-4 border-2 cursor-pointer transition-all ${
                           (cfg?.ambiente||'PRUEBAS')==='PRUEBAS'
                            ? 'bg-[#0f172a] border-[#00f5d4] shadow-[0_0_20px_rgba(0,245,212,0.3)] scale-[1.02]'
@@ -861,7 +869,7 @@ base.sucursales = datosReales.sucursales || base.sucursales || [];
                       </div>
 
                       <div
-                        onClick={() => { if(confirm("Activar PRODUCCION REAL? Las facturas tendran validez legal ante el SRI.")) setCfg((p:any)=>({...p, ambiente:"PRODUCCIÓN"})) }}
+                        onClick={() => { if(confirm("Activar PRODUCCION REAL? El XML usará las URLs de producción. No se envía nada hasta que lo autorices.")) setCfg((p:any)=>({...p, ambiente:"PRODUCCIÓN", firma:{...p.firma, ambiente:"2"}})) }}
                         className={`rounded-xl p-4 border-2 cursor-pointer transition-all ${
                           cfg?.ambiente==='PRODUCCIÓN'
                            ? 'bg-[#0f172a] border-[#00ff5d] shadow-[0_0_20px_rgba(0,255,93,0.4)] scale-[1.02]'
@@ -875,7 +883,12 @@ base.sucursales = datosReales.sucursales || base.sucursales || [];
                     </div>
 
                     <div className={`p-3 rounded-lg border text-[9px] ${cfg?.ambiente==='PRODUCCIÓN'?'bg-[#00ff5d]/10 border-[#00ff5d]/30 text-[#00ff5d]':'bg-[#00f5d4]/10 border-[#00f5d4]/20 text-[#00f5d4]'}`}>
-                      {cfg?.ambiente==='PRODUCCIÓN'? '⚠️ ESTÁS EN PRODUCCIÓN REAL - Cada factura se envía al SRI y genera XML autorizado.' : 'ℹ️ Estás en PRUEBAS - Ideal para configurar firma, RIDE y permisos sin riesgo.'}
+                      El envío al SRI está apagado. Elegir este ambiente solo cambia la URL que se usará cuando autorices el envío.
+                    </div>
+                    <div className="bg-black border border-white/10 rounded-xl p-3 text-[10px] space-y-1 break-all">
+                      <p className="text-white font-bold">Recepción: {SRI_URLS[((cfg?.ambiente==='PRODUCCIÓN' || cfg?.firma?.ambiente==='2') ? '2' : '1')].url}</p>
+                      <p className="text-white font-bold">Autorización: {SRI_URLS[((cfg?.ambiente==='PRODUCCIÓN' || cfg?.firma?.ambiente==='2') ? '2' : '1')].auth}</p>
+                      {sriConexion?.faltantes?.length ? <p className="text-red-400">{sriConexion.faltantes.join(". ")}</p> : sriConexion ? <p className="text-[#00f5d4]">Datos del emisor y certificado listos. La contraseña no está guardada: se pide al firmar.</p> : null}
                     </div>
                   </div>
                 )}

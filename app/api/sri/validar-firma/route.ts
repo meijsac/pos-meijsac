@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import * as forge from 'node-forge';
 import { prisma } from '@/lib/prisma';
+import { usuarioConEmpresaDesdeRequest } from '@/lib/empresa-sesion';
+import { encriptarBytes } from '@/lib/seguridad';
 
 export const dynamic = "force-dynamic"
 
@@ -57,7 +59,35 @@ if (ruc) {
   })
 }
 
+const sesion = await usuarioConEmpresaDesdeRequest(req)
+let guardada = false
+if (!("error" in sesion)) {
+  const bytes = Buffer.from(new Uint8Array(arrayBuffer))
+  await prisma.firmaElectronica.upsert({
+    where: { empresaId: sesion.empresa.id },
+    create: {
+      empresaId: sesion.empresa.id,
+      nombre: file.name || "firma.p12",
+      p12Cifrado: encriptarBytes(bytes),
+      titular: subject.slice(0, 300),
+      expira: fechaExp,
+    },
+    update: {
+      nombre: file.name || "firma.p12",
+      p12Cifrado: encriptarBytes(bytes),
+      titular: subject.slice(0, 300),
+      expira: fechaExp,
+    },
+  })
+  if (!ruc || ruc === sesion.empresa.ruc) {
+    await prisma.empresa.update({ where: { id: sesion.empresa.id }, data: { firmaExpira: fechaExp } })
+  }
+  guardada = true
+}
+
 return NextResponse.json({
+  guardada,
+  claveGuardada: false,
   ok: true,
   ruc: rucEmpresa,
   rucEnFirma: rucEnFirma,

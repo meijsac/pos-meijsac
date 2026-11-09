@@ -104,6 +104,14 @@ export function encriptar(texto: string) {
   return Buffer.concat([iv, tag, datos]).toString("base64")
 }
 
+export function encriptarBytes(binario: Buffer) {
+  return encriptar(binario.toString("base64"))
+}
+
+export function desencriptarBytes(paquete: string) {
+  return Buffer.from(desencriptar(paquete), "base64")
+}
+
 export function desencriptar(paquete: string) {
   const raw = Buffer.from(paquete, "base64")
   const iv = raw.subarray(0, 12)

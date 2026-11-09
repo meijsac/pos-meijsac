@@ -3,6 +3,9 @@ import { prisma } from "@/lib/prisma"
 import { usuarioConEmpresaDesdeRequest } from "@/lib/empresa-sesion"
 import { accesoEmpresa, ipDe, navegadorDe, puede, sanitizarTexto } from "@/lib/seguridad"
 import { anotarFacturaCaja } from "@/lib/login-memoria"
+import { FaltanDatosSri, armarXmlFactura } from "@/lib/sri/xml-factura"
+import { firmarFacturaXml } from "@/lib/sri/firmar"
+import { desencriptarBytes } from "@/lib/seguridad"
 
 export async function POST(req: Request) {
   try {
@@ -13,6 +16,35 @@ export async function POST(req: Request) {
     const caja = String(body?.caja || sesion.usuario.id)
     if (anotarFacturaCaja(caja, Date.now()) > 30) return NextResponse.json({ error: "Demasiadas facturas por minuto" }, { status: 429 })
     if (body?.cliente) body.cliente.razon = sanitizarTexto(body.cliente.razon)
+    const claveFirma = String(body?.claveFirma || "")
+    delete body.claveFirma
+    if (body?.firma) delete body.firma.clave
+    let armado: ReturnType<typeof armarXmlFactura>
+    try {
+      armado = armarXmlFactura(sesion.empresa, body)
+    } catch (e) {
+      if (e instanceof FaltanDatosSri) return NextResponse.json({ error: e.message, faltantes: e.faltantes }, { status: 400 })
+      throw e
+    }
+    let xml = armado.xml
+    let firmado = false
+    if (claveFirma) {
+      const firma = await prisma.firmaElectronica.findUnique({ where: { empresaId: sesion.empresa.id } })
+      if (!firma) return NextResponse.json({ error: "Falta el archivo .p12. Súbelo en Configuración, pestaña Firma." }, { status: 400 })
+      try {
+        xml = firmarFacturaXml(xml, desencriptarBytes(firma.p12Cifrado), claveFirma)
+        firmado = true
+      } catch (e: any) {
+        return NextResponse.json({ error: e.message || "No se pudo firmar el XML" }, { status: 400 })
+      }
+    }
+    body.claveAcceso = armado.claveAcceso
+    body.establecimiento = `${armado.estab}-${armado.pto}`
+    body.secuencial = armado.secuencial
+    body.xmlContent = xml
+    body.firmado = firmado
+    body.estadoSRI = "PENDIENTE_DE_AUTORIZAR"
+    body.envioSri = "APAGADO"
     body.auditoria = { ip: ipDe(req), dispositivo: navegadorDe(req), usuario: sesion.usuario.nombre, caja, fecha: new Date().toISOString() }
     const plazo = Number(body.plazo)
     const cuotas = Number(body.cuotas)
@@ -20,7 +52,7 @@ export async function POST(req: Request) {
     const factura = await prisma.facturaEmitida.create({
       data: {
         empresaId: sesion.empresa.id,
-        estado: String(body.estadoSRI || body.estado || "EMITIDA"),
+        estado: "PENDIENTE_DE_AUTORIZAR",
         payload: body,
         tipoCobro: body.tipo_cobro ? String(body.tipo_cobro) : null,
         estadoPago: body.estado_pago ? String(body.estado_pago) : null,
@@ -39,7 +71,14 @@ export async function POST(req: Request) {
         data: { datosRegistro: { ...prev, modo_negocio: body.modo_negocio } },
       })
     }
-    return NextResponse.json({ id: factura.id })
+    return NextResponse.json({
+      id: factura.id,
+      claveAcceso: armado.claveAcceso,
+      estado: "PENDIENTE_DE_AUTORIZAR",
+      xml,
+      firmado,
+      enviado: false,
+    })
   } catch (e: any) {
     return NextResponse.json({ error: e.message || "No se pudo guardar la factura" }, { status: 500 })
   }

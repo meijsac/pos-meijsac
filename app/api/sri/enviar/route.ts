@@ -1,0 +1,22 @@
+import { NextResponse } from "next/server"
+import { usuarioConEmpresaDesdeRequest } from "@/lib/empresa-sesion"
+import { codigoAmbiente } from "@/lib/sri/ambiente"
+import { enviarComprobante } from "@/lib/sri/soap"
+
+export const dynamic = "force-dynamic"
+
+export async function POST(req: Request) {
+  const sesion = await usuarioConEmpresaDesdeRequest(req)
+  if ("error" in sesion) return NextResponse.json({ error: sesion.error }, { status: sesion.status })
+  const body = await req.json().catch(() => ({}))
+  const extra = sesion.empresa.datosRegistro && typeof sesion.empresa.datosRegistro === "object" && !Array.isArray(sesion.empresa.datosRegistro)
+    ? sesion.empresa.datosRegistro as Record<string, unknown>
+    : {}
+  const resultado = await enviarComprobante({
+    xmlFirmado: String(body?.xml || body?.xmlFirmado || ""),
+    claveAcceso: String(body?.clave || body?.claveAcceso || ""),
+    ambiente: codigoAmbiente(extra.ambiente || extra.ambienteCodigo),
+  })
+  const status = resultado.bloqueado ? 403 : 200
+  return NextResponse.json({ ...resultado, estadoSRI: resultado.estado }, { status })
+}

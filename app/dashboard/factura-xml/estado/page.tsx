@@ -105,31 +105,17 @@ export default function EstadoSRI(){
     setModoNegocio(modo)
     const cobro = cobroGuardado(factura)
     const facturaConCobro = {...factura, formaPago: cobro.formaPago, montoEntregado: cobro.entregado, efectivoRecibido: cobro.efectivoRecibido, vuelto: cobro.vuelto, pagos: {...(factura.pagos||{}), ...cobro, cambio: cobro.vuelto, entregado: cobro.entregado}}
-    setData(facturaConCobro)
-    setTimeout(()=>{
-      const exito = Math.random() > 0.05
-      if(exito){
-        const final = {...facturaConCobro, numeroAutorizacion: factura.claveAcceso, fechaAutorizacion: new Date().toLocaleString('es-EC'), estado: "AUTORIZADO"}
-        setEstado("AUTORIZADO")
-        setData(final)
-        const hist = JSON.parse(localStorage.getItem("meijsac_facturas_emitidas")||"[]")
-        hist.push(final)
-        localStorage.setItem("meijsac_facturas_emitidas", JSON.stringify(hist))
-        localStorage.setItem("meijsac_ultima_factura_autorizada", JSON.stringify(final))
-        import("@/lib/plan-cliente").then(({ contarComprobante, rucLocal }) => {
-          contarComprobante(factura?.configEmisor?.ruc || rucLocal())
-        })
-        if(final.mesaOrigenId){
-          const mesas = JSON.parse(localStorage.getItem("meijsac_restaurante_mesas")||"[]")
-          localStorage.setItem("meijsac_restaurante_mesas", JSON.stringify(mesas.map((m:any)=> m.id===final.mesaOrigenId? {...m, estado:"LIBRE", items:[]} : m)))
-        }
-      } else {
-        setEstado("PENDIENTE")
-        const cola = JSON.parse(localStorage.getItem("meijsac_cola_sri")||"[]")
-        cola.push({...factura, intentos:1, proximoReintento: Date.now()+15*60*1000})
-        localStorage.setItem("meijsac_cola_sri", JSON.stringify(cola))
-      }
-    }, 2000)
+    const pendiente = { ...facturaConCobro, estado: "PENDIENTE_DE_AUTORIZAR", estadoSRI: "PENDIENTE_DE_AUTORIZAR" }
+    delete pendiente.numeroAutorizacion
+    delete pendiente.fechaAutorizacion
+    setData(pendiente)
+    setEstado("PENDIENTE")
+    const hist = JSON.parse(localStorage.getItem("meijsac_facturas_emitidas")||"[]")
+    hist.push(pendiente)
+    localStorage.setItem("meijsac_facturas_emitidas", JSON.stringify(hist))
+    import("@/lib/plan-cliente").then(({ contarComprobante, rucLocal }) => {
+      contarComprobante(factura?.configEmisor?.ruc || rucLocal())
+    })
   },[])
 
   const liberarMesaYVolver = (ruta: string) => {
@@ -251,7 +237,7 @@ export default function EstadoSRI(){
     }
     const cobro = cobroGuardado(d)
     const clave = String(d.claveAcceso || "")
-    const autorizacion = d.numeroAutorizacion ? String(d.numeroAutorizacion) : (estado === "AUTORIZADO" ? clave : "PENDIENTE DE AUTORIZACION")
+    const autorizacion = d.estado === "AUTORIZADO" && d.numeroAutorizacion ? String(d.numeroAutorizacion) : "PENDIENTE DE AUTORIZACION"
     const html = `<!DOCTYPE html><html><head><title>RIDE ${d.establecimiento}-${d.secuencial}</title>
     <style>
       @page { size: A4 portrait; margin: 8mm; }
@@ -378,7 +364,7 @@ export default function EstadoSRI(){
     <div class="b" style="background:#000;color:#fff;padding:4px;font-size:13px">VUELTO: $${cambio.toFixed(2)}</div>
     <div>EFECTIVO EN CAJA: $${entregado.toFixed(2)}</div>
     <div class="line"></div>
-    <div class="c" style="font-size:8px">Autorizado SRI: ${d.numeroAutorizacion}<br/>Consulte en SRI con clave 49</div>
+    <div class="c" style="font-size:8px">${d.estado === "AUTORIZADO" && d.numeroAutorizacion ? `Autorización SRI: ${d.numeroAutorizacion}` : "Pendiente de autorización SRI"}<br/>Clave de acceso de 49 dígitos</div>
     <div class="line"></div>
     <div class="c" style="font-size:9px;word-break:break-word">
     ----------------------------------------<br/>
@@ -388,11 +374,11 @@ export default function EstadoSRI(){
     const w=window.open("","_blank","width=320,height=600"); w?.document.write(html); w?.document.close(); w?.print()
   }
 
-  if(estado==="PROCESANDO") return <div className="min-h-screen bg-black text-[#00f5d4] flex items-center justify-center font-black">⏳ ENVIANDO XML FIRMADO AL SRI - Generando Clave 49...</div>
+  if(estado==="PROCESANDO") return <div className="min-h-screen bg-black text-[#00f5d4] flex items-center justify-center font-black">Guardando comprobante. No se envía al SRI.</div>
   if(estado==="PENDIENTE") return (
     <div className="min-h-screen bg-[#1a1500] p-6 text-white">
-      <div className="bg-yellow-500/20 border border-yellow-500 p-4 rounded-xl font-black text-xl">⏱️ PROCESANDO EN COLA - PENDIENTE DE AUTORIZACIÓN</div>
-      <p className="text-xs mt-2">SRI caído - Modo Offline permitido 72h. Clave: {data.claveAcceso}</p>
+      <div className="bg-yellow-500/20 border border-yellow-500 p-4 rounded-xl font-black text-xl">PENDIENTE DE AUTORIZACIÓN</div>
+      <p className="text-xs mt-2">El comprobante quedó guardado. No se envió al SRI. Clave: {data.claveAcceso}</p>
       <div className="grid grid-cols-2 gap-3 mt-6">
         <button onClick={imprimirRIDE} className="bg-white text-black p-4 rounded-xl font-black">📄 PDF A4 RIDE (BLOQUES A-F)</button>
         <button onClick={imprimirTicket} className="bg-[#00f5d4] text-black p-4 rounded-xl font-black">🧾 TICKET 80mm TÉRMICO</button>
