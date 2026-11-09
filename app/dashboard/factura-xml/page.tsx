@@ -2,8 +2,6 @@
 import { useState, useEffect, useRef } from "react"
 import Link from "next/link"
 import ModalCajaMixto from "./components/ModalCajaMixto"
-import { useTema } from "@/components/tema"
-import { CSS_RIDE, CSS_TICKET, PIE_PROVEEDOR, usd } from "@/lib/impresion-sri"
 
 const PROVINCIAS = {
    "PICHINCHA": ["QUITO", "CAYAMBE", "MEJÍA", "PEDRO MONCAYO", "PEDRO VICENTE MALDONADO", "PUERTO QUITO", "RUMIÑAHUI", "SAN MIGUEL DE LOS BANCOS"],
@@ -57,6 +55,13 @@ type Item = {
   tarifas?: {min:number, may:number, dist:number}
 }
 
+// === NUEVO BLOQUE PROVEEDOR SISTEMA - FICHA TECNICA SRI ===
+const PROVEEDOR_SISTEMA = {
+  nombre: "MEIJSAC POS",
+  ruc: "1793161234001", // <-- CAMBIA AQUI TU RUC REAL 13 DIGITOS
+  contacto: "https://meijsacpos.com - Soporte Quito"
+}
+
 const Chisme = ({texto, titulo}:{texto:string, titulo:string}) => (
   <div className="absolute -top-[58px] left-1/2 -translate-x-1/2 hidden group-hover:block z-50">
     <div className="bg-black border border-[#00f5d4] rounded-xl px-3 py-2 shadow-[0_0_20px_rgba(0,245,212,0.3)] min-w-[220px]">
@@ -72,8 +77,8 @@ export default function FacturadorXMLReal(){
   const [secuencial] = useState("000000015")
   const [establecimiento] = useState("001-001")
   const [configEmisor, setConfigEmisor] = useState<any>({})
-  const { claro, alternar } = useTema()
-  const isDark = !claro
+    // --- AGREGADO TEMA Y CLIENTE ---
+  const [isDark, setIsDark] = useState(true)
   const [showNuevoCliente, setShowNuevoCliente] = useState(false)
   const [buscandoSRI, setBuscandoSRI] = useState(false)
   const [nuevoCliForm, setNuevoCliForm] = useState({ razon:"", identificacion:"", direccion:"", email:"", telefono:"" })
@@ -85,13 +90,9 @@ export default function FacturadorXMLReal(){
     const c2 = localStorage.getItem("meijsac_config_facturacion")
     if(c1) setConfigEmisor(JSON.parse(c1))
     else if(c2) setConfigEmisor(JSON.parse(c2))
-    const pro = JSON.parse(localStorage.getItem("meijsac_config_pro") || "null")
-    setTransporteActivo(pro?.transporteActivo === true)
   },[])
 
 
-  const [transporteActivo, setTransporteActivo] = useState(false)
-  const [transportista, setTransportista] = useState({ ruc: "", placa: "", motivo: "" })
   const [cliente, setCliente] = useState<any>({
     tipoDoc:"05", identificacion:"9999999999999", razon:"CONSUMIDOR FINAL",
     tipold: "",
@@ -295,6 +296,8 @@ useEffect(()=>{
 },[cajaAbierta])
 
     useEffect(()=>{
+          const tema = localStorage.getItem("meijsac_factura_tema")
+    if(tema) setIsDark(tema === "dark")
     const transito = localStorage.getItem("meijsac_transito_factura")
     if(transito){
       try{
@@ -319,7 +322,11 @@ useEffect(()=>{
     }
   },[])
 
-    const toggleTema = () => alternar()
+    const toggleTema = ()=>{
+    const nuevo = !isDark
+    setIsDark(nuevo)
+    localStorage.setItem("meijsac_factura_tema", nuevo ? "dark" : "light")
+  }
 
 const manejarConsultaSRIExpress = async () => {
   const identificacion = cliente.identificacion.trim();
@@ -447,10 +454,8 @@ const ivaDiferenciado = iva5 + iva8 // + otros si usas 12%,13%,14%
 const propina = propinaCheck? subtotalSin*0.10 : 0
 const total = subtotalSin + iva15 + ivaDiferenciado + valorICE + valorIRBPNR + propina
   const esConsumidorFinal = cliente.identificacion === "9999999999999" || cliente.identificacion.trim() === "" || cliente.razon.toUpperCase().includes("CONSUMIDOR FINAL")
-  const superaLimiteSri = total >= 50
+  const superaLimiteSri = total > 50.00
   const ventaBloqueadaPorNormativa = esConsumidorFinal && superaLimiteSri
-  const avisoConsumidorFinal = "Según la norma del SRI, no se permite emitir facturas a Consumidor Final por valores iguales o superiores a $50.00"
-  const transporteIncompleto = transporteActivo && (!transportista.ruc.trim() || !transportista.placa.trim() || !transportista.motivo.trim())
 
   const sumaOtrosPagos = pagos.redBancaria + pagos.tarjeta + pagos.debito + pagos.compensacion + pagos.dineroElec + pagos.prepago + pagos.endoso
   const efectivoCalculado = total - sumaOtrosPagos
@@ -501,10 +506,10 @@ const total = subtotalSin + iva15 + ivaDiferenciado + valorICE + valorIRBPNR + p
     const clave = getClaveAcceso()
     const html = `
     <html><head><title>RIDE ${establecimiento}-${secuencial}</title>
-    <style>${CSS_RIDE}.t{font-size:16px;font-weight:900}</style>
+    <style>body{font-family:Arial;font-size:11px;color:#000}.borde{border:1px solid #000;padding:8px}.t{font-size:16px;font-weight:900} table{width:100%;border-collapse:collapse} td,th{border:1px solid #000;padding:4px;font-size:10px}</style>
     </head><body>
-    <table class="sinborde"><tr>
-      <td style="width:58%" class="borde">
+    <div style="display:flex;justify-content:space-between">
+      <div style="width:58%" class="borde">
         <div style="height:60px;border:1px dashed #aaa;display:flex;align-items:center;justify-content:center;font-size:9px">Logotipo Empresa</div>
         <div><b>${configEmisor.razon||"HERRERA VELOZ EDGAR FAVIAN"}</b></div>
         <div>${configEmisor.comercial||"EL VECINO - CEVICHERIA"}</div>
@@ -513,8 +518,8 @@ const total = subtotalSin + iva15 + ivaDiferenciado + valorICE + valorIRBPNR + p
         <div><b>Obligado Contabilidad:</b> ${configEmisor.obligado||"NO"}</div>
         <div><b>${configEmisor.regimen||"Contribuyente Régimen RIMPE Negocio Popular"}</b></div>
         ${configEmisor.agenteRet && configEmisor.agenteRet!=="NO"?`<div><b>Agente Retención Res. Nro:</b> ${configEmisor.agenteRet}</div>`:""}
-      </td>
-      <td style="width:42%" class="borde">
+      </div>
+      <div style="width:40%" class="borde">
         <div>RUC: <b>${configEmisor.ruc||"1707276760001"}</b></div>
         <div class="t">FACTURA</div>
         <div>No. ${establecimiento}-${secuencial}</div>
@@ -523,45 +528,45 @@ const total = subtotalSin + iva15 + ivaDiferenciado + valorICE + valorIRBPNR + p
         <div>Fecha y Hora Autorización: ${new Date().toLocaleString('es-EC')}</div>
         <div>Ambiente: ${configEmisor.ambiente||"PRODUCCIÓN"}</div>
         <div>Emisión: NORMAL</div>
-      </td>
-    </tr></table>
+      </div>
+    </div>
     <div class="borde" style="margin-top:8px">
       <div><b>Razón Social / Nombres:</b> ${cliente.razon} - <b>Identificación:</b> ${cliente.identificacion} - <b>Fecha Emisión:</b> ${fecha}</div>
       <div><b>Dirección:</b> ${cliente.direccion}</div>
       <div><b>Guía Remisión:</b> </div>
     </div>
     <table style="margin-top:8px"><tr><th>Cod. Principal</th><th>Cod. Auxiliar</th><th>Cant</th><th>Descripción</th><th>Detalle Adicional</th><th>Precio Unitario</th><th>Descuento</th><th>Precio Total</th></tr>
-    ${items.map(it=>`<tr><td>${it.codigo||""}</td><td></td><td>${it.cant||0}</td><td>${it.descripcion||""}</td><td>${it.detalleAdicional||""}</td><td>${usd(it.pUnit)}</td><td>${usd(it.descDolar||0)}</td><td>${usd((Number(it.cant)||0)*(Number(it.pUnit)||0)-(Number(it.descDolar)||0))}</td></tr>`).join("")}
+    ${items.map(it=>`<tr><td>${it.codigo}</td><td></td><td>${it.cant}</td><td>${it.descripcion}</td><td>${it.detalleAdicional||""}</td><td>${it.pUnit.toFixed(2)}</td><td>${(it.descDolar||0).toFixed(2)}</td><td>${(it.cant*it.pUnit-(it.descDolar||0)).toFixed(2)}</td></tr>`).join("")}
     </table>
-    <table class="sinborde" style="margin-top:8px"><tr>
-      <td style="width:58%" class="bloque">
+    <div style="display:flex;justify-content:space-between;margin-top:8px">
+      <div style="width:58%" class="borde">
         <b>Información Adicional</b><br/>
-        Dirección: ${cliente.direccion||""}<br/>
-        Teléfono: ${cliente.telefono||""} ${cliente.celular||""}<br/>
-        Email: ${cliente.email||""}<br/>
-        Provincia: ${cliente.provincia||""} Ciudad: ${cliente.ciudad||""}<br/>
-        ${transporteActivo ? `Transportista: ${transportista.ruc}<br/>Placa: ${transportista.placa}<br/>Motivo de traslado: ${transportista.motivo}<br/>` : ""}
-        <b style="display:block;margin-top:8px">${PIE_PROVEEDOR}</b>
-      </td>
-      <td style="width:42%" class="bloque">
-        <table>
-          ${Object.keys(CATALOGO_IVA_SRI).map(cod => {
-            const base = items.filter((it:any)=>it.codigoPorcentaje===cod).reduce((a:number,b:any)=>a+(Number(b.cant)||0)*(Number(b.pUnit)||0),0);
-            if(!base) return "";
-            return `<tr><td>SUBTOTAL ${CATALOGO_IVA_SRI[cod].label}</td><td style="text-align:right">${usd(base)}</td></tr>`;
-          }).join("")}
-          <tr><td>SUBTOTAL SIN IMPUESTOS</td><td style="text-align:right">${usd(items.reduce((a:number,b:any)=>a+(Number(b.cant)||0)*(Number(b.pUnit)||0),0))}</td></tr>
-          <tr><td>TOTAL DESCUENTO</td><td style="text-align:right">${usd(descuento)}</td></tr>
-          <tr><td>IVA 15%</td><td style="text-align:right">${usd(iva15)}</td></tr>
-          <tr><td>PROPINA 10%</td><td style="text-align:right">${usd(propina)}</td></tr>
-          <tr><td><b>VALOR TOTAL</b></td><td style="text-align:right"><b>${usd(total)}</b></td></tr>
-          <tr><td>EFECTIVO</td><td style="text-align:right">${usd(pagosReales.efectivo)}</td></tr>
-          ${pagos.redBancaria>0?`<tr><td>OTROS 20</td><td style="text-align:right">${usd(pagos.redBancaria)}</td></tr>`:""}
-          ${pagos.tarjeta>0?`<tr><td>TARJETA 19</td><td style="text-align:right">${usd(pagos.tarjeta)}</td></tr>`:""}
-          <tr><td>CAMBIO</td><td style="text-align:right">${usd(pagos.cambio||0)}</td></tr>
-        </table>
-      </td>
-    </tr></table>
+        Dirección: ${cliente.direccion}<br/>
+        Teléfono: ${cliente.telefono} ${cliente.celular}<br/>
+        Email: ${cliente.email}<br/>
+        Provincia: ${cliente.provincia} Ciudad: ${cliente.ciudad}<br/>
+        Vendedor: POS QUITO<br/><br/>
+        <b style="border:1px solid #000;padding:4px;display:block">Proveedor del Sistema: ${PROVEEDOR_SISTEMA.nombre} - RUC Proveedor: ${PROVEEDOR_SISTEMA.ruc} - Contacto: ${PROVEEDOR_SISTEMA.contacto}</b>
+      </div>
+      <div style="width:40%" class="borde">
+  ${Object.keys(CATALOGO_IVA_SRI).map(cod => {
+    const base = items.filter((it:any)=>it.codigoPorcentaje===cod).reduce((a:any,b:any)=>a+(b.cant*b.pUnit),0);
+    if(base===0) return "";
+    return `<div>SUBTOTAL ${CATALOGO_IVA_SRI[cod].label}: $${base.toFixed(2)}</div>`;
+  }).join("")}
+  <div>SUBTOTAL SIN IMPUESTOS: $${(items.reduce((a:any,b:any)=>a+(b.cant*b.pUnit),0)).toFixed(2)}</div>
+  <div>TOTAL DESCUENTO: $${descuento.toFixed(2)}</div>
+  <div>IVA TOTAL: $${(items.reduce((a:any,b:any)=>a+(b.cant*b.pUnit*b.tarifa/100),0).toFixed(2))}</div>
+  <div>IVA 15%: $${items.filter((it:any)=>it.codigoPorcentaje==="4").reduce((a:any,b:any)=>a+(b.cant*b.pUnit*b.tarifa/100),0).toFixed(2)}</div>
+  <div>IVA 8% Turismo: $${items.filter((it:any)=>it.codigoPorcentaje==="8").reduce((a:any,b:any)=>a+(b.cant*b.pUnit*b.tarifa/100),0).toFixed(2)}</div>
+  <div>PROPINA 10%: $${propina.toFixed(2)}</div>
+  <div style="font-size:14px;font-weight:900">VALOR TOTAL: $${total.toFixed(2)}</div>
+</div>
+<div style="font-size:13px">EFECTIVO RECIBIDO: $${(pagosReales.efectivo + (pagos.cambio||0)).toFixed(2)}</div>
+<div style="font-size:14px;font-weight:900;background:#000;color:#fff;padding:4px">CAMBIO / VUELTO: $${(pagos.cambio||0).toFixed(2)}</div>
+<div style="margin-top:6px"><b>Forma Pago</b><br/>01: $${pagosReales.efectivo.toFixed(2)}<br/>${pagos.redBancaria>0?`20: $${pagos.redBancaria.toFixed(2)}<br/>`:""}${pagos.tarjeta>0?`19: $${pagos.tarjeta.toFixed(2)}<br/>`:""}</div>
+      </div>
+    </div>
     </body></html>`
     const w=window.open("","_blank"); w?.document.write(html); w?.document.close(); w?.print()
   }
@@ -570,7 +575,7 @@ const total = subtotalSin + iva15 + ivaDiferenciado + valorICE + valorIRBPNR + p
     const clave = getClaveAcceso()
     const html = `
     <html><head><title>TICKET ${secuencial}</title>
-    <style>${CSS_TICKET}</style>
+    <style>@page{size:80mm auto;margin:2mm} body{width:80mm;font-family:monospace;font-size:11px;color:#000}.c{text-align:center}.b{font-weight:900}.line{border-top:1px dashed #000;margin:4px 0}</style>
     </head><body>
     <div class="c b">${configEmisor.comercial||"EL VECINO"}</div>
     <div class="c">${configEmisor.razon||"HERRERA VELOZ EDGAR FAVIAN"}</div>
@@ -585,20 +590,21 @@ const total = subtotalSin + iva15 + ivaDiferenciado + valorICE + valorIRBPNR + p
     <div>RUC/CI: ${cliente.identificacion}</div>
     <div>Email: ${cliente.email}</div>
     <div class="line"></div>
-    ${items.map(it=>`<div class="row"><span class="nombre">${it.cant||0} x ${it.descripcion||""}</span><span class="monto">${usd((Number(it.cant)||0)*(Number(it.pUnit)||0)-(Number(it.descDolar)||0))}</span></div>`).join("")}
+    ${items.map(it=>`<div>${it.cant} x ${it.descripcion}<br/><div style="display:flex;justify-content:space-between"><span>P.Unit:${it.pUnit.toFixed(2)} Desc:${(it.descDolar||0).toFixed(2)}</span><span>Total:${(it.cant*it.pUnit-(it.descDolar||0)).toFixed(2)}</span></div></div>`).join("")}
     <div class="line"></div>
-    <div class="row"><span class="nombre">SUBTOTAL 15%</span><span class="monto">${usd(base15)}</span></div>
-    <div class="row"><span class="nombre">SUBTOTAL 0%</span><span class="monto">${usd(base0)}</span></div>
-    <div class="row"><span class="nombre">IVA 15%</span><span class="monto">${usd(iva15)}</span></div>
-    <div class="row"><span class="nombre">PROPINA</span><span class="monto">${usd(propina)}</span></div>
-    <div class="row b"><span class="nombre">TOTAL</span><span class="monto">${usd(total)}</span></div>
-    ${transporteActivo ? `<div class="line"></div><div class="nombre">Transportista: ${transportista.ruc}<br/>Placa: ${transportista.placa}<br/>Motivo: ${transportista.motivo}</div>` : ""}
+    <div>SUBTOTAL 15%: $${base15.toFixed(2)}</div>
+    <div>SUBTOTAL 0%: $${base0.toFixed(2)}</div>
+    <div>IVA 15%: $${iva15.toFixed(2)}</div>
+    <div>PROPINA: $${propina.toFixed(2)}</div>
+    <div class="b" style="font-size:13px">TOTAL: $${total.toFixed(2)}</div>
     <div class="line"></div>
-    <div class="row"><span class="nombre">EFECTIVO (01)</span><span class="monto">${usd(pagosReales.efectivo)}</span></div>
-    ${pagos.redBancaria>0?`<div class="row"><span class="nombre">OTROS (20) ${refTransfer}</span><span class="monto">${usd(pagos.redBancaria)}</span></div>`:""}
-    ${pagos.tarjeta>0?`<div class="row"><span class="nombre">TARJETA (19) ${refTarjeta}</span><span class="monto">${usd(pagos.tarjeta)}</span></div>`:""}
+    <div>FORMA PAGO SRI TABLA 24</div>
+    <div>EFECTIVO (01): $${pagosReales.efectivo.toFixed(2)} ${vueltoReal>0?`Vuelto: $${vueltoReal.toFixed(2)}`:""}</div>
+    ${pagos.redBancaria>0?`<div>OTROS (20): $${pagos.redBancaria.toFixed(2)} Ref:${refTransfer}</div>`:""}
+    ${pagos.tarjeta>0?`<div>TARJETA (19): $${pagos.tarjeta.toFixed(2)} Ref:${refTarjeta}</div>`:""}
+    ${tipoCobro==='credito'?`<div>CREDITO (20) Plazo:${plazoElegido}d Vence:${new Date(Date.now()+plazoElegido*86400000).toLocaleDateString()}</div>`:""}
     <div class="line"></div>
-    <div class="c" style="font-size:8px;word-break:break-word">${PIE_PROVEEDOR}</div>
+    <div class="c" style="font-size:8px">Consulte validez en portal SRI con clave 49 dígitos<br/>Factura hecha con ${PROVEEDOR_SISTEMA.nombre} - RUC ${PROVEEDOR_SISTEMA.ruc}<br/>${PROVEEDOR_SISTEMA.contacto}</div>
     </body></html>`
     const w=window.open("","_blank","width=320,height=600"); w?.document.write(html); w?.document.close(); w?.print()
   }
@@ -624,8 +630,6 @@ const total = subtotalSin + iva15 + ivaDiferenciado + valorICE + valorIRBPNR + p
   
   
   const emitirComprobante = async () => {
-    if (ventaBloqueadaPorNormativa) return alert(avisoConsumidorFinal)
-    if (transporteIncompleto) return alert("Completa RUC, placa y motivo de traslado del transportista")
     if(!pagoRealizado) return alert("Primero cobra en CAJA")
     const { emisionBloqueada, rucLocal } = await import("@/lib/plan-cliente")
     const avisoPlan = await emisionBloqueada(configEmisor?.ruc || rucLocal())
@@ -649,7 +653,6 @@ const total = subtotalSin + iva15 + ivaDiferenciado + valorICE + valorIRBPNR + p
       secuencial: secuencial,
       configEmisor: configEmisor,
       cliente: cliente,
-      transportista: transporteActivo ? transportista : null,
       items: items,
       totales: { bruto, descuento, subtotalSin, base15, base0, baseNoObjeto, baseExento, baseDiferenciado, valorICE, valorIRBPNR, iva15, ivaDiferenciado, propina, total },
       pagos: pagosReales,
@@ -1109,24 +1112,14 @@ const total = subtotalSin + iva15 + ivaDiferenciado + valorICE + valorIRBPNR + p
           </div>
 
           {/* === BOTONES ORIGINALES + BORRADOR + NUEVOS PDF Y TICKET === */}
-{transporteActivo && (
-  <div className="mt-3 grid grid-cols-3 gap-2">
-    <input value={transportista.ruc} onChange={e=>setTransportista({...transportista, ruc:e.target.value})} placeholder="RUC/CI transportista" className="bg-black border border-white/10 p-2 rounded-xl text-[11px]" />
-    <input value={transportista.placa} onChange={e=>setTransportista({...transportista, placa:e.target.value.toUpperCase()})} placeholder="Placa" className="bg-black border border-white/10 p-2 rounded-xl text-[11px]" />
-    <input value={transportista.motivo} onChange={e=>setTransportista({...transportista, motivo:e.target.value})} placeholder="Motivo de traslado" className="bg-black border border-white/10 p-2 rounded-xl text-[11px]" />
-  </div>
-)}
-{ventaBloqueadaPorNormativa && (
-  <div className="mt-3 bg-amber-500/20 border border-amber-400 text-amber-100 text-[11px] p-3 rounded-xl font-bold">{avisoConsumidorFinal}</div>
-)}
 <div className="grid grid-cols-3 gap-2 mt-3">
-  <button type="button" onClick={() => { if (ventaBloqueadaPorNormativa) return alert(avisoConsumidorFinal); setCajaAbierta(true) }} disabled={ventaBloqueadaPorNormativa} className={`font-black py-3 rounded-xl text-xs ${ventaBloqueadaPorNormativa ? "bg-white/10 text-white/30" : "bg-[#00f5d4] text-black"}`}>
+  <button onClick={() => setCajaAbierta(true)} className="bg-[#00f5d4] text-black font-black py-3 rounded-xl text-xs">
     CAJA Y COBRO
   </button>
   <button onClick={() => guardarComoBorrador()} className="bg-[#ffbe0a] text-black font-black py-3 rounded-xl text-xs">
     📝 BORRADOR
   </button>
-  <button type="button" onClick={() => emitirComprobante()} disabled={!pagoRealizado || ventaBloqueadaPorNormativa || transporteIncompleto} className={`font-black py-3 rounded-xl text-xs ${pagoRealizado && !ventaBloqueadaPorNormativa && !transporteIncompleto ? 'bg-white text-black' : 'bg-white/10 text-white/20'}`}>
+  <button onClick={() => emitirComprobante()} disabled={!pagoRealizado} className={`font-black py-3 rounded-xl text-xs ${pagoRealizado? 'bg-white text-black' : 'bg-white/10 text-white/20'}`}>
     EMITIR
   </button>
 </div>
@@ -1135,7 +1128,7 @@ const total = subtotalSin + iva15 + ivaDiferenciado + valorICE + valorIRBPNR + p
             <button onClick={imprimirTicket} className="bg-black border border-white/20 font-black py-2 rounded-xl text-[10px]">🧾 TICKET 80mm TERMICO</button>
           </div>
           <div className="mt-2 text-[8px] opacity-40 p-2 bg-black rounded border border-white/10">
-            Clave 49: {getClaveAcceso()} | {PIE_PROVEEDOR}
+            Clave 49: {getClaveAcceso()} | Proveedor: {PROVEEDOR_SISTEMA.nombre} RUC {PROVEEDOR_SISTEMA.ruc}
           </div>
 
           {cajaAbierta && (
@@ -1282,22 +1275,20 @@ const total = subtotalSin + iva15 + ivaDiferenciado + valorICE + valorIRBPNR + p
           }
           if (diff > 0.01) {
             return (
-              <button type="button" disabled={ventaBloqueadaPorNormativa} onClick={()=>{
-                if (ventaBloqueadaPorNormativa) return alert(avisoConsumidorFinal)
+              <button onClick={()=>{
                 const cambio = diff
                 setPagos({efectivo:abonos.efectivo - cambio, redBancaria:abonos.transfer, tarjeta:abonos.tarjeta, credito:abonos.credito, cambio:cambio})
                 setPagoRealizado(true); setCajaAbierta(false)
-              }} className="bg-[#00f5d4] text-black p-4 rounded-xl font-black text-[11px] shadow-[0_0_20px_rgba(0,245,212,0.6)] disabled:opacity-40">
+              }} className="bg-[#00f5d4] text-black p-4 rounded-xl font-black text-[11px] shadow-[0_0_20px_rgba(0,245,212,0.6)]">
                 ✓ ENTREGAR VUELTO ${diff.toFixed(2)}
               </button>
             )
           }
           return (
-            <button type="button" disabled={ventaBloqueadaPorNormativa} onClick={()=>{
-              if (ventaBloqueadaPorNormativa) return alert(avisoConsumidorFinal)
+            <button onClick={()=>{
               setPagos({efectivo:abonos.efectivo, redBancaria:abonos.transfer, tarjeta:abonos.tarjeta, credito:abonos.credito, cambio:0})
               setPagoRealizado(true); setCajaAbierta(false)
-            }} className="bg-[#00f5d4] text-black p-4 rounded-xl font-black disabled:opacity-40">
+            }} className="bg-[#00f5d4] text-black p-4 rounded-xl font-black">
               ✓ CONFIRMAR PAGO MIXTO
             </button>
           )

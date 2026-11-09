@@ -1,7 +1,6 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
-import { TemaProvider } from "@/components/tema";
 
 const geistSans = Geist({ variable: "--font-geist-sans", subsets: ["latin"] });
 const geistMono = Geist_Mono({ variable: "--font-geist-mono", subsets: ["latin"] });
@@ -13,14 +12,9 @@ export const metadata: Metadata = {
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="es">
+    <html lang="en">
       <body className={`${geistSans.variable} ${geistMono.variable} antialiased`}>
-        <script
-          dangerouslySetInnerHTML={{
-            __html: `try{if(localStorage.getItem("meijsac_tema")==="claro")document.documentElement.dataset.theme="claro"}catch(e){}`,
-          }}
-        />
-        <TemaProvider>{children}</TemaProvider>
+        {children}
       </body>
     </html>
   );

@@ -24,35 +24,3 @@ body {
   color: var(--foreground);
   font-family: Arial, Helvetica, sans-serif;
 }
-
-html[data-theme="claro"] body {
-  background: #f8fafc;
-  color: #0f172a;
-}
-
-html[data-theme="claro"] .min-h-screen {
-  background-color: #f8fafc !important;
-  color: #0f172a !important;
-}
-
-html[data-theme="claro"] .min-h-screen .text-white {
-  color: #0f172a !important;
-}
-
-html[data-theme="claro"] .min-h-screen .bg-black,
-html[data-theme="claro"] .min-h-screen .bg-white\/5,
-html[data-theme="claro"] .min-h-screen .bg-white\/10 {
-  background-color: #ffffff !important;
-  color: #0f172a !important;
-  border-color: #e2e8f0 !important;
-}
-
-html[data-theme="claro"] .min-h-screen .border-white\/10,
-html[data-theme="claro"] .min-h-screen .border-white\/20 {
-  border-color: #e2e8f0 !important;
-}
-
-html[data-theme="claro"] .bg-\[\#00f5d4\],
-html[data-theme="claro"] .bg-\[\#00f5d4\] * {
-  color: #042f2e !important;
-}

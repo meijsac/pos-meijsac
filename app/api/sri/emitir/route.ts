@@ -62,16 +62,6 @@ function crearClaveAcceso(p: PayloadFacturaSRI, fechaStr: string): string {
 export async function POST(request: Request) {
   try {
     const body: PayloadFacturaSRI = await request.json();
-    const totalFactura = (body.items || []).reduce((suma, item) => {
-      const base = Number(item.cantidad) * Number(item.precioUnitario) - Number(item.descuento || 0)
-      const tarifa = CATALOGO_IVA_SRI[item.codigoPorcentaje]?.tarifa ?? 15
-      const iva = item.codigoPorcentaje === "6" || item.codigoPorcentaje === "7" ? 0 : base * (tarifa / 100)
-      return suma + (Number.isFinite(base) ? base : 0) + (Number.isFinite(iva) ? iva : 0)
-    }, 0)
-    const esConsumidorFinal = String(body.clienteRuc || "") === "9999999999999" || String(body.clienteNombre || "").toUpperCase().includes("CONSUMIDOR FINAL")
-    if (esConsumidorFinal && totalFactura >= 50) {
-      return NextResponse.json({ success: false, error: "Según la norma del SRI, no se permite emitir facturas a Consumidor Final por valores iguales o superiores a $50.00" }, { status: 400 })
-    }
     const fechaEmision = new Date().toLocaleDateString("es-EC", { day: "2-digit", month: "2-digit", year: "numeric" });
     const claveAcceso = crearClaveAcceso(body, fechaEmision);
 

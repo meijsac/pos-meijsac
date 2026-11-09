@@ -2,7 +2,6 @@
 import { useState, useEffect } from "react";
 import { feriadosIvaReducido } from '@/lib/iva-feriados.config';
 import { cargarEmpresaSesion } from "@/lib/sesion-cliente";
-import { BotonTema } from "@/components/tema";
 
 const SRI_URLS = {
     "1": { nombre: "PRUEBAS", url: "https://celcer.sri.gob.ec/comprobantes-electronicos-ws/RecepcionComprobantesOffline?wsdl", auth: "https://celcer.sri.gob.ec/comprobantes-electronicos-ws/AutorizacionComprobantesOffline?wsdl" },
@@ -173,7 +172,6 @@ if(datosReales.direccion && !datosReales.dirMatriz) datosReales.dirMatriz = dato
     actividad: datosReales.actividad || datosReales.actividadEconomica || "",
     // === SUCURSALES: YA NO FIJAS, VIENEN DEL CLIENTE O VACÍAS ===
     sucursales: datosReales.sucursales || [],
-    transporteActivo: datosReales.transporteActivo === true,
     firma: { nombre: "", clave: "", expira: "", diasRestantes: null, ambiente: "1", ws: "celcer.sri.gob.ec" },
     secuenciales: [
       { estab: "001", pto: "001", codigo:"01", tipo: "01 FACTURA", ultimo: "00000125", alerta: 50, estado: "ACTIVO" },
@@ -296,7 +294,7 @@ base.sucursales = datosReales.sucursales || base.sucursales || [];
         MEIJSAC POS - CENTRO DE CONTROL MODULAR SRI - <span className={`${cfg?.ambiente==='PRODUCCIÓN'? 'text-[#00ff5d]' : 'text-[#00f5d4]'}`}>{cfg?.ambiente || 'PRUEBAS'}</span>
       </h1>
     </div>
-    <div className="flex gap-2"><BotonTema /><button onClick={() => location.href = '/dashboard'} className="bg-white/10 px-4 py-2 rounded-xl text-xs">← Dashboard</button></div>
+    <button onClick={() => location.href = '/dashboard'} className="bg-white/10 px-4 py-2 rounded-xl text-xs">← Dashboard</button>
 </div>
 
 
@@ -380,7 +378,6 @@ base.sucursales = datosReales.sucursales || base.sucursales || [];
                             <div><label className="text-[9px] text-white/40">Teléfono Empresa * RIDE</label><input value={cfg.telefono || ""} onChange={e => setCfg({ ...cfg, telefono: e.target.value })} placeholder="099..." className="w-full bg-black p-3 rounded-xl border border-white/10 text-sm" /></div>
                             <div><label className="text-[9px] text-white/40">Email Empresa * RIDE</label><input value={cfg.email || ""} onChange={e => setCfg({ ...cfg, email: e.target.value })} placeholder="ventas@meijsac.com" className="w-full bg-black p-3 rounded-xl border border-white/10 text-sm" /></div>
                             <div className="md:col-span-3"><label className="text-[9px] text-white/40">Actividad Económica Principal (RIDE Pie)</label><input value={cfg.actividad || ""} onChange={e => setCfg({ ...cfg, actividad: e.target.value.toUpperCase() })} placeholder="VENTA AL POR MENOR DE ALIMENTOS" className="w-full bg-black p-3 rounded-xl border border-white/10 text-sm uppercase" /></div>
-                            <div className="md:col-span-3"><label className="flex items-center gap-2 text-[11px]"><input type="checkbox" checked={cfg.transporteActivo === true} onChange={e => { const transporteActivo = e.target.checked; const next = { ...cfg, transporteActivo }; setCfg(next); localStorage.setItem("meijsac_config_pro", JSON.stringify(next)); }} /> Empresa de Transporte (desactivado por defecto). Si lo activas, la factura pide RUC, placa y motivo de traslado.</label></div>
                             <div><label className="text-[9px] text-white/40">Régimen SRI</label><select value={cfg.regimen} onChange={e => setCfg({ ...cfg, regimen: e.target.value })} className="w-full bg-black p-3 rounded-xl text-sm border border-white/10"><option>RIMPE EMPRENDEDOR</option><option>RIMPE NEGOCIO POPULAR</option><option>REGIMEN GENERAL</option></select></div>
                             <div><label className="text-[9px] text-white/40">Obligado Contabilidad</label><select value={cfg.obligadoConta} onChange={e => setCfg({ ...cfg, obligadoConta: e.target.value })} className="w-full bg-black p-3 rounded-xl text-sm border border-white/10"><option>SI</option><option>NO</option></select></div>
                             <div className="md:col-span-2"><label className="text-[9px] text-white/40">Dirección Matriz SRI</label><input value={cfg.dirMatriz} onChange={e => setCfg({ ...cfg, dirMatriz: e.target.value })} className="w-full bg-black p-3 rounded-xl text-sm border border-white/10" /></div>

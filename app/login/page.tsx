@@ -4,14 +4,15 @@ import { SplashMeijsac } from "@/components/auth/SplashMeijsac";
 import { AuthCard } from "@/components/auth/AuthCard";
 import { RegisterEmpresa } from "@/components/auth/RegisterEmpresa";
 import { EsisaAvatar } from "@/components/EsisaAvatar";
-import { useTema } from "@/components/tema";
 
 export default function HomePage() {
   const [mostrarSplash, setMostrarSplash] = useState(true);
   const [isRegistering, setIsRegistering] = useState(false);
   
-  const { claro, alternar } = useTema()
-  const dark = !claro
+  // Volvemos a tu original, sin ThemeProvider
+  const dark = true;
+
+  const setDark = () => {};
 
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -29,7 +30,7 @@ export default function HomePage() {
       {!isRegistering ? (
         <AuthCard 
           dark={dark} 
-          setDark={alternar} 
+          setDark={setDark} 
           onOpenRegister={() => setIsRegistering(true)} 
         />
       ) : (
