@@ -14,15 +14,24 @@ function numeroGuardado(v: unknown): number | null {
 function cobroGuardado(d: any) {
   const pagos = d?.pagos || {}
   const total = numeroGuardado(d?.totales?.total) ?? 0
-  const vuelto = numeroGuardado(pagos.vuelto) ?? numeroGuardado(pagos.cambio) ?? 0
-  const efectivoNeto = numeroGuardado(typeof pagos.efectivo === "object" ? pagos.efectivo?.monto : pagos.efectivo) ?? 0
-  const efectivoRecibido = numeroGuardado(pagos.efectivoRecibido) ?? numeroGuardado(d?.efectivoRecibido) ?? (efectivoNeto + vuelto)
-  const entregadoGuardado = numeroGuardado(pagos.entregado) ?? numeroGuardado(d?.montoEntregado)
-  const entregado = entregadoGuardado !== null && entregadoGuardado > 0
-    ? entregadoGuardado
-    : (efectivoRecibido > 0 ? efectivoRecibido : total)
+  const caja = d?.caja || {}
+  const sumaCaja = [caja.efectivo, caja.transfer, caja.tarjeta, caja.credito].reduce((s: number, v: unknown) => s + (numeroGuardado(v) ?? 0), 0)
+  let entregado = numeroGuardado(d?.montoEntregado) ?? numeroGuardado(pagos.entregado)
+  let vuelto = numeroGuardado(d?.vuelto) ?? numeroGuardado(pagos.vuelto) ?? numeroGuardado(pagos.cambio) ?? 0
+  if (sumaCaja > 0) {
+    entregado = Math.round(sumaCaja * 100) / 100
+    vuelto = sumaCaja > total + 0.009 ? Math.round((sumaCaja - total) * 100) / 100 : 0
+  } else if (entregado !== null && vuelto > 0 && Math.abs(entregado - vuelto) < 0.02) {
+    entregado = Math.round((total + vuelto) * 100) / 100
+  } else if (entregado === null || entregado + 0.009 < total) {
+    entregado = total
+    vuelto = 0
+  }
+  if (vuelto > 0 && entregado !== null && Math.abs(entregado - vuelto) < 0.02) {
+    entregado = Math.round((total + vuelto) * 100) / 100
+  }
   const formaPago = pagos.formaPago || d?.formaPago || FORMA_PAGO_DEFECTO
-  return { formaPago, entregado, efectivoRecibido: efectivoRecibido > 0 ? efectivoRecibido : entregado, vuelto }
+  return { formaPago, entregado: entregado ?? total, efectivoRecibido: entregado ?? total, vuelto }
 }
 
 export default function EstadoSRI(){
@@ -165,25 +174,6 @@ export default function EstadoSRI(){
     }
     const usd = (n: number) => `$${n.toFixed(2)}`
     const cobro = cobroGuardado(d)
-    const formas: { codigo: string, nombre: string, monto: number }[] = []
-    const sumarForma = (codigo: string, nombre: string, valor: unknown) => {
-      const monto = numFinito(valor)
-      if (monto !== null && monto > 0) formas.push({ codigo, nombre, monto })
-    }
-    const efectivo = numFinito(d.pagos?.efectivo && typeof d.pagos.efectivo === "object" ? d.pagos.efectivo.monto : d.pagos?.efectivo)
-    sumarForma("01", "SIN UTILIZACION DEL SISTEMA FINANCIERO", efectivo)
-    sumarForma("15", "COMPENSACION DE DEUDAS", d.pagos?.compensacion)
-    sumarForma("16", "TARJETA DE DEBITO", d.pagos?.debito)
-    sumarForma("17", "DINERO ELECTRONICO", d.pagos?.dineroElec)
-    sumarForma("18", "TARJETA PREPAGO", d.pagos?.prepago)
-    sumarForma("19", "TARJETA DE CREDITO", d.pagos?.tarjeta)
-    const red = numFinito(d.pagos?.redBancaria)
-    const credito = numFinito(d.pagos?.credito)
-    if (red !== null || credito !== null) sumarForma("20", "OTROS CON UTILIZACION DEL SISTEMA FINANCIERO", (red ?? 0) + (credito ?? 0))
-    sumarForma("21", "ENDOSO DE TITULOS", d.pagos?.endoso)
-    if (formas.length === 0) formas.push({ codigo: "", nombre: cobro.formaPago, monto: cobro.entregado })
-    const entregado = cobro.entregado
-    const cambio = cobro.vuelto
     const clave = String(d.claveAcceso || "")
     const autorizacion = d.numeroAutorizacion ? String(d.numeroAutorizacion) : (estado === "AUTORIZADO" ? clave : "PENDIENTE DE AUTORIZACION")
     const html = `<!DOCTYPE html><html><head><title>RIDE ${d.establecimiento}-${d.secuencial}</title>
@@ -216,7 +206,7 @@ export default function EstadoSRI(){
     </style></head><body>
     <div class="top">
       <div class="izq borde">
-        ${d.configEmisor?.logo ? `<img src="${d.configEmisor.logo}" alt="" style="max-height:48px;max-width:120px;object-fit:contain"/>` : ""}
+        ${d.configEmisor?.logo ? `<img src="${d.configEmisor.logo}" alt="" style="width:120px;height:auto;object-fit:contain;display:block;margin-bottom:2mm"/>` : ""}
         <div><b>${d.configEmisor?.razon || ""}</b></div>
         <div>${d.configEmisor?.comercial || ""}</div>
         <div><b>Dirección Matriz:</b> ${d.configEmisor?.matriz || ""}</div>
@@ -269,9 +259,9 @@ export default function EstadoSRI(){
         <div class="linea total"><span>VALOR TOTAL</span><b>${usd(total!)}</b></div>
         <div class="pagos">
           <div><b>FORMAS DE PAGO (Tabla 24)</b></div>
-          ${formas.map(f => `<div class="pago">${f.codigo ? `${f.codigo} - ${f.nombre}` : f.nombre} ${usd(f.monto)}</div>`).join("")}
-          <div class="pago">ENTREGADO: ${usd(entregado)}</div>
-          <div class="vuelto">VUELTO: ${usd(cambio)}</div>
+          <div class="pago">${cobro.formaPago} ${usd(total!)}</div>
+          <div class="pago">ENTREGADO: ${usd(cobro.entregado)}</div>
+          <div class="vuelto">VUELTO: ${usd(cobro.vuelto)}</div>
         </div>
       </div>
     </div>
@@ -312,10 +302,10 @@ export default function EstadoSRI(){
     <div>IVA 15%: $${Number(iva).toFixed(2)}</div>
     <div class="b" style="font-size:13px">TOTAL: $${d.totales?.total?.toFixed(2)}</div>
     <div class="line"></div>
-    <div>FORMA PAGO: ${formaPagoTxt}</div>
+    <div>FORMA PAGO: ${formaPagoTxt} $${Number(d.totales?.total || 0).toFixed(2)}</div>
     <div>ENTREGADO: $${entregado.toFixed(2)}</div>
     <div class="b" style="background:#000;color:#fff;padding:4px;font-size:13px">VUELTO: $${cambio.toFixed(2)}</div>
-    <div>EFECTIVO EN CAJA: $${enCaja.toFixed(2)}</div>
+    <div>EFECTIVO EN CAJA: $${entregado.toFixed(2)}</div>
     <div class="line"></div>
     <div class="c" style="font-size:8px">Autorizado SRI: ${d.numeroAutorizacion}<br/>Consulte en SRI con clave 49</div>
     <div class="line"></div>

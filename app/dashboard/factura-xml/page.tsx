@@ -110,7 +110,7 @@ export default function FacturadorXMLReal(){
         obligado: conTexto(cfg.obligadoConta, cfg.obligadoContabilidad, empresa.obligadoConta, empresa.obligado),
         regimen: conTexto(cfg.regimen, empresa.regimen),
         ambiente,
-        logo: conTexto(cfg.logoUrl, cfg.logo, empresa.logoUrl),
+        logo: [cfg.logo_url, cfg.logoUrl, cfg.marca?.logo, empresa.logo_url, empresa.logoUrl].map(v => String(v || "").trim()).find(v => v.startsWith("http") || v.startsWith("data:")) || "",
       }
       if (!vivo) return
       setConfigEmisor(emisor)
@@ -616,10 +616,10 @@ const total = subtotalSin + iva15 + ivaDiferenciado + valorICE + valorIRBPNR + p
     const avisoPlan = await emisionBloqueada(configEmisor?.ruc || rucLocal())
     if (avisoPlan) return alert(avisoPlan)
     if (!Number.isFinite(total)) return alert("No se puede emitir: faltan valores de la factura que no se pueden calcular.")
-    const vueltoEmit = Number.isFinite(Number(pagos.cambio)) ? Number(pagos.cambio) : 0
     const netoEmit = Number.isFinite(Number(pagosReales.efectivo)) ? Number(pagosReales.efectivo) : 0
-    const efectivoRecibidoEmit = netoEmit + vueltoEmit
-    const entregadoEmit = efectivoRecibidoEmit > 0 ? efectivoRecibidoEmit : total
+    const entregadoCaja = Number(abonos.efectivo || 0) + Number(abonos.transfer || 0) + Number(abonos.tarjeta || 0) + Number(abonos.credito || 0)
+    const vueltoEmit = entregadoCaja > total + 0.009 ? Math.round((entregadoCaja - total) * 100) / 100 : 0
+    const entregadoEmit = entregadoCaja > 0 ? Math.round(entregadoCaja * 100) / 100 : total
     const formasEmit: string[] = []
     const anotarForma = (codigo: string, nombre: string, monto: unknown) => {
       const n = Number(monto)
@@ -657,9 +657,10 @@ const total = subtotalSin + iva15 + ivaDiferenciado + valorICE + valorIRBPNR + p
       totales: { bruto, descuento, subtotalSin, base15, base0, baseNoObjeto, baseExento, baseDiferenciado, valorICE, valorIRBPNR, iva15, ivaDiferenciado, propina, total },
       formaPago: formaPagoEmit,
       montoEntregado: entregadoEmit,
-      efectivoRecibido: efectivoRecibidoEmit > 0 ? efectivoRecibidoEmit : entregadoEmit,
+      efectivoRecibido: entregadoEmit,
       vuelto: vueltoEmit,
-      pagos: { ...pagosReales, efectivo: netoEmit, cambio: vueltoEmit, vuelto: vueltoEmit, entregado: entregadoEmit, efectivoRecibido: efectivoRecibidoEmit > 0 ? efectivoRecibidoEmit : entregadoEmit, formaPago: formaPagoEmit },
+      caja: { efectivo: Number(abonos.efectivo || 0), transfer: Number(abonos.transfer || 0), tarjeta: Number(abonos.tarjeta || 0), credito: Number(abonos.credito || 0) },
+      pagos: { ...pagosReales, efectivo: netoEmit, cambio: vueltoEmit, vuelto: vueltoEmit, entregado: entregadoEmit, efectivoRecibido: entregadoEmit, formaPago: formaPagoEmit },
       refs: { refTarjeta, refTransfer, tipoCobro, plazoElegido },
       transito: transitoActual,
       mesaOrigenId: transitoActual?.mesaOrigenId || null
