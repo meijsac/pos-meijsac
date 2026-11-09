@@ -54,4 +54,22 @@ BEGIN
       FOREIGN KEY ("planId") REFERENCES "PlanComercial"("id")
       ON DELETE SET NULL ON UPDATE CASCADE;
   END IF;
+
+  IF to_regclass('public."FacturaEmitida"') IS NULL THEN
+    CREATE TABLE "FacturaEmitida" (
+      "id" TEXT NOT NULL,
+      "empresaId" TEXT NOT NULL,
+      "estado" TEXT NOT NULL,
+      "payload" JSONB NOT NULL,
+      "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      CONSTRAINT "FacturaEmitida_pkey" PRIMARY KEY ("id")
+    );
+  END IF;
+
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'FacturaEmitida_empresaId_fkey') THEN
+    ALTER TABLE "FacturaEmitida"
+      ADD CONSTRAINT "FacturaEmitida_empresaId_fkey"
+      FOREIGN KEY ("empresaId") REFERENCES "Empresa"("id")
+      ON DELETE CASCADE ON UPDATE CASCADE;
+  END IF;
 END $$;

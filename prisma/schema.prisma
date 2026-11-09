@@ -49,6 +49,16 @@ model Empresa {
   productos       Producto[]
   proveedores     Proveedor[]
   movimientos     MovimientoInventario[]
+  facturas        FacturaEmitida[]
+}
+
+model FacturaEmitida {
+  id        String   @id @default(cuid())
+  empresaId String
+  empresa   Empresa  @relation(fields: [empresaId], references: [id], onDelete: Cascade)
+  estado    String
+  payload   Json
+  createdAt DateTime @default(now())
 }
 
 model Usuario {

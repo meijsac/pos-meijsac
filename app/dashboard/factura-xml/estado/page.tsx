@@ -216,6 +216,7 @@ export default function EstadoSRI(){
     </style></head><body>
     <div class="top">
       <div class="izq borde">
+        ${d.configEmisor?.logo ? `<img src="${d.configEmisor.logo}" alt="" style="max-height:48px;max-width:120px;object-fit:contain"/>` : ""}
         <div><b>${d.configEmisor?.razon || ""}</b></div>
         <div>${d.configEmisor?.comercial || ""}</div>
         <div><b>Dirección Matriz:</b> ${d.configEmisor?.matriz || ""}</div>
@@ -294,10 +295,10 @@ export default function EstadoSRI(){
     <html><head><title>TICKET</title>
     <style>@page{size:80mm auto;margin:2mm} body{width:80mm;font-family:monospace;font-size:11px;color:#000}.c{text-align:center}.b{font-weight:900}.line{border-top:1px dashed #000;margin:4px 0}</style>
     </head><body>
-    <div class="c b">${d.configEmisor?.comercial||"EL VECINO - CEVICHERIA"}</div>
-    <div class="c">${d.configEmisor?.razon||"HERRERA VELOZ EDGAR FAVIAN"}</div>
-    <div class="c">RUC: ${d.configEmisor?.ruc||"1707276760001"}</div>
-    <div class="c" style="font-size:9px">${d.configEmisor?.sucursal||"Av. 15 de Noviembre, Tena"}<br/>Obligado a llevar contabilidad: ${d.configEmisor?.obligado||"NO"} - ${d.configEmisor?.regimen||"RIMPE Negocio Popular"}</div>
+    <div class="c b">${d.configEmisor?.comercial || ""}</div>
+    <div class="c">${d.configEmisor?.razon || ""}</div>
+    <div class="c">RUC: ${d.configEmisor?.ruc || ""}</div>
+    <div class="c" style="font-size:9px">${d.configEmisor?.sucursal || ""}<br/>Obligado a llevar contabilidad: ${d.configEmisor?.obligado || ""} - ${d.configEmisor?.regimen || ""}</div>
     <div class="line"></div>
     <div>FACT: ${d.establecimiento}-${d.secuencial}</div>
     <div style="font-size:7px;word-break:break-all">CLAVE: ${d.claveAcceso}</div>

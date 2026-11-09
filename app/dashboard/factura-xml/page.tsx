@@ -70,6 +70,7 @@ export default function FacturadorXMLReal(){
   const [secuencial] = useState("000000015")
   const [establecimiento] = useState("001-001")
   const [configEmisor, setConfigEmisor] = useState<any>({})
+  const [emisorListo, setEmisorListo] = useState(false)
     // --- AGREGADO TEMA Y CLIENTE ---
   const [isDark, setIsDark] = useState(true)
   const [showNuevoCliente, setShowNuevoCliente] = useState(false)
@@ -79,10 +80,85 @@ export default function FacturadorXMLReal(){
 
   useEffect(()=>{
     setFecha(new Date().toLocaleDateString('es-EC'))
-    const c1 = localStorage.getItem("meijsac_config_restaurante")
-    const c2 = localStorage.getItem("meijsac_config_facturacion")
-    if(c1) setConfigEmisor(JSON.parse(c1))
-    else if(c2) setConfigEmisor(JSON.parse(c2))
+    let vivo = true
+    const cargarEmisorFactura = async () => {
+      const conTexto = (...vals: unknown[]) => {
+        for (const v of vals) {
+          if (v !== undefined && v !== null && String(v).trim() !== "") return String(v).trim()
+        }
+        return ""
+      }
+      let empresa: any = {}
+      try {
+        const { cargarEmpresaSesion } = await import("@/lib/sesion-cliente")
+        empresa = await cargarEmpresaSesion()
+      } catch {
+        try { empresa = JSON.parse(localStorage.getItem("meijsac_empresa") || "{}") } catch { empresa = {} }
+      }
+      let cfg: any = {}
+      try { cfg = JSON.parse(localStorage.getItem("meijsac_config_pro") || "{}") } catch { cfg = {} }
+      const sucursal = (cfg.sucursales || empresa.sucursales || []).find((s: any) => s?.dir || s?.direccion) || null
+      const ambienteRaw = conTexto(cfg.ambiente, sucursal?.ambiente, empresa.ambiente)
+      const ambiente = ambienteRaw === "2" || ambienteRaw.toUpperCase().includes("PROD") ? "PRODUCCIÓN" : ambienteRaw ? "PRUEBAS" : ""
+      const emisor = {
+        empresaId: empresa.id || empresa.empresaId || "",
+        razon: conTexto(cfg.razonSocial, empresa.razonSocial, empresa.razon),
+        comercial: conTexto(cfg.nombreComercial, empresa.nombreComercial),
+        ruc: conTexto(cfg.ruc, empresa.ruc),
+        matriz: conTexto(cfg.dirMatriz, empresa.dirMatriz, empresa.direccion),
+        sucursal: conTexto(sucursal?.dir, sucursal?.direccion, cfg.dirEstablecimiento, empresa.dirEstablecimiento),
+        obligado: conTexto(cfg.obligadoConta, cfg.obligadoContabilidad, empresa.obligadoConta, empresa.obligado),
+        regimen: conTexto(cfg.regimen, empresa.regimen),
+        ambiente,
+        logo: conTexto(cfg.logoUrl, cfg.logo, empresa.logoUrl),
+      }
+      if (!vivo) return
+      setConfigEmisor(emisor)
+      setEmisorListo(Boolean(emisor.razon && emisor.ruc && emisor.regimen))
+      const claves = [emisor.empresaId, localStorage.getItem("empresaId"), localStorage.getItem("empresa_id")].filter(Boolean)
+      const locales: any[] = []
+      claves.forEach((id) => {
+        try { locales.push(...JSON.parse(localStorage.getItem(`productos_${id}`) || "[]")) } catch {}
+      })
+      let remotos: any[] = []
+      if (emisor.empresaId) {
+        try {
+          const res = await fetch(`/api/productos?empresaId=${emisor.empresaId}`)
+          const data = await res.json()
+          if (Array.isArray(data)) remotos = data
+        } catch {}
+      }
+      const vistos = new Set<string>()
+      const lista = [...locales, ...remotos].filter((p) => {
+        const clave = String(p.codigo || p.id || "")
+        if (!clave || vistos.has(clave)) return false
+        vistos.add(clave)
+        return true
+      })
+      if (vivo) setProductos(lista)
+      try {
+        const clientes = await fetch("/api/clientes").then((r) => r.json())
+        const cf = Array.isArray(clientes) ? clientes.find((c: any) => String(c.identificacion) === "9999999999999") : null
+        if (vivo && cf) {
+          setCliente((prev: any) => ({
+            ...prev,
+            tipoDoc: cf.tipoId || "07",
+            identificacion: cf.identificacion,
+            razon: cf.razonSocial,
+            direccion: cf.direccion || "QUITO",
+            email: cf.email || "",
+            telefono: cf.telefono || "",
+            celular: cf.telefono || "",
+            provincia: cf.provincia || "",
+            ciudad: cf.ciudad || "",
+            tipoCliente: cf.tipoCliente || "",
+            regimen: cf.regimen || "",
+          }))
+        }
+      } catch {}
+    }
+    cargarEmisorFactura()
+    return () => { vivo = false }
   },[])
 
 
@@ -90,7 +166,7 @@ export default function FacturadorXMLReal(){
     tipoDoc:"05", identificacion:"9999999999999", razon:"CONSUMIDOR FINAL",
     tipold: "",
     direccion:"QUITO",
-    email:"cliente@dominio.com",
+    email:"",
     telefono: "",
     celular: "",
     provincia: "Pichincha",
@@ -190,10 +266,7 @@ const [sugerencias, setSugerencias] = useState<any[]>([]);
     }
   }
 
-  const [productos] = useState([
-    {id:1, codigo:"P001", codigoBarras:"786123456789", nombre:"PRODUCTO DE PRUEBA", stock:45, precio:15.00, precioMay:13.00, precioDist:11.00, codigoPorcentaje:4, iva:15},
-    {id:2, codigo:"P002", codigoBarras:"786987654321", nombre:"ARTÍCULO COMERCIAL", stock:20, precio:25.50, precioMay:22.00, precioDist:19.50, codigoPorcentaje:0, iva:0},
-  ])
+  const [productos, setProductos] = useState<any[]>([])
     const codigoRef = useRef<HTMLInputElement>(null)
   const [codigoRapido, setCodigoRapido] = useState("")
   // --- DETECTOR AUTOMÁTICO DE FERIADOS ECUADOR - SRI CÓDIGO 8 ---
@@ -359,15 +432,27 @@ const manejarConsultaSRIExpress = async () => {
     setNuevoCliForm({ razon:"", identificacion:"", direccion:"", email:"", telefono:"" })
   }
   
+  const tarifaProducto = (p:any) => {
+    const t = String(p?.tipoIvaSRI ?? p?.codigoPorcentaje ?? "").trim().toUpperCase()
+    if (t === "15%" || t === "15" || t === "4") return { codigoPorcentaje: "4", tarifa: 15 }
+    if (t === "0%" || t === "0") return { codigoPorcentaje: "0", tarifa: 0 }
+    if (t === "EXENTO" || t === "7") return { codigoPorcentaje: "7", tarifa: 0 }
+    if (t === "NO_OBJETO" || t === "NO OBJETO" || t === "6") return { codigoPorcentaje: "6", tarifa: 0 }
+    return null
+  }
   const addProducto = (p:any) => {
+  const tarifa = tarifaProducto(p)
+  if (!tarifa) return alert(`"${p?.nombre || p?.codigo || "Producto"}" no tiene tarifa IVA en Inventario. No se agrega a la factura.`)
+  const precio = Number(p.precioMinorista ?? p.precio ?? p.precioSinIVA)
+  if (!Number.isFinite(precio)) return alert(`"${p?.nombre || p?.codigo}" no tiene precio.`)
   const idx = items.findIndex(i=>i.codigo===p.codigo || i.codigo===p.codigoBarras)
   if(idx>=0){
     const n=[...items]; n[idx].cant+=1; setItems(n)
   } else {
     setItems([...items, {
-      codigo:p.codigo, descripcion:p.nombre, detalle:"", detalleAdicional:"", cant:1, pUnit:p.precio, descPorc:0, descDolar:0,
-      codigoPorcentaje:p.codigoPorcentaje, iva:p.iva, ice:0, esPlastico:false,
-      tarifas:{min:p.precio, may:p.precioMay||p.precio, dist:p.precioDist||p.precio}
+      codigo:p.codigo, descripcion:p.nombre || p.descripcion, detalle:"", detalleAdicional:p.detalle || "", cant:1, pUnit:precio, descPorc:Number(p.descuento)||0, descDolar:0,
+      codigoPorcentaje:tarifa.codigoPorcentaje, tarifa:tarifa.tarifa, iva:tarifa.tarifa, ice:Number(p.porcIce)||0, esPlastico:false,
+      tarifas:{min:precio, may:Number(p.precioMayorista ?? p.precioMay ?? precio), dist:Number(p.precioDistribuidor ?? p.precioDist ?? precio)}
     }])
   }
   // --- CATALOGO RAPIDO: ultimos usados ---
@@ -430,13 +515,15 @@ const CATALOGO_IVA_SRI: any = {
   const descuento = items.reduce((s,i)=>s+(i.cant*i.pUnit*i.descPorc/100),0)
   const subtotalSin = bruto - descuento
 
-  const base15 = items.filter(i=>i.codigoPorcentaje==="4").reduce((s,i)=>s+(i.cant*i.pUnit)*(1-i.descPorc/100),0)
-const base0 = items.filter(i=>i.codigoPorcentaje==="0").reduce((s,i)=>s+(i.cant*i.pUnit)*(1-i.descPorc/100),0)
-const baseNoObjeto = items.filter(i=>i.codigoPorcentaje==="6").reduce((s,i)=>s+(i.cant*i.pUnit)*(1-i.descPorc/100),0) || 0
-const baseExento = items.filter(i=>i.codigoPorcentaje==="7").reduce((s,i)=>s+(i.cant*i.pUnit)*(1-i.descPorc/100),0) || 0
-const baseDiferenciado = items.filter(i=>i.codigoPorcentaje==="10" || i.codigoPorcentaje==="5" || i.codigoPorcentaje==="8" || i.codigoPorcentaje==="2" || i.codigoPorcentaje==="3").reduce((s,i)=>s+(i.cant*i.pUnit)*(1-i.descPorc/100),0) || 0
-const base5 = items.filter(i=>i.codigoPorcentaje==="5").reduce((s,i)=>s+(i.cant*i.pUnit)*(1-i.descPorc/100),0) || 0
-const base8 = items.filter(i=>i.codigoPorcentaje==="8").reduce((s,i)=>s+(i.cant*i.pUnit)*(1-i.descPorc/100),0) || 0
+  const codigoIva = (i: any) => String(i.codigoPorcentaje ?? "")
+  const base15 = items.filter(i=>codigoIva(i)==="4").reduce((s,i)=>s+(i.cant*i.pUnit)*(1-i.descPorc/100),0)
+const base0 = items.filter(i=>codigoIva(i)==="0").reduce((s,i)=>s+(i.cant*i.pUnit)*(1-i.descPorc/100),0)
+const baseNoObjeto = items.filter(i=>codigoIva(i)==="6").reduce((s,i)=>s+(i.cant*i.pUnit)*(1-i.descPorc/100),0)
+const baseExento = items.filter(i=>codigoIva(i)==="7").reduce((s,i)=>s+(i.cant*i.pUnit)*(1-i.descPorc/100),0)
+const baseDiferenciado = items.filter(i=>["10","5","8","2","3"].includes(codigoIva(i))).reduce((s,i)=>s+(i.cant*i.pUnit)*(1-i.descPorc/100),0)
+const base5 = items.filter(i=>codigoIva(i)==="5").reduce((s,i)=>s+(i.cant*i.pUnit)*(1-i.descPorc/100),0)
+const base8 = items.filter(i=>codigoIva(i)==="8").reduce((s,i)=>s+(i.cant*i.pUnit)*(1-i.descPorc/100),0)
+const itemSinTarifa = items.some(i => !["0","2","3","4","5","6","7","8","10"].includes(codigoIva(i)))
 
 const valorICE = items.reduce((s,i)=>s+i.ice,0) || 0
 const valorIRBPNR = items.filter(i=>i.esPlastico).reduce((s,i)=>s+(i.cant*0.02),0) || 0
@@ -483,7 +570,7 @@ const total = subtotalSin + iva15 + ivaDiferenciado + valorICE + valorIRBPNR + p
   const getClaveAcceso = ()=>{
     const ddmmyyyy = new Date().toLocaleDateString('es-EC').replace(/\//g,"").padStart(8,"0")
     const tipoComp = "01"
-    const ruc = configEmisor.ruc || "1707276760001"
+    const ruc = configEmisor.ruc || ""
     const amb = configEmisor.ambiente==="PRODUCCIÓN"?"2":"1"
     const serie = establecimiento.replace("-","")+secuencial.padStart(9,"0")
     const codigoNum = "12345678"
@@ -493,7 +580,9 @@ const total = subtotalSin + iva15 + ivaDiferenciado + valorICE + valorIRBPNR + p
     return `${clave48}${dv}`
   }
 
-    const guardarComoBorrador = () => {
+    const guardarComoBorrador = async () => {
+    if (!emisorListo) return alert("Faltan datos del emisor en Configuración")
+    if (itemSinTarifa) return alert("Hay un producto sin tarifa IVA. No se puede guardar.")
     if(items.length===0){ alert("Agrega productos"); return }
     const hoy = new Date()
     const borrador = {
@@ -509,13 +598,19 @@ const total = subtotalSin + iva15 + ivaDiferenciado + valorICE + valorIRBPNR + p
       estadoSRI: 'BORRADOR'
     }
     const actuales = JSON.parse(localStorage.getItem("meijsac_borradores_facturas")||"[]")
-    localStorage.setItem("meijsac_borradores_facturas", JSON.stringify([...actuales, borrador]))
+    const completo = { ...borrador, configEmisor, cliente, items, totales: { bruto, descuento, subtotalSin, base15, base0, baseNoObjeto, baseExento, baseDiferenciado, valorICE, valorIRBPNR, iva15, ivaDiferenciado, propina, total } }
+    localStorage.setItem("meijsac_borradores_facturas", JSON.stringify([...actuales, completo]))
+    try {
+      await fetch("/api/facturas", { method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${localStorage.getItem("meijsac_token") || ""}` }, body: JSON.stringify(completo) })
+    } catch {}
     window.location.href = "/dashboard/comprobantes/emitidos"
   }
   
   
   const emitirComprobante = async () => {
     if (bloqueoConsumidorFinal) return alert(avisoConsumidorFinal)
+    if (!emisorListo) return alert("Faltan datos del emisor en Configuración")
+    if (itemSinTarifa) return alert("Hay un producto sin tarifa IVA. No se puede emitir.")
     if(!pagoRealizado) return alert("Primero cobra en CAJA")
     const { emisionBloqueada, rucLocal } = await import("@/lib/plan-cliente")
     const avisoPlan = await emisionBloqueada(configEmisor?.ruc || rucLocal())
@@ -618,6 +713,17 @@ const total = subtotalSin + iva15 + ivaDiferenciado + valorICE + valorIRBPNR + p
     localStorage.removeItem("meijsac_transito_factura")
     }
 
+    try {
+      const guardado = await fetch("/api/facturas", { method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${localStorage.getItem("meijsac_token") || ""}` }, body: JSON.stringify({ ...facturaPendiente, estadoSRI: "EMITIDA" }) })
+      if (!guardado.ok) {
+        const err = await guardado.json().catch(() => ({}))
+        alert(err.error || "No se pudo guardar la factura en la base.")
+        return
+      }
+    } catch {
+      alert("No se pudo guardar la factura en la base.")
+      return
+    }
     // --- CORRECCIÓN 3: NO IMPRIMAS AQUÍ - VA A LA PANTALLA DE DESPACHO ---
     window.location.href = `/dashboard/factura-xml/estado?id=${facturaPendiente.id}`;
   }
@@ -653,12 +759,14 @@ const total = subtotalSin + iva15 + ivaDiferenciado + valorICE + valorIRBPNR + p
           tipoDoc: c.tipoId || f.tipoDoc,
           identificacion: c.identificacion,
           razon: c.razonSocial,
-          direccion: c.direccion,
-          provincia: c.provincia || "PICHINCHA",
-          ciudad: c.ciudad || "QUITO",
-          email: c.email,
-          telefono: c.telefono,
-          celular: c.telefono,
+          direccion: c.direccion || (String(c.identificacion) === "9999999999999" ? "QUITO" : ""),
+          provincia: c.provincia || "",
+          ciudad: c.ciudad || "",
+          email: c.email || "",
+          telefono: c.telefono || "",
+          celular: c.telefono || "",
+          tipoCliente: c.tipoCliente || "",
+          regimen: c.regimen || "",
         }));
 
         // NUEVO - Carga sucursales de ese cliente
@@ -688,7 +796,19 @@ const total = subtotalSin + iva15 + ivaDiferenciado + valorICE + valorIRBPNR + p
     {/* TU CÓDIGO ORIGINAL SIGUE ABAJO */}
       
       <div className="flex justify-between bg-[#1e293b] p-3 rounded-xl mb-3 border border-white/10">
-        <div className="font-black">Emisión de Facturas Electrónicas <span className="bg-[#00f5d4]/20 text-[#00f5d4] px-2 py-1 rounded ml-2">RIMPE POPULAR - LECTOR ACTIVO</span></div>
+        <div className="font-black">
+          <div className="flex items-center gap-2">Emisión de Facturas Electrónicas {configEmisor.logo ? <img src={configEmisor.logo} alt="" className="h-8 w-8 object-contain rounded" /> : null}</div>
+          {emisorListo ? (
+            <div className="mt-1 text-[10px] font-bold text-white/80 leading-4">
+              <div>{configEmisor.razon} · RUC {configEmisor.ruc}</div>
+              <div>Matriz: {configEmisor.matriz || "—"} · Sucursal: {configEmisor.sucursal || "—"}</div>
+              <div>Obligado a llevar contabilidad: {configEmisor.obligado || "—"} · Régimen: {configEmisor.regimen} · Ambiente: {configEmisor.ambiente || "—"}</div>
+              {cliente.tipoCliente || cliente.regimen ? <div>Cliente: {cliente.razon} · {cliente.tipoCliente || ""} {cliente.regimen || ""}</div> : null}
+            </div>
+          ) : (
+            <div className="mt-2 bg-red-500/20 border-2 border-red-500 text-red-100 text-sm font-bold p-3 rounded-xl">Faltan datos del emisor en Configuración</div>
+          )}
+        </div>
         <div className="flex gap-4 text-[10px]"><div>FECHA<br/><b>{fecha}</b></div><div>PUNTO<br/><b>{establecimiento}</b></div><div>SEC<br/><b className="text-[#00f5d4]">{secuencial}</b></div><b suppressHydrationWarning>{fecha || "---"}</b></div>
       </div>
 
@@ -801,7 +921,7 @@ const total = subtotalSin + iva15 + ivaDiferenciado + valorICE + valorIRBPNR + p
         <div onClick={()=>addProducto(p)}>
           <p className="text-[11px] font-bold truncate">{p.nombre}</p>
           <p className="text-[10px] text-white/50">Stock: {p.stock}</p>
-          <p className="text-[11px] text-[#00f5d4] font-bold">${p.precio?.toFixed(2) || p.pvp}</p>
+          <p className="text-[11px] text-[#00f5d4] font-bold">${Number(p.precioMinorista ?? p.precio ?? 0).toFixed(2)}</p>
           <p className="text-[8px] text-white/20 truncate">{p.codigo}</p>
         </div>
       </div>
@@ -1003,6 +1123,11 @@ const total = subtotalSin + iva15 + ivaDiferenciado + valorICE + valorIRBPNR + p
           )}
         </div>
 
+        {itemSinTarifa && (
+          <div className="mb-3 bg-red-500/20 border-2 border-red-500 text-red-100 text-sm font-bold p-4 rounded-xl">
+            Hay un producto sin tarifa IVA. No se puede emitir hasta corregirlo en Inventario.
+          </div>
+        )}
         {bloqueoConsumidorFinal && (
           <div className="mb-3 bg-red-500/20 border-2 border-red-500 text-red-100 text-sm font-bold p-4 rounded-xl">
             {avisoConsumidorFinal}
@@ -1032,7 +1157,7 @@ const total = subtotalSin + iva15 + ivaDiferenciado + valorICE + valorIRBPNR + p
   <button onClick={() => guardarComoBorrador()} className="bg-[#ffbe0a] text-black font-black py-3 rounded-xl text-xs">
     📝 BORRADOR
   </button>
-  <button type="button" onClick={() => emitirComprobante()} disabled={!pagoRealizado || bloqueoConsumidorFinal} className={`font-black py-3 rounded-xl text-xs ${pagoRealizado && !bloqueoConsumidorFinal ? 'bg-white text-black' : 'bg-white/10 text-white/20'}`}>
+  <button type="button" onClick={() => emitirComprobante()} disabled={!pagoRealizado || bloqueoConsumidorFinal || !emisorListo || itemSinTarifa} className={`font-black py-3 rounded-xl text-xs ${pagoRealizado && !bloqueoConsumidorFinal && emisorListo && !itemSinTarifa ? 'bg-white text-black' : 'bg-white/10 text-white/20'}`}>
     EMITIR
   </button>
 </div>
