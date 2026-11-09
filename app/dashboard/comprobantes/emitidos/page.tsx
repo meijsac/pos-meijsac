@@ -140,46 +140,20 @@ export default function EmitidosPage(){
 
   useEffect(()=>{ cargar() },[])
 
-  // 2. WATCHER AUTOMATICO - PENDIENTES AL SRI (GENÉRICO)
-  useEffect(()=>{
-    const SRI_API = "/api/sri/enviar"
-    const autorizarUno = async (doc:ComprobanteHistorialSRI) => {
-      if(!navigator.onLine) return false
-      try{
-        const res = await fetch(SRI_API, {
-          method: 'POST',
-          body: JSON.stringify({ xml: doc.xmlContent, clave: doc.claveAcceso }),
-          headers: { 'Content-Type': 'application/json' }
-        })
-        const data = await res.json()
-        if(data.estado === 'AUTORIZADO'){
-          const keys = ["meijsac_comprobantes_pendientes_sri","meijsac_comprobantes_sri","meijsac_comprobantes_emitidos","meijsac_ventas_pos","meijsac_facturas"]
-          keys.forEach(k=>{
-            const lista = JSON.parse(localStorage.getItem(k)||"[]")
-            const nueva = lista.map((d:any)=> d.claveAcceso===doc.claveAcceso || d.secuencial===doc.secuencial ? {...d, estadoSRI:'AUTORIZADO', fechaAutorizacion: new Date().toISOString()} : d)
-            localStorage.setItem(k, JSON.stringify(nueva))
-          })
-          const colaActual = JSON.parse(localStorage.getItem("meijsac_comprobantes_pendientes_sri")||"[]")
-          localStorage.setItem("meijsac_comprobantes_pendientes_sri", JSON.stringify(colaActual.filter((d:any)=>d.claveAcceso!==doc.claveAcceso && d.secuencial!==doc.secuencial)))
-          return true
-        }
-      }catch{}
-      return false
+  const reenviarPruebas = async (p: ComprobanteHistorialSRI) => {
+    const res = await fetch("/api/sri/enviar", { method: "POST", body: JSON.stringify({ xml: p.xmlContent, clave: p.claveAcceso, confirmar: true }), headers: { "Content-Type": "application/json" } })
+    const data = await res.json().catch(() => ({}))
+    if (data.estado === "AUTORIZADO" && data.numeroAutorizacion && data.fechaAutorizacion) {
+      const keys = ["meijsac_comprobantes_pendientes_sri", "meijsac_comprobantes_sri", "meijsac_comprobantes_emitidos", "meijsac_ventas_pos", "meijsac_facturas"]
+      keys.forEach((k) => {
+        const lista = JSON.parse(localStorage.getItem(k) || "[]")
+        const nueva = lista.map((d: any) => d.claveAcceso === p.claveAcceso || d.secuencial === p.secuencial ? { ...d, estadoSRI: "AUTORIZADO", numeroAutorizacion: data.numeroAutorizacion, fechaAutorizacion: data.fechaAutorizacion } : d)
+        localStorage.setItem(k, JSON.stringify(nueva))
+      })
     }
-
-    const procesarCola = async () => {
-      const cola = JSON.parse(localStorage.getItem("meijsac_comprobantes_pendientes_sri")||"[]")
-      if(cola.length===0 || !navigator.onLine) return
-      for(const doc of cola){ await autorizarUno(doc); await new Promise(r=>setTimeout(r,2000)) }
-      cargar()
-    }
-
-    const interval = setInterval(procesarCola, 60000)
-    window.addEventListener('online', procesarCola)
-    window.addEventListener('focus', procesarCola)
-    procesarCola()
-    return ()=>{ clearInterval(interval); window.removeEventListener('online', procesarCola); window.removeEventListener('focus', procesarCola) }
-  },[])
+    alert(data.mensaje || data.estado || "Sin respuesta del SRI")
+    cargar()
+  }
 
   // 3. BOTONERA DE DESPACHO - GENERICA
   const descargarXML = (doc:ComprobanteHistorialSRI)=>{
@@ -322,8 +296,8 @@ export default function EmitidosPage(){
       {pendientes.length>0 && (
         <div className="bg-yellow-500/10 border border-yellow-500/30 rounded-[20px] p-4 mb-6">
           <div className="flex justify-between items-center mb-3">
-            <h2 className="font-black text-[12px] text-yellow-400 tracking-widest">⏳ PENDIENTES DE AUTORIZAR - {pendientes.length} - SE ENVIAN SOLOS AL VOLVER INTERNET/LUZ/SRI</h2>
-            <span className="text-[9px] bg-yellow-400 text-black px-2 py-1 rounded-full font-black animate-pulse">AUTO-SYNC: 60s + online + focus</span>
+            <h2 className="font-black text-[12px] text-yellow-400 tracking-widest">PENDIENTES DE AUTORIZAR - {pendientes.length}</h2>
+            <span className="text-[9px] bg-yellow-400 text-black px-2 py-1 rounded-full font-black">ENVIAR A SRI PRUEBAS</span>
           </div>
           <div className="grid gap-2">
             {pendientes.map((p:any)=>(
@@ -335,10 +309,7 @@ export default function EmitidosPage(){
                 <div className="col-span-1 font-black">${Number(p.valorTotal).toFixed(2)}</div>
                 <div className="col-span-3 flex justify-end gap-1">
                   <span className="bg-yellow-500/20 text-yellow-400 px-2 py-1 rounded-full text-[9px]">⏳ {p.estadoSRI}</span>
-                  <Chismoso texto="Reintentar ahora mismo contra SRI"><button onClick={async()=>{
-                    const res = await fetch("/api/sri/enviar",{method:'POST',body:JSON.stringify({xml:p.xmlContent, clave:p.claveAcceso}), headers:{'Content-Type':'application/json'}})
-                    cargar()
-                  }} className="bg-white text-black px-2 py-1 rounded-lg text-[10px] font-bold">🔄</button></Chismoso>
+                  <Chismoso texto="Enviar este XML firmado al SRI de pruebas"><button onClick={() => reenviarPruebas(p)} className="bg-white text-black px-2 py-1 rounded-lg text-[10px] font-bold">ENVIAR</button></Chismoso>
                 </div>
               </div>
             ))}

@@ -63,13 +63,22 @@ async function postSoap(url: string, cuerpo: string, soapAction: string) {
   throw new Error(ultimo)
 }
 
+function esperar(ms: number) {
+  return new Promise((resolver) => setTimeout(resolver, ms))
+}
+
+function zona(xml: string, tag: string) {
+  const bloque = xml.match(new RegExp(`<${tag}\\b[^>]*>[\\s\\S]*?</${tag}>`, "i"))
+  return bloque ? bloque[0] : ""
+}
+
 export async function enviarComprobante(entrada: { xmlFirmado: string; claveAcceso: string; ambiente: CodigoAmbiente }): Promise<ResultadoSri> {
-  if (!envioSriPermitido()) {
+  if (!envioSriPermitido(entrada.ambiente)) {
     return {
       enviado: false,
       bloqueado: true,
       estado: "PENDIENTE_DE_AUTORIZAR",
-      mensaje: "El envío al SRI está apagado. No se envió ningún comprobante.",
+      mensaje: "Producción bloqueada. No se envió ningún comprobante al SRI.",
       mensajes: [],
     }
   }
@@ -80,38 +89,50 @@ export async function enviarComprobante(entrada: { xmlFirmado: string; claveAcce
   } catch (e: any) {
     return { enviado: false, bloqueado: false, estado: "PENDIENTE_DE_AUTORIZAR", mensaje: e.message, mensajes: [] }
   }
-  const estadoRecepcion = textoTag(recepcion, "estado")
-  const avisos = mensajesSri(recepcion)
+  const cajaRecepcion = zona(recepcion, "RespuestaRecepcionComprobante") || recepcion
+  const estadoRecepcion = textoTag(cajaRecepcion, "estado")
+  const avisos = mensajesSri(cajaRecepcion)
+  if (estadoRecepcion === "DEVUELTA") {
+    return { enviado: true, bloqueado: false, estado: "DEVUELTA", mensaje: avisos.join(" | ") || "DEVUELTA", mensajes: avisos }
+  }
   if (estadoRecepcion !== "RECIBIDA") {
-    return {
-      enviado: true,
-      bloqueado: false,
-      estado: "DEVUELTA",
-      mensaje: avisos[0] || "El SRI devolvió el comprobante",
-      mensajes: avisos,
+    const falla = textoTag(recepcion, "faultstring")
+    return { enviado: true, bloqueado: false, estado: "PENDIENTE_DE_AUTORIZAR", mensaje: falla || avisos.join(" | ") || "El SRI no respondió RECIBIDA ni DEVUELTA", mensajes: avisos }
+  }
+  let leido = { estado: "", numero: "", fecha: "", mensajes: [] as string[] }
+  for (let intento = 0; intento < 3; intento++) {
+    if (intento > 0) await esperar(3000)
+    let autorizacion = ""
+    try {
+      autorizacion = await postSoap(urls.autorizacion, sobreAutorizacion(entrada.claveAcceso), "autorizacionComprobante")
+    } catch (e: any) {
+      if (intento === 2) {
+        return { enviado: true, bloqueado: false, estado: "PENDIENTE_DE_AUTORIZAR", mensaje: `Recibida por el SRI. Autorización pendiente: ${e.message}`, mensajes: avisos }
+      }
+      continue
     }
+    const caja = zona(autorizacion, "autorizacion")
+    leido = {
+      estado: caja ? textoTag(caja, "estado") : "",
+      numero: caja ? textoTag(caja, "numeroAutorizacion") : "",
+      fecha: caja ? textoTag(caja, "fechaAutorizacion") : "",
+      mensajes: mensajesSri(caja || autorizacion),
+    }
+    if (leido.estado === "AUTORIZADO" || leido.estado === "NO AUTORIZADO") break
   }
-  let autorizacion = ""
-  try {
-    autorizacion = await postSoap(urls.autorizacion, sobreAutorizacion(entrada.claveAcceso), "autorizacionComprobante")
-  } catch (e: any) {
-    return { enviado: true, bloqueado: false, estado: "PENDIENTE_DE_AUTORIZAR", mensaje: `Recibida por el SRI. Autorización pendiente: ${e.message}`, mensajes: avisos }
-  }
-  const estado = textoTag(autorizacion, "estado")
-  const detalle = mensajesSri(autorizacion)
-  if (estado === "AUTORIZADO") {
+  if (leido.estado === "AUTORIZADO") {
     return {
       enviado: true,
       bloqueado: false,
       estado: "AUTORIZADO",
-      mensaje: "Autorizado por el SRI",
-      numeroAutorizacion: textoTag(autorizacion, "numeroAutorizacion"),
-      fechaAutorizacion: textoTag(autorizacion, "fechaAutorizacion"),
-      mensajes: detalle,
+      mensaje: leido.mensajes.join(" | "),
+      numeroAutorizacion: leido.numero,
+      fechaAutorizacion: leido.fecha,
+      mensajes: leido.mensajes,
     }
   }
-  if (estado === "NO AUTORIZADO") {
-    return { enviado: true, bloqueado: false, estado: "NO AUTORIZADO", mensaje: detalle[0] || "No autorizado por el SRI", mensajes: detalle }
+  if (leido.estado === "NO AUTORIZADO") {
+    return { enviado: true, bloqueado: false, estado: "NO AUTORIZADO", mensaje: leido.mensajes.join(" | ") || "NO AUTORIZADO", mensajes: leido.mensajes }
   }
-  return { enviado: true, bloqueado: false, estado: "PENDIENTE_DE_AUTORIZAR", mensaje: "El SRI recibió el comprobante y todavía no lo autoriza", mensajes: detalle }
+  return { enviado: true, bloqueado: false, estado: "PENDIENTE_DE_AUTORIZAR", mensaje: leido.mensajes.join(" | ") || "El SRI recibió el comprobante y todavía no devuelve autorización", mensajes: leido.mensajes }
 }

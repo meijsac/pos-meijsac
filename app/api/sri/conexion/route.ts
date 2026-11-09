@@ -26,7 +26,7 @@ export async function GET(req: Request) {
     ambienteNombre: ambiente.nombre,
     recepcion: ambiente.recepcion,
     autorizacion: ambiente.autorizacion,
-    envioHabilitado: envioSriPermitido(),
+    envioHabilitado: envioSriPermitido(ambiente.codigo),
     firmaCargada: Boolean(firma),
     firmaNombre: firma?.nombre || "",
     firmaExpira: firma?.expira || sesion.empresa.firmaExpira,

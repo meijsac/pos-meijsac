@@ -86,7 +86,7 @@ function htmlResumen(d: any) {
 
 export default function EstadoSRI(){
   const router = useRouter()
-  const [estado, setEstado] = useState<"PROCESANDO"|"AUTORIZADO"|"PENDIENTE">("PROCESANDO")
+  const [estado, setEstado] = useState<"PROCESANDO"|"AUTORIZADO"|"PENDIENTE"|"DEVUELTA"|"NO AUTORIZADO">("PROCESANDO")
   const [data, setData] = useState<any>({})
   const [modoNegocio, setModoNegocio] = useState("GENERAL")
 
@@ -105,13 +105,16 @@ export default function EstadoSRI(){
     setModoNegocio(modo)
     const cobro = cobroGuardado(factura)
     const facturaConCobro = {...factura, formaPago: cobro.formaPago, montoEntregado: cobro.entregado, efectivoRecibido: cobro.efectivoRecibido, vuelto: cobro.vuelto, pagos: {...(factura.pagos||{}), ...cobro, cambio: cobro.vuelto, entregado: cobro.entregado}}
-    const pendiente = { ...facturaConCobro, estado: "PENDIENTE_DE_AUTORIZAR", estadoSRI: "PENDIENTE_DE_AUTORIZAR" }
-    delete pendiente.numeroAutorizacion
-    delete pendiente.fechaAutorizacion
-    setData(pendiente)
-    setEstado("PENDIENTE")
+    const respuesta = String(factura.estadoSRI || factura.estado || "")
+    const visible = respuesta === "AUTORIZADO"
+      ? "AUTORIZADO"
+      : respuesta === "DEVUELTA" || respuesta === "NO AUTORIZADO"
+        ? respuesta
+        : "PENDIENTE"
+    setData(facturaConCobro)
+    setEstado(visible as "AUTORIZADO" | "PENDIENTE" | "DEVUELTA" | "NO AUTORIZADO")
     const hist = JSON.parse(localStorage.getItem("meijsac_facturas_emitidas")||"[]")
-    hist.push(pendiente)
+    hist.push(facturaConCobro)
     localStorage.setItem("meijsac_facturas_emitidas", JSON.stringify(hist))
     import("@/lib/plan-cliente").then(({ contarComprobante, rucLocal }) => {
       contarComprobante(factura?.configEmisor?.ruc || rucLocal())
@@ -374,11 +377,19 @@ export default function EstadoSRI(){
     const w=window.open("","_blank","width=320,height=600"); w?.document.write(html); w?.document.close(); w?.print()
   }
 
-  if(estado==="PROCESANDO") return <div className="min-h-screen bg-black text-[#00f5d4] flex items-center justify-center font-black">Guardando comprobante. No se envía al SRI.</div>
+  if(estado==="PROCESANDO") return <div className="min-h-screen bg-black text-[#00f5d4] flex items-center justify-center font-black">Consultando la respuesta del SRI...</div>
+  if(estado==="DEVUELTA" || estado==="NO AUTORIZADO") return (
+    <div className="min-h-screen bg-[#1a0505] p-6 text-white">
+      <div className="bg-red-500/20 border border-red-500 p-4 rounded-xl font-black text-xl">{estado}</div>
+      <p className="text-sm mt-3 text-red-200 whitespace-pre-wrap">{data.mensajeSri || (data.mensajesSri || []).join(" | ")}</p>
+      <p className="text-xs mt-2">Clave: {data.claveAcceso}</p>
+      <button onClick={()=> router.push("/dashboard/factura-xml")} className="mt-6 w-full bg-black border border-white/20 p-4 rounded-xl font-black">VOLVER A FACTURA</button>
+    </div>
+  )
   if(estado==="PENDIENTE") return (
     <div className="min-h-screen bg-[#1a1500] p-6 text-white">
       <div className="bg-yellow-500/20 border border-yellow-500 p-4 rounded-xl font-black text-xl">PENDIENTE DE AUTORIZACIÓN</div>
-      <p className="text-xs mt-2">El comprobante quedó guardado. No se envió al SRI. Clave: {data.claveAcceso}</p>
+      <p className="text-xs mt-2">{data.mensajeSri || "El SRI no devolvió autorización. El comprobante quedó pendiente."} Clave: {data.claveAcceso}</p>
       <div className="grid grid-cols-2 gap-3 mt-6">
         <button onClick={imprimirRIDE} className="bg-white text-black p-4 rounded-xl font-black">📄 PDF A4 RIDE (BLOQUES A-F)</button>
         <button onClick={imprimirTicket} className="bg-[#00f5d4] text-black p-4 rounded-xl font-black">🧾 TICKET 80mm TÉRMICO</button>

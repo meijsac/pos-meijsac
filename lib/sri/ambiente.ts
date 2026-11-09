@@ -30,6 +30,7 @@ export function ambienteSri(valor: unknown) {
   return SRI_AMBIENTES[codigoAmbiente(valor)]
 }
 
-export function envioSriPermitido() {
+export function envioSriPermitido(ambiente: CodigoAmbiente) {
+  if (ambiente === "1") return true
   return process.env.SRI_ENVIO_AUTORIZADO === "1"
 }

@@ -143,7 +143,7 @@ export default function FacturadorXMLReal(){
       try { cfg = JSON.parse(localStorage.getItem("meijsac_config_pro") || "{}") } catch { cfg = {} }
       const sucursal = (cfg.sucursales || empresa.sucursales || []).find((s: any) => s?.dir || s?.direccion) || null
       const ambienteRaw = conTexto(cfg.ambiente, sucursal?.ambiente, empresa.ambiente)
-      const ambiente = ambienteRaw === "2" || ambienteRaw.toUpperCase().includes("PROD") ? "PRODUCCIÓN" : ambienteRaw ? "PRUEBAS" : ""
+      const ambiente = ambienteRaw === "2" || ambienteRaw.toUpperCase().includes("PROD") ? "PRODUCCIÓN" : "PRUEBAS"
       const emisor = {
         empresaId: empresa.id || empresa.empresaId || "",
         razon: conTexto(cfg.razonSocial, empresa.razonSocial, empresa.razon),
@@ -390,6 +390,7 @@ const toggleTurismoFeriado = (checked: boolean) => {
   const [tarjetaData, setTarjetaData] = useState({ tipoSRI:"19", forma:"CORRIENTE", plazo:0, franquicia:"Datafast - Visa / Mastercard" })
   const [conteoCaja, setConteoCaja] = useState({ "100":0,"50":0,"20":0,"10":0,"5":0,"1":0,"0.50":0,"0.25":0,"0.10":0,"0.05":0,"0.01":0 } as any)
   const [pagoRealizado, setPagoRealizado] = useState(false)
+  const [claveFirma, setClaveFirma] = useState("")
   const [cajaAbierta, setCajaAbierta] = useState(false)
   const [tipoCobro, setTipoCobro] = useState<'efectivo'|'tarjeta'|'transfer'|'pendiente'|'credito'>('efectivo')
   const [refTarjeta, setRefTarjeta] = useState("")
@@ -679,6 +680,8 @@ const total = subtotalSin + iva15 + ivaDiferenciado + valorICE + valorIRBPNR + p
   
   
   const emitirComprobante = async () => {
+    const esProduccion = configEmisor.ambiente === "PRODUCCIÓN"
+    if (!esProduccion && !claveFirma.trim()) return alert("Escribe la contraseña del .p12 para firmar y enviar a pruebas. No se guarda.")
     if (bloqueoConsumidorFinal) return alert(avisoConsumidorFinal)
     if (!emisorListo) return alert("Faltan datos del emisor en Configuración")
     if (itemSinTarifa) return alert("Hay un producto sin tarifa IVA. No se puede emitir.")
@@ -820,7 +823,7 @@ const total = subtotalSin + iva15 + ivaDiferenciado + valorICE + valorIRBPNR + p
     }
 
     try {
-      const guardado = await fetch("/api/facturas", { method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${localStorage.getItem("meijsac_token") || ""}` }, body: JSON.stringify({ ...facturaPendiente, estadoSRI: "PENDIENTE_DE_AUTORIZAR" }) })
+      const guardado = await fetch("/api/facturas", { method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${localStorage.getItem("meijsac_token") || ""}` }, body: JSON.stringify({ ...facturaPendiente, estadoSRI: "PENDIENTE_DE_AUTORIZAR", claveFirma: esProduccion ? "" : claveFirma }) })
       if (!guardado.ok) {
         const err = await guardado.json().catch(() => ({}))
         const faltan = Array.isArray(err.faltantes) ? `\n${err.faltantes.join("\n")}` : ""
@@ -831,8 +834,14 @@ const total = subtotalSin + iva15 + ivaDiferenciado + valorICE + valorIRBPNR + p
       facturaPendiente.facturaId = guardada.id
       if (guardada.claveAcceso) facturaPendiente.claveAcceso = guardada.claveAcceso
       if (guardada.xml) facturaPendiente.xmlContent = guardada.xml
-      facturaPendiente.estadoSRI = "PENDIENTE_DE_AUTORIZAR"
+      facturaPendiente.estado = guardada.estado || "PENDIENTE_DE_AUTORIZAR"
+      facturaPendiente.estadoSRI = guardada.estado || "PENDIENTE_DE_AUTORIZAR"
       facturaPendiente.firmado = Boolean(guardada.firmado)
+      facturaPendiente.numeroAutorizacion = guardada.numeroAutorizacion || ""
+      facturaPendiente.fechaAutorizacion = guardada.fechaAutorizacion || ""
+      facturaPendiente.mensajeSri = guardada.mensaje || ""
+      facturaPendiente.mensajesSri = guardada.mensajes || []
+      setClaveFirma("")
       const listaDoc = {
         id: guardada.id || facturaPendiente.id,
         facturaId: guardada.id,
@@ -843,7 +852,7 @@ const total = subtotalSin + iva15 + ivaDiferenciado + valorICE + valorIRBPNR + p
         receptorIdentificacion: facturaPendiente.cliente?.identificacion,
         receptorNombre: facturaPendiente.cliente?.razon,
         valorTotal: facturaPendiente.totales?.total,
-        estadoSRI: "PENDIENTE_DE_AUTORIZAR",
+        estadoSRI: facturaPendiente.estadoSRI,
         xmlContent: facturaPendiente.xmlContent || "",
         tipo_cobro: facturaPendiente.tipo_cobro,
         estado_pago: facturaPendiente.estado_pago,
@@ -1292,6 +1301,9 @@ const total = subtotalSin + iva15 + ivaDiferenciado + valorICE + valorIRBPNR + p
             {items.length === 0 || total <= 0 ? <div className="text-right text-[11px] font-black text-white/40">Sin productos</div> : null}
           </div>
 
+{configEmisor.ambiente !== "PRODUCCIÓN" && (
+  <input type="password" autoComplete="new-password" value={claveFirma} onChange={(e) => setClaveFirma(e.target.value)} placeholder="Contraseña del .p12 (solo para firmar, no se guarda)" className="w-full mt-3 bg-black border border-white/10 rounded-xl p-3 text-xs text-white" />
+)}
 <div className="grid grid-cols-3 gap-2 mt-3">
   <button type="button" onClick={() => { if (bloqueoConsumidorFinal) return; setCajaAbierta(true) }} disabled={bloqueoConsumidorFinal} className={`font-black py-3 rounded-xl text-xs ${bloqueoConsumidorFinal ? "bg-white/10 text-white/30" : "bg-[#00f5d4] text-black"}`}>
     CAJA Y COBRO
@@ -1300,7 +1312,7 @@ const total = subtotalSin + iva15 + ivaDiferenciado + valorICE + valorIRBPNR + p
     📝 BORRADOR
   </button>
   <button type="button" onClick={() => emitirComprobante()} disabled={!pagoRealizado || bloqueoConsumidorFinal || !emisorListo || itemSinTarifa} className={`font-black py-3 rounded-xl text-xs ${pagoRealizado && !bloqueoConsumidorFinal && emisorListo && !itemSinTarifa ? 'bg-white text-black' : 'bg-white/10 text-white/20'}`}>
-    EMITIR
+    {configEmisor.ambiente === "PRODUCCIÓN" ? "EMITIR" : "ENVIAR A SRI PRUEBAS"}
   </button>
 </div>
 

@@ -864,7 +864,7 @@ base.sucursales = datosReales.sucursales || base.sucursales || [];
                         }`}
                       >
                         <p className="text-[11px] font-bold text-white">🧪 PRUEBAS</p>
-                        <p className="text-[9px] text-white/50 mt-1">Conectado a SRI de pruebas. Facturas sin validez tributaria.</p>
+                        <p className="text-[9px] text-white/50 mt-1">Encendido. ENVIAR A SRI PRUEBAS llama a celcer.sri.gob.ec.</p>
                         <span className={`mt-2 inline-block text-[8px] px-2 py-0.5 rounded-full font-bold ${(cfg?.ambiente||'PRUEBAS')==='PRUEBAS'?'bg-[#00f5d4] text-black':'bg-white/10 text-white/30'}`}>ACTIVO</span>
                       </div>
 
@@ -877,13 +877,13 @@ base.sucursales = datosReales.sucursales || base.sucursales || [];
                         }`}
                       >
                         <p className="text-[11px] font-bold text-white">🚀 PRODUCCIÓN REAL</p>
-                        <p className="text-[9px] text-white/50 mt-1">Conectado al SRI real. Facturas con validez tributaria inmediata.</p>
+                        <p className="text-[9px] text-white/50 mt-1">Bloqueada. No se envía nada hasta que lo autorices.</p>
                         <span className={`mt-2 inline-block text-[8px] px-2 py-0.5 rounded-full font-bold ${cfg?.ambiente==='PRODUCCIÓN'?'bg-[#00ff5d] text-black':'bg-white/10 text-white/30'}`}>{cfg?.ambiente==='PRODUCCIÓN'?'ACTIVO':'INACTIVO'}</span>
                       </div>
                     </div>
 
                     <div className={`p-3 rounded-lg border text-[9px] ${cfg?.ambiente==='PRODUCCIÓN'?'bg-[#00ff5d]/10 border-[#00ff5d]/30 text-[#00ff5d]':'bg-[#00f5d4]/10 border-[#00f5d4]/20 text-[#00f5d4]'}`}>
-                      El envío al SRI está apagado. Elegir este ambiente solo cambia la URL que se usará cuando autorices el envío.
+                      {(cfg?.ambiente === "PRODUCCIÓN") ? "Producción bloqueada. No se envía ningún comprobante a cel.sri.gob.ec." : "Pruebas encendido. El XML firmado se envía a celcer.sri.gob.ec al presionar ENVIAR A SRI PRUEBAS."}
                     </div>
                     <div className="bg-black border border-white/10 rounded-xl p-3 text-[10px] space-y-1 break-all">
                       <p className="text-white font-bold">Recepción: {SRI_URLS[((cfg?.ambiente==='PRODUCCIÓN' || cfg?.firma?.ambiente==='2') ? '2' : '1')].url}</p>
