@@ -979,7 +979,7 @@ const total = subtotalSin + iva15 + ivaDiferenciado + valorICE + valorIRBPNR + p
         cuotas: facturaPendiente.cuotas,
         fecha_vencimiento: facturaPendiente.fecha_vencimiento,
       }
-      ;["meijsac_comprobantes_emitidos", "meijsac_enviados_sri", "meijsac_comprobantes_sri"].forEach((clave) => {
+      ;["meijsac_comprobantes_emitidos", "meijsac_documentos_emitidos", "meijsac_enviados_sri"].forEach((clave) => {
         const previa = JSON.parse(localStorage.getItem(clave) || "[]")
         localStorage.setItem(clave, JSON.stringify([...previa, listaDoc]))
       })

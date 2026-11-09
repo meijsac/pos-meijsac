@@ -23,6 +23,21 @@ export function VisorComprobante({ clave }: { clave: string }) {
       const fecha = String(data.fechaAutorizacion || "").trim()
       setEstado(fecha ? `Autorizado ${fecha}` : (data.mensaje || data.error || "Pendiente de autorización"))
       setMarca((n) => n + 1)
+      try {
+        const lista = await fetch("/api/facturas", { headers: { Authorization: `Bearer ${localStorage.getItem("meijsac_token") || ""}` } }).then((r) => r.json()).catch(() => [])
+        const guardado = Array.isArray(lista) ? lista.find((d) => String(d?.claveAcceso || "").replace(/\D/g, "") === clave) : null
+        const doc = guardado || { claveAcceso: clave, estadoSRI: fecha ? "AUTORIZADO" : "PENDIENTE", fechaAutorizacion: fecha, numeroAutorizacion: data.numeroAutorizacion || "", mensajeSri: data.mensaje || data.error || "" }
+        const emitirEn = ["meijsac_comprobantes_emitidos", "meijsac_documentos_emitidos", "meijsac_enviados_sri"]
+        const autorizarEn = fecha ? ["meijsac_comprobantes_sri", "meijsac_autorizados"] : []
+        for (const caja of [...emitirEn, ...autorizarEn]) {
+          const previa = JSON.parse(localStorage.getItem(caja) || "[]")
+          const i = Array.isArray(previa) ? previa.findIndex((d: { claveAcceso?: string }) => String(d?.claveAcceso || "").replace(/\D/g, "") === clave) : -1
+          const base = Array.isArray(previa) ? previa : []
+          if (i >= 0) base[i] = { ...base[i], ...doc }
+          else base.push(doc)
+          localStorage.setItem(caja, JSON.stringify(base))
+        }
+      } catch {}
     })()
     return () => { vivo = false }
   }, [clave])
