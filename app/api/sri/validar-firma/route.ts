@@ -3,6 +3,7 @@ import * as forge from 'node-forge';
 import { prisma } from '@/lib/prisma';
 import { usuarioConEmpresaDesdeRequest } from '@/lib/empresa-sesion';
 import { encriptarBytes, encriptar } from '@/lib/seguridad';
+import { firmaCoincideConEmpresa } from '@/lib/sri/cedula-ruc';
 
 export const dynamic = "force-dynamic"
 
@@ -46,10 +47,8 @@ if (!cedulaEnFirma) {
 }
 
 const rucEnFirma = cedulaEnFirma;
-// TU CASO: 1708330509 debe coincidir con 1708330509001
-const rucCoincide = rucEmpresa && rucEnFirma
-  ? (rucEmpresa.startsWith(rucEnFirma) || rucEnFirma.startsWith(rucEmpresa))
-  : false;
+// Persona natural: IDCEC-1708330509 es la misma persona que el RUC 1708330509001.
+const rucCoincide = firmaCoincideConEmpresa(rucEnFirma, rucEmpresa);
 
 const ruc = String(rucEmpresa || "").trim()
 if (ruc) {

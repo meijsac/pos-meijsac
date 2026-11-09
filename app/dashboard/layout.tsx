@@ -15,18 +15,21 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       router.replace("/login")
       return
     }
+    if (sessionStorage.getItem("meijsac_acceso_ok") === "1") return
     const ctrl = new AbortController()
     const timer = setTimeout(() => ctrl.abort(), 3000)
     fetch("/api/auth/sesion", { signal: ctrl.signal })
       .then((res) => {
-        if (res.status === 401) router.replace("/login")
+        if (res.status === 401) {
+          sessionStorage.removeItem("meijsac_acceso_ok")
+          router.replace("/login")
+          return
+        }
+        if (res.ok) sessionStorage.setItem("meijsac_acceso_ok", "1")
       })
       .catch(() => {})
       .finally(() => clearTimeout(timer))
-    return () => {
-      clearTimeout(timer)
-      ctrl.abort()
-    }
+    return () => clearTimeout(timer)
   }, [router])
 
   return (

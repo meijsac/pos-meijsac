@@ -2,6 +2,7 @@
 import { useState, useEffect } from "react";
 import { feriadosIvaReducido } from '@/lib/iva-feriados.config';
 import { cargarEmpresaSesion } from "@/lib/sesion-cliente";
+import { firmaCoincideConEmpresa } from "@/lib/sri/cedula-ruc";
 import { errorLogo } from "@/lib/logo-empresa";
 import DocumentosLegales from "./documentos-legales";
 
@@ -298,6 +299,10 @@ export default function ConfiguracionAvanzadaSRI() {
 
     useEffect(() => {
       let vivo = true
+      try {
+        const guardada = JSON.parse(localStorage.getItem("meijsac_config_pro") || "null")
+        if (guardada && typeof guardada === "object") setCfg(guardada)
+      } catch {}
       ;(async () => {
         const reg = JSON.parse(localStorage.getItem("meijsac_registro") || "{}");
         const emp = JSON.parse(localStorage.getItem("meijsac_empresa") || "{}");
@@ -443,7 +448,7 @@ base.sucursales = datosReales.sucursales || base.sucursales || [];
       };
     }, [cfg?.modoOffline, cfg?.colaOffline?.length]);
 
-    if (!cfg) return null;
+    if (!cfg) return <div className="min-h-screen bg-[#060608] text-white/40 p-6 text-sm">Cargando...</div>;
     const wsActual = SRI_URLS[(cfg.firma?.ambiente || cfg.ambiente || "1") as "1" | "2"];
 
     const guardar = (accion: string) => {
@@ -573,6 +578,11 @@ base.sucursales = datosReales.sucursales || base.sucursales || [];
                       <p className="text-[9px] text-white/40 mb-3">Arrastra tu.p12 aquí o selecciona</p>
                       <input type="file" accept=".p12" onChange={(e:any)=>{ const f=e.target.files?.[0]; if(f){ if(!f.name.toLowerCase().endsWith('.p12')){ alert('Solo se permite archivo.p12'); return; } setCfg((p:any)=>({...p, firma:{...p?.firma, nombre:f.name}})); handleFirmaChange(e); } }} className="mt-3 text-xs mx-auto block text-white" />
                       {cfg?.firma?.nombre && <p className="mt-3 text-[11px] text-[#00f5d4]">Archivo cargado: {cfg.firma.nombre}</p>}
+                      {!infoFirma && cfg?.firma?.rucDetectado && (
+                        firmaCoincideConEmpresa(cfg.firma.rucDetectado, cfg?.ruc)
+                          ? <p className="mt-2 text-[12px] font-bold text-green-400">✓ Firma coincide con el RUC de la empresa</p>
+                          : <p className="mt-2 text-[12px] font-bold text-red-400">La cédula de la firma no corresponde al RUC de la empresa</p>
+                      )}
                     </div>
 
                     {infoFirma && (
@@ -582,8 +592,11 @@ base.sucursales = datosReales.sucursales || base.sucursales || [];
                           <>
                             <p className="text-white">📅 Expira: {new Date(infoFirma.fechaExpiracion).toLocaleDateString()} ({infoFirma.diasRestantes} días)</p>
                             <p className="text-white">🪪 RUC en firma: {infoFirma.rucEnFirma}</p>
-                            {!infoFirma.rucCoincide && <p className="text-red-500 font-bold mt-2 text-[12px]">🚨 ALERTA ROJA: El RUC {infoFirma.rucEnFirma} no coincide con el RUC de la empresa {cfg?.ruc}</p>}
-                            {infoFirma.rucCoincide && <p className="text-green-400 font-bold mt-2">✅ RUC coincide correctamente</p>}
+                            {firmaCoincideConEmpresa(infoFirma.rucEnFirma, cfg?.ruc) ? (
+                              <p className="text-green-400 font-bold mt-2">✓ Firma coincide con el RUC de la empresa</p>
+                            ) : (
+                              <p className="text-red-400 font-bold mt-2 text-[12px]">La cédula de la firma no corresponde al RUC de la empresa</p>
+                            )}
                           </>
                         )}
                       </div>

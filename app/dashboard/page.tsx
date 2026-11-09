@@ -127,6 +127,12 @@ export default function DashboardMeijsac(){
       setFirmaSubida(true)
     }
 
+    try {
+      const local = JSON.parse(localStorage.getItem("meijsac_empresa") || "{}")
+      const razon = local.razonSocial || local.razon || local.nombreComercial || ""
+      if (razon || local.ruc) setUserMock({ razon: razon || "Sin nombre", ruc: local.ruc || "", logo: local.logo_url || local.logoUrl || "" })
+    } catch {}
+
     let cancel = false
     ;(async () => {
       try {
