@@ -55,13 +55,6 @@ type Item = {
   tarifas?: {min:number, may:number, dist:number}
 }
 
-// === NUEVO BLOQUE PROVEEDOR SISTEMA - FICHA TECNICA SRI ===
-const PROVEEDOR_SISTEMA = {
-  nombre: "MEIJSAC POS",
-  ruc: "1793161234001", // <-- CAMBIA AQUI TU RUC REAL 13 DIGITOS
-  contacto: "https://meijsacpos.com - Soporte Quito"
-}
-
 const Chisme = ({texto, titulo}:{texto:string, titulo:string}) => (
   <div className="absolute -top-[58px] left-1/2 -translate-x-1/2 hidden group-hover:block z-50">
     <div className="bg-black border border-[#00f5d4] rounded-xl px-3 py-2 shadow-[0_0_20px_rgba(0,245,212,0.3)] min-w-[220px]">
@@ -500,113 +493,6 @@ const total = subtotalSin + iva15 + ivaDiferenciado + valorICE + valorIRBPNR + p
     return `${clave48}${dv}`
   }
 
-  // === NUEVO - IMPRESION RIDE A4 ===
-  const imprimirRIDE = ()=>{
-    const clave = getClaveAcceso()
-    const html = `
-    <html><head><title>RIDE ${establecimiento}-${secuencial}</title>
-    <style>body{font-family:Arial;font-size:11px;color:#000}.borde{border:1px solid #000;padding:8px}.t{font-size:16px;font-weight:900} table{width:100%;border-collapse:collapse} td,th{border:1px solid #000;padding:4px;font-size:10px}</style>
-    </head><body>
-    <div style="display:flex;justify-content:space-between">
-      <div style="width:58%" class="borde">
-        <div style="height:60px;border:1px dashed #aaa;display:flex;align-items:center;justify-content:center;font-size:9px">Logotipo Empresa</div>
-        <div><b>${configEmisor.razon||"HERRERA VELOZ EDGAR FAVIAN"}</b></div>
-        <div>${configEmisor.comercial||"EL VECINO - CEVICHERIA"}</div>
-        <div><b>Dirección Matriz:</b> ${configEmisor.matriz||"AV DE LA PRENSA 3748 Y SALVADOR MARTINEZ"}</div>
-        <div><b>Dirección Sucursal:</b> ${configEmisor.sucursal||"AV DE LA PRENSA 3748 Y SALVADOR MARTINEZ"}</div>
-        <div><b>Obligado Contabilidad:</b> ${configEmisor.obligado||"NO"}</div>
-        <div><b>${configEmisor.regimen||"Contribuyente Régimen RIMPE Negocio Popular"}</b></div>
-        ${configEmisor.agenteRet && configEmisor.agenteRet!=="NO"?`<div><b>Agente Retención Res. Nro:</b> ${configEmisor.agenteRet}</div>`:""}
-      </div>
-      <div style="width:40%" class="borde">
-        <div>RUC: <b>${configEmisor.ruc||"1707276760001"}</b></div>
-        <div class="t">FACTURA</div>
-        <div>No. ${establecimiento}-${secuencial}</div>
-        <div><b>Número Autorización / Clave Acceso</b><br/>${clave}</div>
-        <div style="margin-top:6px;border:1px solid #000;height:50px;display:flex;align-items:center;justify-content:center">*${clave}*</div>
-        <div>Fecha y Hora Autorización: ${new Date().toLocaleString('es-EC')}</div>
-        <div>Ambiente: ${configEmisor.ambiente||"PRODUCCIÓN"}</div>
-        <div>Emisión: NORMAL</div>
-      </div>
-    </div>
-    <div class="borde" style="margin-top:8px">
-      <div><b>Razón Social / Nombres:</b> ${cliente.razon} - <b>Identificación:</b> ${cliente.identificacion} - <b>Fecha Emisión:</b> ${fecha}</div>
-      <div><b>Dirección:</b> ${cliente.direccion}</div>
-      <div><b>Guía Remisión:</b> </div>
-    </div>
-    <table style="margin-top:8px"><tr><th>Cod. Principal</th><th>Cod. Auxiliar</th><th>Cant</th><th>Descripción</th><th>Detalle Adicional</th><th>Precio Unitario</th><th>Descuento</th><th>Precio Total</th></tr>
-    ${items.map(it=>`<tr><td>${it.codigo}</td><td></td><td>${it.cant}</td><td>${it.descripcion}</td><td>${it.detalleAdicional||""}</td><td>${it.pUnit.toFixed(2)}</td><td>${(it.descDolar||0).toFixed(2)}</td><td>${(it.cant*it.pUnit-(it.descDolar||0)).toFixed(2)}</td></tr>`).join("")}
-    </table>
-    <div style="display:flex;justify-content:space-between;margin-top:8px">
-      <div style="width:58%" class="borde">
-        <b>Información Adicional</b><br/>
-        Dirección: ${cliente.direccion}<br/>
-        Teléfono: ${cliente.telefono} ${cliente.celular}<br/>
-        Email: ${cliente.email}<br/>
-        Provincia: ${cliente.provincia} Ciudad: ${cliente.ciudad}<br/>
-        Vendedor: POS QUITO<br/><br/>
-        <b style="border:1px solid #000;padding:4px;display:block">Proveedor del Sistema: ${PROVEEDOR_SISTEMA.nombre} - RUC Proveedor: ${PROVEEDOR_SISTEMA.ruc} - Contacto: ${PROVEEDOR_SISTEMA.contacto}</b>
-      </div>
-      <div style="width:40%" class="borde">
-  ${Object.keys(CATALOGO_IVA_SRI).map(cod => {
-    const base = items.filter((it:any)=>it.codigoPorcentaje===cod).reduce((a:any,b:any)=>a+(b.cant*b.pUnit),0);
-    if(base===0) return "";
-    return `<div>SUBTOTAL ${CATALOGO_IVA_SRI[cod].label}: $${base.toFixed(2)}</div>`;
-  }).join("")}
-  <div>SUBTOTAL SIN IMPUESTOS: $${(items.reduce((a:any,b:any)=>a+(b.cant*b.pUnit),0)).toFixed(2)}</div>
-  <div>TOTAL DESCUENTO: $${descuento.toFixed(2)}</div>
-  <div>IVA TOTAL: $${(items.reduce((a:any,b:any)=>a+(b.cant*b.pUnit*b.tarifa/100),0).toFixed(2))}</div>
-  <div>IVA 15%: $${items.filter((it:any)=>it.codigoPorcentaje==="4").reduce((a:any,b:any)=>a+(b.cant*b.pUnit*b.tarifa/100),0).toFixed(2)}</div>
-  <div>IVA 8% Turismo: $${items.filter((it:any)=>it.codigoPorcentaje==="8").reduce((a:any,b:any)=>a+(b.cant*b.pUnit*b.tarifa/100),0).toFixed(2)}</div>
-  <div>PROPINA 10%: $${propina.toFixed(2)}</div>
-  <div style="font-size:14px;font-weight:900">VALOR TOTAL: $${total.toFixed(2)}</div>
-</div>
-<div style="font-size:13px">EFECTIVO RECIBIDO: $${(pagosReales.efectivo + (pagos.cambio||0)).toFixed(2)}</div>
-<div style="font-size:14px;font-weight:900;background:#000;color:#fff;padding:4px">CAMBIO / VUELTO: $${(pagos.cambio||0).toFixed(2)}</div>
-<div style="margin-top:6px"><b>Forma Pago</b><br/>01: $${pagosReales.efectivo.toFixed(2)}<br/>${pagos.redBancaria>0?`20: $${pagos.redBancaria.toFixed(2)}<br/>`:""}${pagos.tarjeta>0?`19: $${pagos.tarjeta.toFixed(2)}<br/>`:""}</div>
-      </div>
-    </div>
-    </body></html>`
-    const w=window.open("","_blank"); w?.document.write(html); w?.document.close(); w?.print()
-  }
-
-  const imprimirTicket = ()=>{
-    const clave = getClaveAcceso()
-    const html = `
-    <html><head><title>TICKET ${secuencial}</title>
-    <style>@page{size:80mm auto;margin:2mm} body{width:80mm;font-family:monospace;font-size:11px;color:#000}.c{text-align:center}.b{font-weight:900}.line{border-top:1px dashed #000;margin:4px 0}</style>
-    </head><body>
-    <div class="c b">${configEmisor.comercial||"EL VECINO"}</div>
-    <div class="c">${configEmisor.razon||"HERRERA VELOZ EDGAR FAVIAN"}</div>
-    <div class="c">RUC: ${configEmisor.ruc||"1707276760001"}</div>
-    <div class="c">${configEmisor.sucursal||"AV DE LA PRENSA 3748, TENA"}</div>
-    <div class="c" style="font-size:8px">${configEmisor.regimen||"RIMPE Negocio Popular"} - Obligado: ${configEmisor.obligado||"NO"}</div>
-    <div class="line"></div>
-    <div>FACTURA: ${establecimiento}-${secuencial}</div>
-    <div style="font-size:8px;word-break:break-all">CLAVE: ${clave}</div>
-    <div>Fecha: ${fecha} ${new Date().toLocaleTimeString()}</div>
-    <div>Cliente: ${cliente.razon}</div>
-    <div>RUC/CI: ${cliente.identificacion}</div>
-    <div>Email: ${cliente.email}</div>
-    <div class="line"></div>
-    ${items.map(it=>`<div>${it.cant} x ${it.descripcion}<br/><div style="display:flex;justify-content:space-between"><span>P.Unit:${it.pUnit.toFixed(2)} Desc:${(it.descDolar||0).toFixed(2)}</span><span>Total:${(it.cant*it.pUnit-(it.descDolar||0)).toFixed(2)}</span></div></div>`).join("")}
-    <div class="line"></div>
-    <div>SUBTOTAL 15%: $${base15.toFixed(2)}</div>
-    <div>SUBTOTAL 0%: $${base0.toFixed(2)}</div>
-    <div>IVA 15%: $${iva15.toFixed(2)}</div>
-    <div>PROPINA: $${propina.toFixed(2)}</div>
-    <div class="b" style="font-size:13px">TOTAL: $${total.toFixed(2)}</div>
-    <div class="line"></div>
-    <div>FORMA PAGO SRI TABLA 24</div>
-    <div>EFECTIVO (01): $${pagosReales.efectivo.toFixed(2)} ${vueltoReal>0?`Vuelto: $${vueltoReal.toFixed(2)}`:""}</div>
-    ${pagos.redBancaria>0?`<div>OTROS (20): $${pagos.redBancaria.toFixed(2)} Ref:${refTransfer}</div>`:""}
-    ${pagos.tarjeta>0?`<div>TARJETA (19): $${pagos.tarjeta.toFixed(2)} Ref:${refTarjeta}</div>`:""}
-    ${tipoCobro==='credito'?`<div>CREDITO (20) Plazo:${plazoElegido}d Vence:${new Date(Date.now()+plazoElegido*86400000).toLocaleDateString()}</div>`:""}
-    <div class="line"></div>
-    <div class="c" style="font-size:8px">Consulte validez en portal SRI con clave 49 dígitos<br/>Factura hecha con ${PROVEEDOR_SISTEMA.nombre} - RUC ${PROVEEDOR_SISTEMA.ruc}<br/>${PROVEEDOR_SISTEMA.contacto}</div>
-    </body></html>`
-    const w=window.open("","_blank","width=320,height=600"); w?.document.write(html); w?.document.close(); w?.print()
-  }
     const guardarComoBorrador = () => {
     if(items.length===0){ alert("Agrega productos"); return }
     const hoy = new Date()
@@ -1116,7 +1002,6 @@ const total = subtotalSin + iva15 + ivaDiferenciado + valorICE + valorIRBPNR + p
             <div className="flex justify-between text-lg border-t border-white/10 pt-2 mt-2"><span className="font-black">VALOR TOTAL A PAGAR:</span><b className="text-[#00f5d4] text-xl">${total.toFixed(2)}</b></div>
           </div>
 
-          {/* === BOTONES ORIGINALES + BORRADOR + NUEVOS PDF Y TICKET === */}
 <div className="grid grid-cols-3 gap-2 mt-3">
   <button type="button" onClick={() => { if (bloqueoConsumidorFinal) return; setCajaAbierta(true) }} disabled={bloqueoConsumidorFinal} className={`font-black py-3 rounded-xl text-xs ${bloqueoConsumidorFinal ? "bg-white/10 text-white/30" : "bg-[#00f5d4] text-black"}`}>
     CAJA Y COBRO
@@ -1128,13 +1013,6 @@ const total = subtotalSin + iva15 + ivaDiferenciado + valorICE + valorIRBPNR + p
     EMITIR
   </button>
 </div>
-          <div className="grid grid-cols-2 gap-2 mt-2">
-            <button onClick={imprimirRIDE} className="bg-white text-black font-black py-2 rounded-xl text-[10px] border">📄 PDF A4 RIDE (BLOQUES A-F)</button>
-            <button onClick={imprimirTicket} className="bg-black border border-white/20 font-black py-2 rounded-xl text-[10px]">🧾 TICKET 80mm TERMICO</button>
-          </div>
-          <div className="mt-2 text-[8px] opacity-40 p-2 bg-black rounded border border-white/10">
-            Clave 49: {getClaveAcceso()} | Proveedor: {PROVEEDOR_SISTEMA.nombre} RUC {PROVEEDOR_SISTEMA.ruc}
-          </div>
 
           {cajaAbierta && (
   <div className="fixed inset-0 bg-black/90 z-[150] flex items-center justify-center p-4">

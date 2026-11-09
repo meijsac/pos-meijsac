@@ -173,8 +173,10 @@ export default function EstadoSRI(){
     <div className="min-h-screen bg-[#1a1500] p-6 text-white">
       <div className="bg-yellow-500/20 border border-yellow-500 p-4 rounded-xl font-black text-xl">⏱️ PROCESANDO EN COLA - PENDIENTE DE AUTORIZACIÓN</div>
       <p className="text-xs mt-2">SRI caído - Modo Offline permitido 72h. Clave: {data.claveAcceso}</p>
-      <button onClick={imprimirTicket} className="w-full mt-6 bg-black border p-4 rounded-xl font-black">🧾 IMPRIMIR TICKET 80mm EMERGENCIA - Con leyenda PENDIENTE</button>
-      <button disabled className="w-full mt-2 bg-white/10 p-4 rounded-xl opacity-30">📄 PDF A4 RIDE BLOQUEADO</button>
+      <div className="grid grid-cols-2 gap-3 mt-6">
+        <button onClick={imprimirRIDE} className="bg-white text-black p-4 rounded-xl font-black">📄 PDF A4 RIDE (BLOQUES A-F)</button>
+        <button onClick={imprimirTicket} className="bg-[#00f5d4] text-black p-4 rounded-xl font-black">🧾 TICKET 80mm TÉRMICO</button>
+      </div>
     </div>
   )
   return (
