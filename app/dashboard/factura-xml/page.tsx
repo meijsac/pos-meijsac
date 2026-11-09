@@ -453,9 +453,8 @@ const iva8 = base8*0.08
 const ivaDiferenciado = iva5 + iva8 // + otros si usas 12%,13%,14%
 const propina = propinaCheck? subtotalSin*0.10 : 0
 const total = subtotalSin + iva15 + ivaDiferenciado + valorICE + valorIRBPNR + propina
-  const esConsumidorFinal = cliente.identificacion === "9999999999999" || cliente.identificacion.trim() === "" || cliente.razon.toUpperCase().includes("CONSUMIDOR FINAL")
-  const superaLimiteSri = total > 50.00
-  const ventaBloqueadaPorNormativa = esConsumidorFinal && superaLimiteSri
+  const avisoConsumidorFinal = "Según la norma del SRI, no se permite emitir facturas a Consumidor Final por valores iguales o superiores a $50.00"
+  const bloqueoConsumidorFinal = String(cliente.identificacion || "").trim() === "9999999999999" && total >= 50
 
   const sumaOtrosPagos = pagos.redBancaria + pagos.tarjeta + pagos.debito + pagos.compensacion + pagos.dineroElec + pagos.prepago + pagos.endoso
   const efectivoCalculado = total - sumaOtrosPagos
@@ -630,6 +629,7 @@ const total = subtotalSin + iva15 + ivaDiferenciado + valorICE + valorIRBPNR + p
   
   
   const emitirComprobante = async () => {
+    if (bloqueoConsumidorFinal) return alert(avisoConsumidorFinal)
     if(!pagoRealizado) return alert("Primero cobra en CAJA")
     const { emisionBloqueada, rucLocal } = await import("@/lib/plan-cliente")
     const avisoPlan = await emisionBloqueada(configEmisor?.ruc || rucLocal())
@@ -1094,6 +1094,11 @@ const total = subtotalSin + iva15 + ivaDiferenciado + valorICE + valorIRBPNR + p
           )}
         </div>
 
+        {bloqueoConsumidorFinal && (
+          <div className="mb-3 bg-red-500/20 border-2 border-red-500 text-red-100 text-sm font-bold p-4 rounded-xl">
+            {avisoConsumidorFinal}
+          </div>
+        )}
         <div className="bg-[#1e293b] p-3 rounded-xl border-t-4 border-t-[#7c3aed] border border-white/10">
           <b>RESUMEN CONTABLE FACTURA (SRI)</b>
           <div className="space-y-1 mt-2">
@@ -1113,13 +1118,13 @@ const total = subtotalSin + iva15 + ivaDiferenciado + valorICE + valorIRBPNR + p
 
           {/* === BOTONES ORIGINALES + BORRADOR + NUEVOS PDF Y TICKET === */}
 <div className="grid grid-cols-3 gap-2 mt-3">
-  <button onClick={() => setCajaAbierta(true)} className="bg-[#00f5d4] text-black font-black py-3 rounded-xl text-xs">
+  <button type="button" onClick={() => { if (bloqueoConsumidorFinal) return; setCajaAbierta(true) }} disabled={bloqueoConsumidorFinal} className={`font-black py-3 rounded-xl text-xs ${bloqueoConsumidorFinal ? "bg-white/10 text-white/30" : "bg-[#00f5d4] text-black"}`}>
     CAJA Y COBRO
   </button>
   <button onClick={() => guardarComoBorrador()} className="bg-[#ffbe0a] text-black font-black py-3 rounded-xl text-xs">
     📝 BORRADOR
   </button>
-  <button onClick={() => emitirComprobante()} disabled={!pagoRealizado} className={`font-black py-3 rounded-xl text-xs ${pagoRealizado? 'bg-white text-black' : 'bg-white/10 text-white/20'}`}>
+  <button type="button" onClick={() => emitirComprobante()} disabled={!pagoRealizado || bloqueoConsumidorFinal} className={`font-black py-3 rounded-xl text-xs ${pagoRealizado && !bloqueoConsumidorFinal ? 'bg-white text-black' : 'bg-white/10 text-white/20'}`}>
     EMITIR
   </button>
 </div>
@@ -1275,20 +1280,22 @@ const total = subtotalSin + iva15 + ivaDiferenciado + valorICE + valorIRBPNR + p
           }
           if (diff > 0.01) {
             return (
-              <button onClick={()=>{
+              <button type="button" disabled={bloqueoConsumidorFinal} onClick={()=>{
+                if (bloqueoConsumidorFinal) return
                 const cambio = diff
                 setPagos({efectivo:abonos.efectivo - cambio, redBancaria:abonos.transfer, tarjeta:abonos.tarjeta, credito:abonos.credito, cambio:cambio})
                 setPagoRealizado(true); setCajaAbierta(false)
-              }} className="bg-[#00f5d4] text-black p-4 rounded-xl font-black text-[11px] shadow-[0_0_20px_rgba(0,245,212,0.6)]">
+              }} className="bg-[#00f5d4] text-black p-4 rounded-xl font-black text-[11px] shadow-[0_0_20px_rgba(0,245,212,0.6)] disabled:opacity-40">
                 ✓ ENTREGAR VUELTO ${diff.toFixed(2)}
               </button>
             )
           }
           return (
-            <button onClick={()=>{
+            <button type="button" disabled={bloqueoConsumidorFinal} onClick={()=>{
+              if (bloqueoConsumidorFinal) return
               setPagos({efectivo:abonos.efectivo, redBancaria:abonos.transfer, tarjeta:abonos.tarjeta, credito:abonos.credito, cambio:0})
               setPagoRealizado(true); setCajaAbierta(false)
-            }} className="bg-[#00f5d4] text-black p-4 rounded-xl font-black">
+            }} className="bg-[#00f5d4] text-black p-4 rounded-xl font-black disabled:opacity-40">
               ✓ CONFIRMAR PAGO MIXTO
             </button>
           )
