@@ -36,24 +36,31 @@ function fechaSri(valor: unknown) {
 
 export const ID_CONSUMIDOR_FINAL = "9999999999999"
 
+function codigoDocumento(cliente: any) {
+  const c = String(cliente?.tipoDoc || cliente?.tipoId || "").replace(/\D/g, "").padStart(2, "0")
+  if (c === "04" || c === "05" || c === "06" || c === "08") return c
+  return "06"
+}
+
 export function normalizarComprador(cliente: any) {
   const razon = String(cliente?.razon || "").trim()
   const digitos = String(cliente?.identificacion || "").replace(/\D/g, "")
-  const esFinal = razon.toUpperCase().includes("CONSUMIDOR FINAL") || digitos === ID_CONSUMIDOR_FINAL || /^9{13,}$/.test(digitos)
-  if (!esFinal) return cliente
-  return { ...cliente, tipoDoc: "07", tipoId: "07", identificacion: ID_CONSUMIDOR_FINAL, razon: razon || "CONSUMIDOR FINAL" }
+  const idFinal = digitos === ID_CONSUMIDOR_FINAL || /^9{13,}$/.test(digitos)
+  const nombreFinal = razon.toUpperCase() === "CONSUMIDOR FINAL"
+  if (idFinal || (nombreFinal && digitos.length !== 10 && digitos.length !== 13)) {
+    return { ...cliente, tipoDoc: "07", tipoId: "07", identificacion: ID_CONSUMIDOR_FINAL, razon: "CONSUMIDOR FINAL" }
+  }
+  const tipo = digitos.length === 10 ? "05" : digitos.length === 13 ? "04" : codigoDocumento(cliente)
+  return { ...cliente, tipoDoc: tipo, tipoId: tipo, identificacion: digitos, razon }
 }
 
 function tipoIdentificacion(id: string, codigo?: unknown) {
-  const limpio = id.replace(/\s/g, "").replace(/\D/g, "")
+  const limpio = id.replace(/\D/g, "")
   if (limpio === ID_CONSUMIDOR_FINAL || /^9{13,}$/.test(limpio)) return "07"
-  const digitos = String(codigo ?? "").replace(/\D/g, "")
-  if (digitos) {
-    const c = digitos.padStart(2, "0")
-    if (c === "04" || c === "05" || c === "06" || c === "07" || c === "08") return c
-  }
-  if (/^\d{13}$/.test(limpio)) return "04"
-  if (/^\d{10}$/.test(limpio)) return "05"
+  if (limpio.length === 10) return "05"
+  if (limpio.length === 13) return "04"
+  const c = String(codigo ?? "").replace(/\D/g, "").padStart(2, "0")
+  if (c === "04" || c === "05" || c === "06" || c === "08") return c
   return "06"
 }
 

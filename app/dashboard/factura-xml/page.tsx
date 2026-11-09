@@ -3,7 +3,6 @@ import { useState, useEffect, useRef } from "react"
 import Link from "next/link"
 import ModalCajaMixto from "./components/ModalCajaMixto"
 import { elegirSecuencial, puntoActivoFactura } from "@/lib/sri/punto-emision"
-import { htmlRide } from "@/lib/sri/ride-html"
 import { normalizarComprador } from "@/lib/sri/xml-factura"
 
 function codigosProducto(p: any) {
@@ -768,6 +767,10 @@ const total = subtotalSin + iva15 + ivaDiferenciado + valorICE + valorIRBPNR + p
     if(!pagoRealizado) return alert("Primero cobra en CAJA")
     if (tipoCobro === "credito" && (!(plazoCredito > 0) || !(cuotasCredito >= 1))) return alert("Para crédito debes poner plazo y cuotas")
     const venta = window.open("", "_blank")
+    try {
+      venta?.document.write("<p style=\"font-family:Arial,sans-serif;padding:24px\">Generando el comprobante…</p>")
+      venta?.document.close()
+    } catch {}
     const { emisionBloqueada, rucLocal } = await import("@/lib/plan-cliente")
     const avisoPlan = await emisionBloqueada(configEmisor?.ruc || rucLocal())
     if (avisoPlan) { venta?.close(); return alert(avisoPlan) }
@@ -986,44 +989,13 @@ const total = subtotalSin + iva15 + ivaDiferenciado + valorICE + valorIRBPNR + p
       } catch {}
       cargarPunto()
       localStorage.setItem("meijsac_ultima_factura_pendiente", JSON.stringify(facturaPendiente))
-      if (venta) {
-        const t = facturaPendiente.totales || {}
-        venta.document.open()
-        venta.document.write(htmlRide({
-          razonSocial: configEmisor.razon || "",
-          nombreComercial: configEmisor.comercial || "",
-          ruc: configEmisor.ruc || "",
-          dirMatriz: configEmisor.matriz || "",
-          dirSucursal: configEmisor.sucursal || "",
-          obligado: configEmisor.obligado || "",
-          regimen: configEmisor.regimen || "",
-          logoUrl: configEmisor.logo || "",
-          numeroFactura: `${serieUsada}-${secUsado}`,
-          claveAcceso: facturaPendiente.claveAcceso || "",
-          fechaAutorizacion: guardada.fechaAutorizacion || "—",
-          ambiente: configEmisor.ambiente || "PRUEBAS",
-          cliente: facturaPendiente.cliente?.razon || "",
-          identificacion: facturaPendiente.cliente?.identificacion || "9999999999999",
-          fechaEmision: facturaPendiente.fechaEmisionFormato || "",
-          email: facturaPendiente.cliente?.email || "",
-          direccionCliente: facturaPendiente.cliente?.direccion || "",
-          formaPago: facturaPendiente.formaPago || "",
-          items: facturaPendiente.items || [],
-          base15: t.base15,
-          base0: t.base0,
-          baseNoObjeto: t.baseNoObjeto,
-          baseExento: t.baseExento,
-          subtotalSin: t.subtotalSin,
-          descuento: t.descuento,
-          ice: t.valorICE,
-          iva: t.iva15,
-          propina: t.propina,
-          total: t.total,
-          mensajeSri: guardada.fechaAutorizacion ? "" : (guardada.mensaje || ""),
-        }))
-        venta.document.close()
-      } else {
-        alert("El navegador bloqueó la pestaña del comprobante. Permite ventanas emergentes para imprimir.")
+      const claveRide = String(guardada.claveAcceso || facturaPendiente.claveAcceso || "").replace(/\D/g, "")
+      const urlRide = `/dashboard/factura-xml/pdf/${claveRide}`
+      if (claveRide && venta) venta.location.href = urlRide
+      else if (claveRide) window.open(urlRide, "_blank")
+      else {
+        venta?.close()
+        alert("No se pudo obtener la clave de acceso del comprobante.")
       }
       if (guardada.conectado === false) alert(guardada.error || guardada.mensaje || "No hubo conexión con el SRI.")
     } catch {
@@ -1059,11 +1031,13 @@ const total = subtotalSin + iva15 + ivaDiferenciado + valorICE + valorIRBPNR + p
           x.identificacion?.includes(ruc10)
         ) || data[0];
 
+        const idCliente = String(c.identificacion || "").replace(/\D/g, "")
+        const tipoCliente = idCliente === "9999999999999" || /^9{13,}$/.test(idCliente) ? "07" : idCliente.length === 13 ? "04" : idCliente.length === 10 ? "05" : (c.tipoId || "06")
         setCliente((f:any) => ({
           ...f,
-          tipoDoc: c.tipoId || f.tipoDoc,
-          identificacion: c.identificacion,
-          razon: c.razonSocial,
+          tipoDoc: tipoCliente,
+          identificacion: tipoCliente === "07" ? "9999999999999" : idCliente,
+          razon: tipoCliente === "07" ? "CONSUMIDOR FINAL" : c.razonSocial,
           direccion: c.direccion || (String(c.identificacion) === "9999999999999" ? "QUITO" : ""),
           provincia: c.provincia || "",
           ciudad: c.ciudad || "",
@@ -1127,13 +1101,22 @@ const total = subtotalSin + iva15 + ivaDiferenciado + valorICE + valorIRBPNR + p
         <div className="col-span-2 bg-[#1e293b] p-3 rounded-xl border border-white/10">
           <div className="flex justify-between mb-2"><b className="text-[#00f5d4]">1. + CLIENTE (SRI)</b><button onClick={()=>setShowNuevoCliente(true)} className="bg-[#00f5d4]/20 text-[#00f5d4] px-2 py-1 rounded text-[10px]">+ Nuevo</button></div>
           <div className="grid grid-cols-3 gap-2">
-            <select value={cliente.tipoDoc} onChange={e=>setCliente({...cliente,tipoDoc:e.target.value})} className="bg-black p-2 rounded-lg text-white text-[11px]">
+            <select value={cliente.tipoDoc} onChange={e=>{
+              const tipoDoc = e.target.value
+              if (tipoDoc === "07") setCliente({ ...cliente, tipoDoc, identificacion: "9999999999999", razon: "CONSUMIDOR FINAL" })
+              else setCliente({ ...cliente, tipoDoc, identificacion: cliente.identificacion === "9999999999999" ? "" : cliente.identificacion, razon: cliente.razon === "CONSUMIDOR FINAL" ? "" : cliente.razon })
+            }} className="bg-black p-2 rounded-lg text-white text-[11px]">
               <option value="05">05 - Cédula</option>
               <option value="04">04 - RUC</option>
               <option value="07">07 - Consumidor Final</option>
             </select>
             <div className="flex gap-1">
-  <input value={cliente.identificacion} onChange={e=>setCliente({...cliente,identificacion:e.target.value})} className="flex-1 ..." />
+  <input value={cliente.identificacion} onChange={e=>{
+    const identificacion = e.target.value
+    const digitos = identificacion.replace(/\D/g, "")
+    const tipoDoc = digitos === "9999999999999" || /^9{13,}$/.test(digitos) ? "07" : digitos.length === 13 ? "04" : digitos.length === 10 ? "05" : cliente.tipoDoc
+    setCliente({ ...cliente, identificacion, tipoDoc, razon: tipoDoc === "07" ? "CONSUMIDOR FINAL" : cliente.razon })
+  }} className="flex-1 ..." />
   <button
     type="button"
     disabled={buscandoSRI}
