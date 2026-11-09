@@ -13,7 +13,12 @@ type Producto = {
   descripcion: string;
   detalle: string;
   tipoItem: TipoItem;
-  tipoIvaSRI: "15%" | "0%" | "EXENTO" | "NO_OBJETO" | "DIFERENCIADO";
+  tipoIvaSRI: "15%" | "12%" | "14%" | "5%" | "0%" | "EXENTO" | "NO_OBJETO" | "DIFERENCIADO";
+  codigoPorcentaje: string;
+  tarifaIva: number;
+  codigoImpuesto: number;
+  descuento: number;
+  valorIce: number;
   precioSinIVA: number;
   precioMinorista: number;
   precioMayorista: number;
@@ -55,7 +60,7 @@ interface KardexMov {
 const formInicial: Producto = {
   id: "", empresa_id: "EMPRESA_001", nombre: "",
   codigo: "", codigoAuxiliar: "", descripcion: "", detalle: "",
-  tipoItem: "FISICO", tipoIvaSRI: "15%",
+  tipoItem: "FISICO", tipoIvaSRI: "15%", codigoPorcentaje: "4", tarifaIva: 15, codigoImpuesto: 2, descuento: 0, valorIce: 0,
   precioSinIVA: 0, precioMinorista: 0, precioMayorista: 0, precioDistribuidor: 0,
   costoInicial: 0, stock: 0, stockMin: 5, stockMax: 100,
   bodega: "PRINCIPAL", categoria: "PRINCIPAL", unidad: "UND",
@@ -84,73 +89,138 @@ export default function ProductosModule() {
   const [bodegas, setBodegas] = useState<string[]>(["PRINCIPAL", "EXHIBICION"]);
   const [fechasKardex, setFechasKardex] = useState({ desde: "", hasta: "" });
   const [ajusteForm, setAjusteForm] = useState({ tipo: "EGRESO", cant: 1, motivo: "Mermas / Daños" });
+  const [resumenImportacion, setResumenImportacion] = useState<{ importados: number; errores: string[] } | null>(null);
 
-  // LÓGICA DE UPSERT: Importación inteligente validando duplicados
   const importarDesdeExcel = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if(!file) return;
     const reader = new FileReader();
     reader.onload = (evt) => {
       const wb = XLSX.read(evt.target!.result, { type: 'array' });
-      const ws = wb.Sheets[wb.SheetNames[0]];
+      const nombreHoja = wb.SheetNames.find((n) => n.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().includes("producto")) || wb.SheetNames[0]
+      const ws = wb.Sheets[nombreHoja];
       const data: any[] = XLSX.utils.sheet_to_json(ws);
       
-      const mapeados = data.map((fila:any, i:number) => ({
-        id: fila["ID"] && String(fila["ID"]).trim() !== "" ? String(fila["ID"]) : `IMP_${Date.now()}_${i}`,
-        empresa_id: empresaId,
-        nombre: (fila["Nombre"] || fila["Descripcion"] || "").toString().toUpperCase(),
-        codigo: (fila["Codigo_Principal"] || `00${i+1}`).toString(),
-        codigoAuxiliar: (fila["Codigo_Auxiliar"] || "").toString(),
-        descripcion: (fila["Descripcion"] || "").toString(),
-        detalle: (fila["Detalle_Factura"] || "").toString(),
-        tipoItem: (fila["Tipo_Item"] || "FISICO") as TipoItem,
-        tipoIvaSRI: (fila["Tarifa_IVA_SRI"] || "15%") as any,
-        precioSinIVA: Number(fila["Precio_Minorista"] || 0),
-        precioMinorista: Number(fila["Precio_Minorista"] || 0),
-        precioMayorista: Number(fila["Precio_Mayorista"] || 0),
-        precioDistribuidor: Number(fila["Precio_Distribuidor"] || 0),
-        costoInicial: Number(fila["Costo_Inicial"] || 0),
-        stock: Number(fila["Stock_Actual"] || 0),
-        stockMin: Number(fila["Stock_Minimo"] || 5),
-        stockMax: Number(fila["Stock_Maximo"] || 100),
-        bodega: (fila["Bodega"] || "PRINCIPAL").toString(),
-        categoria: "PRINCIPAL",
-        unidad: (fila["Unidad_Medida"] || "UND").toString(),
-        ubicacion: "",
-        fechaVence: "",
-        porcIce: Number(fila["Porcentaje_ICE"] || 0),
-        irbpnr: 0,
-        subsidio: 0,
-        gravaICE: fila["Aplica_ICE"] === "SI",
-        manejaStock: fila["Maneja_Stock"] !== "NO",
-        cuentaContable: "4.1.01",
-        visibleWeb: fila["Estado"] !== "INACTIVO",
-        esCombo: false,
-        esFabricado: false,
-        lote: (fila["Lote"] || "").toString()
-      })).filter(p => p.nombre !== "");
+      const texto = (fila: Record<string, unknown>, ...nombres: string[]) => {
+        for (const nombre of nombres) {
+          const valor = fila[nombre]
+          if (valor !== undefined && valor !== null && String(valor).trim() !== "") return valor
+        }
+        return ""
+      }
+      const numero = (valor: unknown) => {
+        if (valor === "" || valor === undefined || valor === null) return null
+        const n = Number(String(valor).replace(",", "."))
+        return Number.isFinite(n) ? n : Number.NaN
+      }
+      const ivaPorCodigo: Record<string, { tipo: Producto["tipoIvaSRI"]; tarifa: number | null }> = {
+        "0": { tipo: "0%", tarifa: 0 },
+        "2": { tipo: "12%", tarifa: 12 },
+        "3": { tipo: "14%", tarifa: 14 },
+        "4": { tipo: "15%", tarifa: 15 },
+        "5": { tipo: "5%", tarifa: 5 },
+        "6": { tipo: "NO_OBJETO", tarifa: 0 },
+        "7": { tipo: "EXENTO", tarifa: 0 },
+        "8": { tipo: "DIFERENCIADO", tarifa: null },
+      }
+      const aliasIva: Record<string, string> = {
+        "0%": "0", "12%": "2", "14%": "3", "15%": "4", "5%": "5",
+        "NO_OBJETO": "6", "NO OBJETO": "6", "EXENTO": "7", "DIFERENCIADO": "8",
+      }
+      const errores: string[] = []
+      const mapeados: Producto[] = []
+      data.forEach((cruda: any, i: number) => {
+        const fila: Record<string, unknown> = {}
+        Object.entries(cruda).forEach(([k, v]) => { fila[String(k).trim()] = v })
+        const filaExcel = i + 2
+        const codigo = String(texto(fila, "Codigo", "Codigo_Principal")).trim()
+        const nombre = String(texto(fila, "Nombre", "Descripcion")).trim()
+        if (!codigo && !nombre) return
+        const ref = codigo ? `Fila ${filaExcel} (${codigo})` : `Fila ${filaExcel}`
+        const tipoRaw = String(texto(fila, "Tipo Producto", "Tipo_Item")).trim().toUpperCase()
+        const tipoNumero = Number(tipoRaw)
+        const tipoNum = tipoRaw === "BIEN" || tipoRaw === "FISICO" || tipoNumero === 1 ? "1" : tipoRaw === "SERVICIO" || tipoNumero === 2 ? "2" : ""
+        if (!tipoNum) errores.push(`${ref}: Tipo Producto debe ser 1 o 2`)
+        const ivaTexto = String(texto(fila, "Tipo Iva", "Tarifa_IVA_SRI")).trim().toUpperCase()
+        const ivaNumero = Number(ivaTexto)
+        const codigoIva = aliasIva[ivaTexto] || (ivaTexto !== "" && Number.isInteger(ivaNumero) ? String(ivaNumero) : "")
+        const iva = ivaPorCodigo[codigoIva]
+        if (!iva) errores.push(`${ref}: Tipo Iva debe ser 0, 2, 3, 4, 5, 6, 7 u 8`)
+        const tarifaEscrita = numero(texto(fila, "Tarifa_IVA_Porcentaje"))
+        let tarifa = iva?.tarifa ?? 0
+        if (iva && codigoIva === "8") {
+          if (tarifaEscrita === null || Number.isNaN(tarifaEscrita)) errores.push(`${ref}: Tarifa_IVA_Porcentaje es obligatoria para Tipo Iva 8`)
+          else tarifa = tarifaEscrita
+        } else if (iva && tarifaEscrita !== null) {
+          if (Number.isNaN(tarifaEscrita) || tarifaEscrita !== iva.tarifa) errores.push(`${ref}: Tarifa_IVA_Porcentaje debe ser ${iva.tarifa} para Tipo Iva ${codigoIva}`)
+        }
+        const impuesto = texto(fila, "Codigo_Impuesto")
+        if (impuesto !== "" && Number(impuesto) !== 2) errores.push(`${ref}: Codigo_Impuesto debe ser 2`)
+        const precio1 = numero(texto(fila, "Precio 1", "Precio_Minorista"))
+        if (precio1 === null || Number.isNaN(precio1)) errores.push(`${ref}: Precio 1 es obligatorio y va sin IVA`)
+        const precio2 = numero(texto(fila, "Precio 2", "Precio_Mayorista"))
+        const precio3 = numero(texto(fila, "Precio 3", "Precio_Distribuidor"))
+        if (Number.isNaN(precio2) || Number.isNaN(precio3)) errores.push(`${ref}: Precio 2 y Precio 3 deben ser números o quedar vacíos`)
+        const stock = numero(texto(fila, "Stock", "Stock_Actual"))
+        const costo = numero(texto(fila, "Costo", "Costo_Inicial"))
+        const descuento = numero(texto(fila, "Descuento"))
+        const valorIce = numero(texto(fila, "Valor_ICE"))
+        const irbpnr = numero(texto(fila, "Valor_IRBPNR"))
+        if ([stock, costo, descuento, valorIce, irbpnr].some((n) => Number.isNaN(n))) errores.push(`${ref}: Stock, Costo, Descuento, Valor_ICE y Valor_IRBPNR deben ser números`)
+        if (!codigo) errores.push(`${ref}: Codigo es obligatorio`)
+        if (!nombre) errores.push(`${ref}: Nombre es obligatorio`)
+        if (errores.some((e) => e.startsWith(`${ref}:`))) return
+        mapeados.push({
+          id: `IMP_${Date.now()}_${i}`,
+          empresa_id: empresaId,
+          nombre: nombre.toUpperCase(),
+          codigo,
+          codigoAuxiliar: String(texto(fila, "Codigo Auxiliar", "Codigo_Auxiliar")).trim(),
+          descripcion: nombre.toUpperCase(),
+          detalle: String(texto(fila, "Detalle", "Detalle_Factura")).trim(),
+          tipoItem: tipoNum === "2" ? "SERVICIO" : "FISICO",
+          tipoIvaSRI: iva!.tipo,
+          codigoPorcentaje: codigoIva,
+          tarifaIva: tarifa,
+          codigoImpuesto: 2,
+          descuento: descuento ?? 0,
+          valorIce: valorIce ?? 0,
+          precioSinIVA: precio1!,
+          precioMinorista: precio1!,
+          precioMayorista: precio2 ?? 0,
+          precioDistribuidor: precio3 ?? 0,
+          costoInicial: costo ?? 0,
+          stock: stock ?? 0,
+          stockMin: 5,
+          stockMax: 100,
+          bodega: "PRINCIPAL",
+          categoria: "PRINCIPAL",
+          unidad: String(texto(fila, "Unidad_Medida") || "UNIDAD"),
+          ubicacion: "",
+          fechaVence: "",
+          porcIce: 0,
+          irbpnr: irbpnr ?? 0,
+          subsidio: 0,
+          gravaICE: (valorIce ?? 0) > 0,
+          manejaStock: tipoNum !== "2",
+          cuentaContable: "4.1.01",
+          visibleWeb: true,
+          esCombo: false,
+          esFabricado: false,
+          lote: "",
+        })
+      })
       
       setProductos(prevProductos => {
-        let nuevosProductos = [...prevProductos];
-        let actualizados = 0;
-        let creados = 0;
-
+        const nuevosProductos = [...prevProductos]
         mapeados.forEach(prodEntrante => {
-          const indexExistente = nuevosProductos.findIndex(p => p.codigo === prodEntrante.codigo);
-          if (indexExistente >= 0) {
-            // Actualiza manteniendo el ID original
-            nuevosProductos[indexExistente] = { ...prodEntrante, id: nuevosProductos[indexExistente].id };
-            actualizados++;
-          } else {
-            // Es un código nuevo
-            nuevosProductos.push(prodEntrante);
-            creados++;
-          }
-        });
-
-        alert(`✅ Proceso Exitoso:\n- ${creados} Productos creados nuevos.\n- ${actualizados} Productos actualizados.`);
-        return nuevosProductos;
-      });
+          const indexExistente = nuevosProductos.findIndex(p => p.codigo === prodEntrante.codigo)
+          if (indexExistente >= 0) nuevosProductos[indexExistente] = { ...prodEntrante, id: nuevosProductos[indexExistente].id }
+          else nuevosProductos.push(prodEntrante)
+        })
+        return nuevosProductos
+      })
+      setResumenImportacion({ importados: mapeados.length, errores })
       
       e.target.value = '';
     };
@@ -159,16 +229,15 @@ export default function ProductosModule() {
 
   const exportarAExcel = () => {
     if(productos.length === 0) return alert("No hay nada que exportar");
+    const codigoDe = (p: Producto) => p.codigoPorcentaje || ({ "0%": "0", "12%": "2", "14%": "3", "15%": "4", "5%": "5", "NO_OBJETO": "6", "EXENTO": "7", "DIFERENCIADO": "8" } as Record<string, string>)[p.tipoIvaSRI] || ""
     const filas = productos.map(p => ({
-      ID: p.id, Codigo_Principal: p.codigo, Codigo_Auxiliar: p.codigoAuxiliar,
-      Nombre: p.nombre, Descripcion: p.descripcion, Detalle_Factura: p.detalle,
-      Tipo_Item: p.tipoItem, Tarifa_IVA_SRI: p.tipoIvaSRI,
-      Precio_Minorista: p.precioMinorista, Precio_Mayorista: p.precioMayorista,
-      Precio_Distribuidor: p.precioDistribuidor, Costo_Inicial: p.costoInicial,
-      Stock_Actual: p.stock, Stock_Minimo: p.stockMin, Stock_Maximo: p.stockMax,
-      Maneja_Stock: p.manejaStock ? "SI" : "NO", Aplica_ICE: p.gravaICE ? "SI" : "NO",
-      Porcentaje_ICE: p.porcIce, Bodega: p.bodega, Unidad_Medida: p.unidad,
-      Lote: p.lote, Estado: p.visibleWeb ? "ACTIVO" : "INACTIVO"
+      Codigo: p.codigo, "Codigo Auxiliar": p.codigoAuxiliar,
+      Nombre: p.nombre, Detalle: p.detalle,
+      "Tipo Producto": p.tipoItem === "SERVICIO" ? 2 : 1, "Tipo Iva": codigoDe(p),
+      "Precio 1": p.precioSinIVA || p.precioMinorista, "Precio 2": p.precioMayorista, "Precio 3": p.precioDistribuidor,
+      Stock: p.stock, Costo: p.costoInicial, Codigo_Impuesto: 2,
+      Tarifa_IVA_Porcentaje: p.tarifaIva ?? "", Unidad_Medida: p.unidad || "UNIDAD",
+      Descuento: p.descuento || 0, Valor_ICE: p.valorIce || 0, Valor_IRBPNR: p.irbpnr || 0,
     }));
     const ws = XLSX.utils.json_to_sheet(filas);
     const wb = XLSX.utils.book_new();
@@ -176,19 +245,16 @@ export default function ProductosModule() {
     XLSX.writeFile(wb, `Inventario_Maestro_${empresaId}.xlsx`);
   };
 
-  const descargarPlantilla = () => {
-    const ws = XLSX.utils.json_to_sheet([{
-      ID: "", Codigo_Principal: "PROD-001", Codigo_Auxiliar: "7501031311",
-      Nombre: "COCA COLA 500ML", Descripcion: "Gaseosa personal", Detalle_Factura: "Bebida azucarada 500ml",
-      Tipo_Item: "FISICO", Tarifa_IVA_SRI: "15%", Precio_Minorista: 1.20, Precio_Mayorista: 1.10,
-      Precio_Distribuidor: 1.00, Costo_Inicial: 0.85, Stock_Actual: 100, Stock_Minimo: 10,
-      Stock_Maximo: 200, Maneja_Stock: "SI", Aplica_ICE: "NO", Porcentaje_ICE: 0,
-      Bodega: "PRINCIPAL", Unidad_Medida: "UND", Lote: "LOTE-2024", Estado: "ACTIVO"
-    }]);
-    ws['!cols'] = [ {wch:15}, {wch:15}, {wch:15}, {wch:30}, {wch:20}, {wch:25}, {wch:12}, {wch:15}, {wch:15}, {wch:15}, {wch:15}, {wch:12}, {wch:12}, {wch:12}, {wch:12}, {wch:12}, {wch:12}, {wch:15}, {wch:15}, {wch:15}, {wch:15}, {wch:10} ];
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, "Plantilla_Migracion");
-    XLSX.writeFile(wb, "Plantilla_Migracion_Productos.xlsx");
+  const descargarPlantilla = async () => {
+    const res = await fetch("/api/productos/plantilla")
+    if (!res.ok) return alert("No se pudo descargar la plantilla")
+    const blob = await res.blob()
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement("a")
+    a.href = url
+    a.download = "Plantilla_Migracion_Productos.xlsx"
+    a.click()
+    URL.revokeObjectURL(url)
   };
 
   useEffect(() => {
@@ -207,7 +273,8 @@ export default function ProductosModule() {
        ...p,
         codigo: p.codigo || "001", codigoAuxiliar: p.codigoAuxiliar || "",
         descripcion: p.descripcion || p.nombre, detalle: p.detalle || "",
-        tipoIvaSRI: p.tipoIvaSRI || "15%", stockMax: p.stockMax || 100,
+        tipoIvaSRI: p.tipoIvaSRI || "15%", codigoPorcentaje: p.codigoPorcentaje || "", tarifaIva: p.tarifaIva ?? 0,
+        codigoImpuesto: 2, descuento: p.descuento || 0, valorIce: p.valorIce || 0, stockMax: p.stockMax || 100,
         bodega: p.bodega || "PRINCIPAL", categoria: p.categoria || "PRINCIPAL",
         unidad: p.unidad || "UND", ubicacion: p.ubicacion || "",
         fechaVence: p.fechaVence || "", porcIce: p.porcIce || 0,
@@ -220,7 +287,7 @@ export default function ProductosModule() {
       setProductos(migrados);
     } else {
       setProductos([
-        { id: "1", empresa_id: eid, nombre: "COCA COLA 500ML", codigo:"001", codigoAuxiliar:"", descripcion:"COCA COLA 500ML", detalle: "", tipoItem: "FISICO", tipoIvaSRI:"15%", precioSinIVA: 1.20, precioMinorista: 1.20, precioMayorista: 1.10, precioDistribuidor: 1.00, costoInicial: 0.85, stock: 100, stockMin: 10, stockMax: 200, bodega:"PRINCIPAL", categoria:"PRINCIPAL", unidad:"UND", ubicacion:"", fechaVence:"", porcIce:0, irbpnr:0, subsidio:0, gravaICE:false, manejaStock:true, cuentaContable:"4.1.01", visibleWeb:true, esCombo:false, esFabricado:false, lote: "" }
+        { id: "1", empresa_id: eid, nombre: "COCA COLA 500ML", codigo:"001", codigoAuxiliar:"", descripcion:"COCA COLA 500ML", detalle: "", tipoItem: "FISICO", tipoIvaSRI:"15%", codigoPorcentaje:"4", tarifaIva:15, codigoImpuesto:2, descuento:0, valorIce:0, precioSinIVA: 1.20, precioMinorista: 1.20, precioMayorista: 1.10, precioDistribuidor: 1.00, costoInicial: 0.85, stock: 100, stockMin: 10, stockMax: 200, bodega:"PRINCIPAL", categoria:"PRINCIPAL", unidad:"UND", ubicacion:"", fechaVence:"", porcIce:0, irbpnr:0, subsidio:0, gravaICE:false, manejaStock:true, cuentaContable:"4.1.01", visibleWeb:true, esCombo:false, esFabricado:false, lote: "" }
       ]);
     }
     
@@ -380,7 +447,7 @@ export default function ProductosModule() {
 
         <div className="grid grid-cols-2 gap-2 pt-3 border-t border-white/10">
           <div><label className="text-[9px] text-white/60 block mb-1" title="Usa tu lector de código de barras aquí.">Cód. Barras / Auxiliar</label><input value={form.codigoAuxiliar} onChange={e=>setForm({...form, codigoAuxiliar:e.target.value})} placeholder="Ej: 75010..." className="w-full bg-black border border-white/10 rounded-lg px-2.5 py-1.5 text-[11px] focus:border-[#00f5d4] outline-none" /></div>
-          <div><label className="text-[9px] text-white/60 font-bold block mb-1" title="Parámetro estricto para enviar comprobantes electrónicos al SRI.">Tarifa IVA SRI *</label><select value={form.tipoIvaSRI} onChange={e=>setForm({...form, tipoIvaSRI:e.target.value as any})} className="w-full bg-black border border-[#00f5d4]/50 text-[#00f5d4] rounded-lg px-2.5 py-1.5 text-[10px] font-bold outline-none"><option value="15%">IVA 15%</option><option value="0%">IVA 0%</option><option value="EXENTO">EXENTO</option><option value="NO_OBJETO">NO OBJETO</option></select></div>
+          <div><label className="text-[9px] text-white/60 font-bold block mb-1" title="Parámetro estricto para enviar comprobantes electrónicos al SRI.">Tarifa IVA SRI *</label><select value={form.tipoIvaSRI} onChange={e=>setForm({...form, tipoIvaSRI:e.target.value as any})} className="w-full bg-black border border-[#00f5d4]/50 text-[#00f5d4] rounded-lg px-2.5 py-1.5 text-[10px] font-bold outline-none"><option value="15%">IVA 15%</option><option value="5%">IVA 5%</option><option value="12%">IVA 12%</option><option value="14%">IVA 14%</option><option value="0%">IVA 0%</option><option value="EXENTO">EXENTO</option><option value="NO_OBJETO">NO OBJETO</option><option value="DIFERENCIADO">DIFERENCIADO</option></select></div>
           
           <div className="flex items-center gap-2 mt-1 bg-white/5 p-1.5 rounded-lg border border-white/5">
             <input type="checkbox" checked={form.gravaICE} onChange={e=>setForm({...form, gravaICE: e.target.checked})} id="chkIce" className="accent-[#00f5d4]" />
@@ -487,6 +554,12 @@ export default function ProductosModule() {
                 <option value="EXENTO">Solo Exentos</option>
               </select>
 
+              {resumenImportacion && (
+                <div className="max-w-[420px] max-h-[88px] overflow-auto bg-black border border-white/10 rounded-lg px-2 py-1 text-[9px]">
+                  <p className="font-black">{resumenImportacion.importados} importados, {resumenImportacion.errores.length} con error</p>
+                  {resumenImportacion.errores.map((err, i) => <p key={`${i}-${err}`}>{err}</p>)}
+                </div>
+              )}
               <div className="flex gap-1 bg-black p-1 rounded-lg border border-white/5">
                 <button title="📥 Descargar plantilla Excel vacía para migrar productos desde otro sistema" onClick={descargarPlantilla} className="bg-white/10 hover:bg-[#00f5d4] hover:text-black text-white rounded-md p-1.5 text-[12px] transition-colors">📥</button>
                 <div className="relative overflow-hidden cursor-pointer bg-white/10 hover:bg-blue-500 hover:text-white rounded-md p-1.5 transition-colors" title="📂 Importar productos masivamente desde el Excel de migración llenado">
