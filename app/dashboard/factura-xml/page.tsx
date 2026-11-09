@@ -520,6 +520,25 @@ const total = subtotalSin + iva15 + ivaDiferenciado + valorICE + valorIRBPNR + p
     const { emisionBloqueada, rucLocal } = await import("@/lib/plan-cliente")
     const avisoPlan = await emisionBloqueada(configEmisor?.ruc || rucLocal())
     if (avisoPlan) return alert(avisoPlan)
+    if (!Number.isFinite(total)) return alert("No se puede emitir: faltan valores de la factura que no se pueden calcular.")
+    const vueltoEmit = Number.isFinite(Number(pagos.cambio)) ? Number(pagos.cambio) : 0
+    const netoEmit = Number.isFinite(Number(pagosReales.efectivo)) ? Number(pagosReales.efectivo) : 0
+    const efectivoRecibidoEmit = netoEmit + vueltoEmit
+    const entregadoEmit = efectivoRecibidoEmit > 0 ? efectivoRecibidoEmit : total
+    const formasEmit: string[] = []
+    const anotarForma = (codigo: string, nombre: string, monto: unknown) => {
+      const n = Number(monto)
+      if (Number.isFinite(n) && n > 0) formasEmit.push(`${codigo} - ${nombre}`)
+    }
+    anotarForma("01", "SIN UTILIZACION DEL SISTEMA FINANCIERO", netoEmit)
+    anotarForma("15", "COMPENSACION DE DEUDAS", pagosReales.compensacion)
+    anotarForma("16", "TARJETA DE DEBITO", pagosReales.debito)
+    anotarForma("17", "DINERO ELECTRONICO", pagosReales.dineroElec)
+    anotarForma("18", "TARJETA PREPAGO", pagosReales.prepago)
+    anotarForma("19", "TARJETA DE CREDITO", pagosReales.tarjeta)
+    anotarForma("20", "OTROS CON UTILIZACION DEL SISTEMA FINANCIERO", (Number(pagosReales.redBancaria) || 0) + (Number(pagosReales.credito) || 0))
+    anotarForma("21", "ENDOSO DE TITULOS", pagosReales.endoso)
+    const formaPagoEmit = formasEmit.length ? formasEmit.join(" | ") : "01 - SIN UTILIZACION DEL SISTEMA FINANCIERO"
     console.log('Generando XML con pagos:', pagosReales, ' refs:', refTarjeta, refTransfer)
 
     // --- CORRECCIÓN 1: CLAVE 49 + DV MODULO 11 - FICHA TÉCNICA SRI ---
@@ -541,7 +560,11 @@ const total = subtotalSin + iva15 + ivaDiferenciado + valorICE + valorIRBPNR + p
       cliente: cliente,
       items: items,
       totales: { bruto, descuento, subtotalSin, base15, base0, baseNoObjeto, baseExento, baseDiferenciado, valorICE, valorIRBPNR, iva15, ivaDiferenciado, propina, total },
-      pagos: pagosReales,
+      formaPago: formaPagoEmit,
+      montoEntregado: entregadoEmit,
+      efectivoRecibido: efectivoRecibidoEmit > 0 ? efectivoRecibidoEmit : entregadoEmit,
+      vuelto: vueltoEmit,
+      pagos: { ...pagosReales, efectivo: netoEmit, cambio: vueltoEmit, vuelto: vueltoEmit, entregado: entregadoEmit, efectivoRecibido: efectivoRecibidoEmit > 0 ? efectivoRecibidoEmit : entregadoEmit, formaPago: formaPagoEmit },
       refs: { refTarjeta, refTransfer, tipoCobro, plazoElegido },
       transito: transitoActual,
       mesaOrigenId: transitoActual?.mesaOrigenId || null

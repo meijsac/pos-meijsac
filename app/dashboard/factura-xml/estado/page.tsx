@@ -3,6 +3,27 @@ import { useState, useEffect } from "react"
 import { useRouter } from "next/navigation"
 
 const PIE_PROVEEDOR = "Proveedor del Sistema: MEIJSAC S.A.S. - RUC: 1793243789001 - Soporte Quito"
+const FORMA_PAGO_DEFECTO = "01 - SIN UTILIZACION DEL SISTEMA FINANCIERO"
+
+function numeroGuardado(v: unknown): number | null {
+  if (v === null || v === undefined || v === "") return null
+  const n = typeof v === "number" ? v : Number(v)
+  return Number.isFinite(n) ? n : null
+}
+
+function cobroGuardado(d: any) {
+  const pagos = d?.pagos || {}
+  const total = numeroGuardado(d?.totales?.total) ?? 0
+  const vuelto = numeroGuardado(pagos.vuelto) ?? numeroGuardado(pagos.cambio) ?? 0
+  const efectivoNeto = numeroGuardado(typeof pagos.efectivo === "object" ? pagos.efectivo?.monto : pagos.efectivo) ?? 0
+  const efectivoRecibido = numeroGuardado(pagos.efectivoRecibido) ?? numeroGuardado(d?.efectivoRecibido) ?? (efectivoNeto + vuelto)
+  const entregadoGuardado = numeroGuardado(pagos.entregado) ?? numeroGuardado(d?.montoEntregado)
+  const entregado = entregadoGuardado !== null && entregadoGuardado > 0
+    ? entregadoGuardado
+    : (efectivoRecibido > 0 ? efectivoRecibido : total)
+  const formaPago = pagos.formaPago || d?.formaPago || FORMA_PAGO_DEFECTO
+  return { formaPago, entregado, efectivoRecibido: efectivoRecibido > 0 ? efectivoRecibido : entregado, vuelto }
+}
 
 export default function EstadoSRI(){
   const router = useRouter()
@@ -14,11 +35,13 @@ export default function EstadoSRI(){
     const cfg = JSON.parse(localStorage.getItem("meijsac_config") || localStorage.getItem("meijsac_config_restaurante") || "{}")
     setTipoNegocio(cfg.tipoNegocio || "restaurante")
     const factura = JSON.parse(localStorage.getItem("meijsac_ultima_factura_pendiente")||"{}")
-    setData(factura)
+    const cobro = cobroGuardado(factura)
+    const facturaConCobro = {...factura, formaPago: cobro.formaPago, montoEntregado: cobro.entregado, efectivoRecibido: cobro.efectivoRecibido, vuelto: cobro.vuelto, pagos: {...(factura.pagos||{}), ...cobro, cambio: cobro.vuelto, entregado: cobro.entregado}}
+    setData(facturaConCobro)
     setTimeout(()=>{
       const exito = Math.random() > 0.05
       if(exito){
-        const final = {...factura, numeroAutorizacion: factura.claveAcceso, fechaAutorizacion: new Date().toLocaleString('es-EC'), estado: "AUTORIZADO"}
+        const final = {...facturaConCobro, numeroAutorizacion: factura.claveAcceso, fechaAutorizacion: new Date().toLocaleString('es-EC'), estado: "AUTORIZADO"}
         setEstado("AUTORIZADO")
         setData(final)
         const hist = JSON.parse(localStorage.getItem("meijsac_facturas_emitidas")||"[]")
@@ -141,6 +164,7 @@ export default function EstadoSRI(){
       return
     }
     const usd = (n: number) => `$${n.toFixed(2)}`
+    const cobro = cobroGuardado(d)
     const formas: { codigo: string, nombre: string, monto: number }[] = []
     const sumarForma = (codigo: string, nombre: string, valor: unknown) => {
       const monto = numFinito(valor)
@@ -157,17 +181,9 @@ export default function EstadoSRI(){
     const credito = numFinito(d.pagos?.credito)
     if (red !== null || credito !== null) sumarForma("20", "OTROS CON UTILIZACION DEL SISTEMA FINANCIERO", (red ?? 0) + (credito ?? 0))
     sumarForma("21", "ENDOSO DE TITULOS", d.pagos?.endoso)
-    if (formas.length === 0 && efectivo !== null) formas.push({ codigo: "01", nombre: "SIN UTILIZACION DEL SISTEMA FINANCIERO", monto: efectivo })
-    if (formas.length === 0) errores.push("Forma de pago")
-    const cambio = numFinito(d.pagos?.cambio ?? d.pagos?.efectivo?.cambio)
-    const entregadoGuardado = numFinito(d.pagos?.entregado)
-    const entregado = entregadoGuardado !== null ? entregadoGuardado : (efectivo !== null && cambio !== null ? efectivo + cambio : null)
-    if (entregado === null) errores.push("Entregado")
-    if (cambio === null) errores.push("Vuelto")
-    if (errores.length || entregado === null || cambio === null) {
-      alert(`No se emite el RIDE. Hay valores vacíos que no se pueden calcular: ${[...new Set(errores)].join(", ")}.`)
-      return
-    }
+    if (formas.length === 0) formas.push({ codigo: "", nombre: cobro.formaPago, monto: cobro.entregado })
+    const entregado = cobro.entregado
+    const cambio = cobro.vuelto
     const clave = String(d.claveAcceso || "")
     const autorizacion = d.numeroAutorizacion ? String(d.numeroAutorizacion) : (estado === "AUTORIZADO" ? clave : "PENDIENTE DE AUTORIZACION")
     const html = `<!DOCTYPE html><html><head><title>RIDE ${d.establecimiento}-${d.secuencial}</title>
@@ -252,7 +268,7 @@ export default function EstadoSRI(){
         <div class="linea total"><span>VALOR TOTAL</span><b>${usd(total!)}</b></div>
         <div class="pagos">
           <div><b>FORMAS DE PAGO (Tabla 24)</b></div>
-          ${formas.map(f => `<div class="pago">${f.codigo} - ${f.nombre} ${usd(f.monto)}</div>`).join("")}
+          ${formas.map(f => `<div class="pago">${f.codigo ? `${f.codigo} - ${f.nombre}` : f.nombre} ${usd(f.monto)}</div>`).join("")}
           <div class="pago">ENTREGADO: ${usd(entregado)}</div>
           <div class="vuelto">VUELTO: ${usd(cambio)}</div>
         </div>
@@ -267,15 +283,13 @@ export default function EstadoSRI(){
 
   const imprimirTicket = ()=>{
     const d = data
-    let cambio = Number(d.pagos?.cambio || d.pagos?.efectivo?.cambio || 0)
-    let enCaja = Number(d.pagos?.efectivo && typeof d.pagos.efectivo === 'object' ? (d.pagos.efectivo.monto || 0) : (d.pagos?.efectivo || 0))
-    let entregado = Number(d.pagos?.entregado || 0)
-    if(enCaja === 0 && cambio > 0){ enCaja = Number(d.totales?.total || 0) }
-    if(entregado === 0 || entregado === cambio){ entregado = enCaja + cambio }
-    if(entregado < Number(d.totales?.total||0)){ entregado = Number(d.totales?.total||0) + cambio }
+    const cobro = cobroGuardado(d)
+    const cambio = cobro.vuelto
+    const entregado = cobro.entregado
+    const enCaja = numeroGuardado(typeof d.pagos?.efectivo === "object" ? d.pagos?.efectivo?.monto : d.pagos?.efectivo) ?? cobro.efectivoRecibido
     const subtotal = d.totales?.base15 || d.totales?.subtotalSin || 0
     const iva = d.totales?.iva15 || 0
-    const formaPagoTxt = d.pagos?.tarjeta > 0 || d.pagos?.redBancaria > 0 ? `01: $${enCaja.toFixed(2)} | 19: $${(d.pagos?.tarjeta||0).toFixed(2)}` : `01 - EFECTIVO`
+    const formaPagoTxt = cobro.formaPago
     const html = `
     <html><head><title>TICKET</title>
     <style>@page{size:80mm auto;margin:2mm} body{width:80mm;font-family:monospace;font-size:11px;color:#000}.c{text-align:center}.b{font-weight:900}.line{border-top:1px dashed #000;margin:4px 0}</style>
@@ -333,7 +347,7 @@ export default function EstadoSRI(){
         <div>Clave 49: <b className="font-mono break-all">{data.claveAcceso}</b></div>
         <div>Autorización: <b>{data.numeroAutorizacion}</b></div>
         <div>Fecha Aut: <b>{data.fechaAutorizacion}</b></div>
-        <div className="mt-2">Vuelto entregado: <b className="text-[#00f5d4]">${(data.pagos?.cambio||0).toFixed(2)}</b> / Efectivo recibido: ${( (data.pagos?.efectivo||0)+(data.pagos?.cambio||0) ).toFixed(2)} / Entregado real: ${(data.pagos?.entregado||0).toFixed(2)}</div>
+        <div className="mt-2">Vuelto entregado: <b className="text-[#00f5d4]">${cobroGuardado(data).vuelto.toFixed(2)}</b> / Efectivo recibido: ${cobroGuardado(data).efectivoRecibido.toFixed(2)} / Entregado real: ${cobroGuardado(data).entregado.toFixed(2)}</div>
       </div>
       <div className="grid grid-cols-2 gap-3 mt-6">
         <button onClick={imprimirRIDE} className="bg-white text-black p-4 rounded-xl font-black">📄 PDF A4 RIDE (BLOQUES A-F)</button>
