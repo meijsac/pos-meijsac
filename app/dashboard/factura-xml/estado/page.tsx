@@ -2,11 +2,7 @@
 import { useState, useEffect } from "react"
 import { useRouter } from "next/navigation"
 
-const PROVEEDOR_SISTEMA = {
-  nombre: "MEIJSAC POS",
-  ruc: "1793161234001",
-  contacto: "https://meijsacpos.com - Soporte Tena"
-}
+const PIE_PROVEEDOR = "Proveedor del Sistema: MEIJSAC S.A.S. - RUC: 1793243789001 - Soporte Quito"
 
 export default function EstadoSRI(){
   const router = useRouter()
@@ -61,62 +57,212 @@ export default function EstadoSRI(){
 
   const imprimirRIDE = ()=>{
     const d = data
-    const clave = d.claveAcceso || ""
-    let cambio = Number(d.pagos?.cambio || d.pagos?.efectivo?.cambio || 0)
-    let enCaja = Number(d.pagos?.efectivo && typeof d.pagos.efectivo === 'object' ? (d.pagos.efectivo.monto || 0) : (d.pagos?.efectivo || 0))
-    let entregado = Number(d.pagos?.entregado || 0)
-    if(enCaja === 0 && cambio > 0){ enCaja = Number(d.totales?.total || 0) }
-    if(entregado === 0 || entregado === cambio){ entregado = enCaja + cambio }
-    const formaPagoTxt = d.pagos?.tarjeta > 0 || d.pagos?.redBancaria > 0 ? `01: $${enCaja.toFixed(2)}` : `01 - SIN UTILIZACION SISTEMA FINANCIERO $${enCaja.toFixed(2)}`
-    const html = `
-    <html><head><title>RIDE ${d.establecimiento}-${d.secuencial}</title>
-    <style>body{font-family:Arial;font-size:11px;color:#000}.borde{border:1px solid #000;padding:8px}.t{font-size:16px;font-weight:900} table{width:100%;border-collapse:collapse} td,th{border:1px solid #000;padding:4px;font-size:10px}</style>
-    </head><body>
-    <div style="display:flex;justify-content:space-between">
-      <div style="width:58%" class="borde">
-        <div><b>${d.configEmisor?.razon||""}</b></div>
-        <div>${d.configEmisor?.comercial||""}</div>
-        <div><b>Dirección Matriz:</b> ${d.configEmisor?.matriz||""}</div>
-        <div><b>Dirección Sucursal:</b> ${d.configEmisor?.sucursal||""}</div>
-        <div><b>Obligado:</b> ${d.configEmisor?.obligado||"NO"} - <b>${d.configEmisor?.regimen||""}</b></div>
+    const errores: string[] = []
+    const numFinito = (v: unknown): number | null => {
+      if (v === null || v === undefined || v === "") return null
+      const n = typeof v === "number" ? v : Number(v)
+      return Number.isFinite(n) ? n : null
+    }
+    const exigir = (nombre: string, guardado: unknown, calculado: () => number | null) => {
+      const directo = numFinito(guardado)
+      if (directo !== null) return directo
+      const calculo = calculado()
+      if (calculo !== null) return calculo
+      errores.push(nombre)
+      return null
+    }
+    const items: any[] = Array.isArray(d.items) ? d.items : []
+    const baseDe = (codigos: string[]) => {
+      if (!Array.isArray(d.items)) return null
+      let suma = 0
+      for (const it of items) {
+        if (!codigos.includes(String(it?.codigoPorcentaje))) continue
+        const cant = numFinito(it?.cant)
+        const pUnit = numFinito(it?.pUnit)
+        if (cant === null || pUnit === null) return null
+        const descPorc = numFinito(it?.descPorc)
+        suma += cant * pUnit * (descPorc === null ? 1 : 1 - descPorc / 100)
+      }
+      return suma
+    }
+    const base15 = exigir("Subtotal 15%", d.totales?.base15, () => baseDe(["4"]))
+    const base0 = exigir("Subtotal 0%", d.totales?.base0, () => baseDe(["0"]))
+    const baseNoObjeto = exigir("Subtotal No objeto de IVA", d.totales?.baseNoObjeto, () => baseDe(["6"]))
+    const baseExento = exigir("Subtotal Exento de IVA", d.totales?.baseExento, () => baseDe(["7"]))
+    const descuento = exigir("Total Descuentos", d.totales?.descuento, () => {
+      if (!Array.isArray(d.items)) return null
+      let suma = 0
+      for (const it of items) {
+        const cant = numFinito(it?.cant)
+        const pUnit = numFinito(it?.pUnit)
+        const descPorc = numFinito(it?.descPorc)
+        const descDolar = numFinito(it?.descDolar)
+        if (cant === null || pUnit === null) return null
+        suma += descPorc !== null ? cant * pUnit * descPorc / 100 : (descDolar ?? 0)
+      }
+      return suma
+    })
+    const ice = exigir("ICE", d.totales?.valorICE, () => {
+      if (!Array.isArray(d.items)) return null
+      let suma = 0
+      for (const it of items) {
+        if (it?.ice === undefined) continue
+        const valor = numFinito(it.ice)
+        if (valor === null) return null
+        suma += valor
+      }
+      return suma
+    })
+    const iva = exigir("IVA oficial", d.totales?.iva15, () => base15 === null ? null : Math.round(base15 * 0.15 * 100) / 100)
+    const propina = exigir("Propina", d.totales?.propina, () => null)
+    const total = exigir("Valor Total", d.totales?.total, () => null)
+    const filas = items.map((it: any) => {
+      const cant = numFinito(it?.cant)
+      const pUnit = numFinito(it?.pUnit)
+      const descDolar = numFinito(it?.descDolar)
+      if (cant === null || pUnit === null) {
+        errores.push(`Precio o cantidad de ${it?.descripcion || it?.codigo || "un producto"}`)
+        return ""
+      }
+      if (it?.descDolar !== undefined && it?.descDolar !== null && it?.descDolar !== "" && descDolar === null) {
+        errores.push(`Descuento de ${it?.descripcion || it?.codigo || "un producto"}`)
+        return ""
+      }
+      const desc = descDolar ?? 0
+      const precioTotal = cant * pUnit - desc
+      if (!Number.isFinite(precioTotal)) {
+        errores.push(`Total de línea ${it?.descripcion || it?.codigo || ""}`)
+        return ""
+      }
+      return `<tr><td>${it.codigo ?? ""}</td><td class="num">${cant}</td><td>${it.descripcion ?? ""}</td><td>${it.detalleAdicional || ""}</td><td class="num">$${pUnit.toFixed(2)}</td><td class="num">$${desc.toFixed(2)}</td><td class="num">$${precioTotal.toFixed(2)}</td></tr>`
+    })
+    if (errores.length) {
+      alert(`No se emite el RIDE. Hay valores vacíos que no se pueden calcular: ${[...new Set(errores)].join(", ")}.`)
+      return
+    }
+    const usd = (n: number) => `$${n.toFixed(2)}`
+    const formas: { codigo: string, nombre: string, monto: number }[] = []
+    const sumarForma = (codigo: string, nombre: string, valor: unknown) => {
+      const monto = numFinito(valor)
+      if (monto !== null && monto > 0) formas.push({ codigo, nombre, monto })
+    }
+    const efectivo = numFinito(d.pagos?.efectivo && typeof d.pagos.efectivo === "object" ? d.pagos.efectivo.monto : d.pagos?.efectivo)
+    sumarForma("01", "SIN UTILIZACION DEL SISTEMA FINANCIERO", efectivo)
+    sumarForma("15", "COMPENSACION DE DEUDAS", d.pagos?.compensacion)
+    sumarForma("16", "TARJETA DE DEBITO", d.pagos?.debito)
+    sumarForma("17", "DINERO ELECTRONICO", d.pagos?.dineroElec)
+    sumarForma("18", "TARJETA PREPAGO", d.pagos?.prepago)
+    sumarForma("19", "TARJETA DE CREDITO", d.pagos?.tarjeta)
+    const red = numFinito(d.pagos?.redBancaria)
+    const credito = numFinito(d.pagos?.credito)
+    if (red !== null || credito !== null) sumarForma("20", "OTROS CON UTILIZACION DEL SISTEMA FINANCIERO", (red ?? 0) + (credito ?? 0))
+    sumarForma("21", "ENDOSO DE TITULOS", d.pagos?.endoso)
+    if (formas.length === 0 && efectivo !== null) formas.push({ codigo: "01", nombre: "SIN UTILIZACION DEL SISTEMA FINANCIERO", monto: efectivo })
+    if (formas.length === 0) errores.push("Forma de pago")
+    const cambio = numFinito(d.pagos?.cambio ?? d.pagos?.efectivo?.cambio)
+    const entregadoGuardado = numFinito(d.pagos?.entregado)
+    const entregado = entregadoGuardado !== null ? entregadoGuardado : (efectivo !== null && cambio !== null ? efectivo + cambio : null)
+    if (entregado === null) errores.push("Entregado")
+    if (cambio === null) errores.push("Vuelto")
+    if (errores.length || entregado === null || cambio === null) {
+      alert(`No se emite el RIDE. Hay valores vacíos que no se pueden calcular: ${[...new Set(errores)].join(", ")}.`)
+      return
+    }
+    const clave = String(d.claveAcceso || "")
+    const autorizacion = d.numeroAutorizacion ? String(d.numeroAutorizacion) : (estado === "AUTORIZADO" ? clave : "PENDIENTE DE AUTORIZACION")
+    const html = `<!DOCTYPE html><html><head><title>RIDE ${d.establecimiento}-${d.secuencial}</title>
+    <style>
+      @page { size: A4 portrait; margin: 8mm; }
+      * { box-sizing: border-box; }
+      html, body { margin: 0; padding: 0; }
+      body { width: 194mm; margin: 0 auto; font-family: Arial, Helvetica, sans-serif; font-size: 9px; color: #000; text-align: left; }
+      .top, .abajo { display: flex; gap: 4mm; align-items: stretch; }
+      .izq { width: 58%; min-width: 0; }
+      .der { width: 42%; min-width: 0; }
+      .borde { border: 1px solid #000; padding: 2.5mm; overflow: hidden; }
+      .factura { font-size: 14px; font-weight: 900; margin: 1mm 0; }
+      .lbl { font-size: 8px; font-weight: 700; margin-top: 1.5mm; }
+      .clave { display: block; width: 100%; max-width: 100%; min-height: 8mm; margin-top: 0.6mm; padding: 1mm; border: 1px solid #000; font-family: "Courier New", Courier, monospace; font-size: 8px; line-height: 1.35; font-weight: 700; word-break: break-all; overflow-wrap: anywhere; white-space: normal; letter-spacing: 0; }
+      table { width: 100%; margin-top: 3mm; border-collapse: collapse; table-layout: fixed; }
+      th, td { border: 1px solid #000; padding: 1.2mm 1mm; font-size: 8px; vertical-align: top; text-align: left; word-wrap: break-word; overflow-wrap: anywhere; }
+      th { font-size: 7px; }
+      td.num, th.num { text-align: right; white-space: nowrap; }
+      .info { width: 54%; min-width: 0; }
+      .tot { width: 46%; min-width: 0; text-align: left; }
+      .linea { display: flex; justify-content: space-between; gap: 3mm; padding: 0.4mm 0; text-align: left; }
+      .linea span:first-child { text-align: left; }
+      .linea b { text-align: right; white-space: nowrap; }
+      .total { font-size: 12px; font-weight: 900; border-top: 1px solid #000; margin-top: 1mm; padding-top: 1mm; }
+      .pagos { text-align: left; margin-top: 2mm; border-top: 1px solid #000; padding-top: 1.5mm; }
+      .pago { text-align: left; word-break: break-word; overflow-wrap: anywhere; padding: 0.3mm 0; }
+      .vuelto { text-align: left; background: #000; color: #fff; font-weight: 900; padding: 1mm; margin-top: 1mm; }
+      .pie { display: block; width: 100%; margin-top: 2mm; padding: 1.5mm; border: 1px solid #000; font-size: 8px; font-weight: 700; text-align: left; word-break: break-word; }
+    </style></head><body>
+    <div class="top">
+      <div class="izq borde">
+        <div><b>${d.configEmisor?.razon || ""}</b></div>
+        <div>${d.configEmisor?.comercial || ""}</div>
+        <div><b>Dirección Matriz:</b> ${d.configEmisor?.matriz || ""}</div>
+        <div><b>Dirección Sucursal:</b> ${d.configEmisor?.sucursal || ""}</div>
+        <div><b>Obligado a llevar contabilidad:</b> ${d.configEmisor?.obligado || "NO"}</div>
+        <div><b>${d.configEmisor?.regimen || ""}</b></div>
       </div>
-      <div style="width:40%" class="borde">
-        <div>RUC: <b>${d.configEmisor?.ruc||""}</b></div>
-        <div class="t">FACTURA</div>
-        <div>No. ${d.establecimiento}-${d.secuencial}</div>
-        <div><b>Clave Acceso</b><br/>${clave}</div>
-        <div>Fecha Aut: ${d.fechaAutorizacion||""}</div>
-        <div>Ambiente: ${d.configEmisor?.ambiente||"PRODUCCIÓN"} - EMISION: NORMAL</div>
-        <div><b>Autorización: ${d.numeroAutorizacion||"AUTORIZADO"}</b></div>
+      <div class="der borde">
+        <div>R.U.C.: <b>${d.configEmisor?.ruc || ""}</b></div>
+        <div class="factura">FACTURA</div>
+        <div>No. ${d.establecimiento || ""}-${d.secuencial || ""}</div>
+        <div class="lbl">NÚMERO DE AUTORIZACIÓN</div>
+        <div class="clave">${autorizacion}</div>
+        <div>Fecha y hora de autorización: ${d.fechaAutorizacion || ""}</div>
+        <div>Ambiente: ${d.configEmisor?.ambiente || "PRODUCCIÓN"}</div>
+        <div>Emisión: NORMAL</div>
+        <div class="lbl">CLAVE DE ACCESO</div>
+        <div class="clave">${clave}</div>
       </div>
     </div>
-    <div class="borde" style="margin-top:8px">
-      <div><b>Razón Social:</b> ${d.cliente?.razon} - <b>ID:</b> ${d.cliente?.identificacion} - <b>Fecha:</b> ${d.fechaEmisionFormato}</div>
+    <div class="borde" style="margin-top:3mm">
+      <div><b>Razón Social / Nombres y Apellidos:</b> ${d.cliente?.razon || ""}</div>
+      <div><b>Identificación:</b> ${d.cliente?.identificacion || ""} &nbsp; <b>Fecha de emisión:</b> ${d.fechaEmisionFormato || ""}</div>
+      <div><b>Dirección:</b> ${d.cliente?.direccion || ""}</div>
     </div>
-    <table style="margin-top:8px"><tr><th>Cod. Principal</th><th>Cant</th><th>Descripción</th><th>Detalle Adic.</th><th>P.Unit</th><th>Desc</th><th>P.Total</th></tr>
-    ${(d.items||[]).map((it:any)=>`<tr><td>${it.codigo}</td><td>${it.cant}</td><td>${it.descripcion}</td><td>${it.detalleAdicional||""}</td><td>${it.pUnit?.toFixed(2)}</td><td>${(it.descDolar||0).toFixed(2)}</td><td>${(it.cant*it.pUnit-(it.descDolar||0)).toFixed(2)}</td></tr>`).join("")}
+    <table>
+      <colgroup>
+        <col style="width:13%"/><col style="width:7%"/><col style="width:28%"/><col style="width:16%"/><col style="width:12%"/><col style="width:11%"/><col style="width:13%"/>
+      </colgroup>
+      <tr><th>Cod. Principal</th><th class="num">Cant.</th><th>Descripción</th><th>Detalle adicional</th><th class="num">Precio unitario</th><th class="num">Descuento</th><th class="num">Precio total</th></tr>
+      ${filas.join("")}
     </table>
-    <div style="display:flex;justify-content:space-between;margin-top:8px">
-      <div style="width:58%" class="borde">
-        Email: ${d.cliente?.email}<br/>Tel: ${d.cliente?.telefono}<br/>
-        <b style="border:1px solid #000;padding:4px;display:block;margin-top:8px">Proveedor del Sistema: ${PROVEEDOR_SISTEMA.nombre} - RUC ${PROVEEDOR_SISTEMA.ruc} - ${PROVEEDOR_SISTEMA.contacto}</b>
+    <div class="abajo" style="margin-top:3mm">
+      <div class="info borde">
+        <b>Información adicional</b>
+        <div>Dirección: ${d.cliente?.direccion || ""}</div>
+        <div>Teléfono: ${d.cliente?.telefono || ""}</div>
+        <div>Email: ${d.cliente?.email || ""}</div>
+        <div class="pie">${PIE_PROVEEDOR}</div>
       </div>
-      <div style="width:40%" class="borde">
-        <div>SUBTOTAL 15%: ${d.totales?.base15?.toFixed(2) || d.totales?.subtotalSin?.toFixed(2)}</div>
-        <div>SUBTOTAL 0%: ${d.totales?.base0?.toFixed(2)}</div>
-        <div>SUBTOTAL SIN IMP: ${d.totales?.subtotalSin?.toFixed(2)}</div>
-        <div>IVA 15%: ${d.totales?.iva15?.toFixed(2)}</div>
-        <div>PROPINA 10%: ${d.totales?.propina?.toFixed(2)}</div>
-        <div style="font-size:14px;font-weight:900">TOTAL: ${d.totales?.total?.toFixed(2)}</div>
-        <hr/>
-        <div>FORMA PAGO: ${formaPagoTxt}</div>
-        <div>ENTREGADO: $${entregado.toFixed(2)}</div>
-        <div style="background:#000;color:#fff;padding:4px;font-weight:900">VUELTO: $${cambio.toFixed(2)}</div>
-        <div>EFECTIVO EN CAJA: $${enCaja.toFixed(2)}</div>
+      <div class="tot borde">
+        <div class="linea"><span>SUBTOTAL 15%</span><b>${usd(base15!)}</b></div>
+        <div class="linea"><span>SUBTOTAL 0%</span><b>${usd(base0!)}</b></div>
+        <div class="linea"><span>SUBTOTAL NO OBJETO DE IVA</span><b>${usd(baseNoObjeto!)}</b></div>
+        <div class="linea"><span>SUBTOTAL EXENTO DE IVA</span><b>${usd(baseExento!)}</b></div>
+        <div class="linea"><span>TOTAL DESCUENTO</span><b>${usd(descuento!)}</b></div>
+        <div class="linea"><span>ICE</span><b>${usd(ice!)}</b></div>
+        <div class="linea"><span>IVA</span><b>${usd(iva!)}</b></div>
+        <div class="linea"><span>PROPINA 10%</span><b>${usd(propina!)}</b></div>
+        <div class="linea total"><span>VALOR TOTAL</span><b>${usd(total!)}</b></div>
+        <div class="pagos">
+          <div><b>FORMAS DE PAGO (Tabla 24)</b></div>
+          ${formas.map(f => `<div class="pago">${f.codigo} - ${f.nombre} ${usd(f.monto)}</div>`).join("")}
+          <div class="pago">ENTREGADO: ${usd(entregado)}</div>
+          <div class="vuelto">VUELTO: ${usd(cambio)}</div>
+        </div>
       </div>
     </div>
     </body></html>`
-    const w=window.open("","_blank"); w?.document.write(html); w?.document.close(); w?.print()
+    const w = window.open("", "_blank")
+    w?.document.write(html)
+    w?.document.close()
+    w?.print()
   }
 
   const imprimirTicket = ()=>{
@@ -158,11 +304,9 @@ export default function EstadoSRI(){
     <div class="line"></div>
     <div class="c" style="font-size:8px">Autorizado SRI: ${d.numeroAutorizacion}<br/>Consulte en SRI con clave 49</div>
     <div class="line"></div>
-    <div class="c" style="font-size:9px;opacity:0.8">
+    <div class="c" style="font-size:9px;word-break:break-word">
     ----------------------------------------<br/>
-    Proveedor del Sistema: ${PROVEEDOR_SISTEMA.nombre}<br/>
-    RUC Proveedor: ${PROVEEDOR_SISTEMA.ruc}<br/>
-    Soporte: ${PROVEEDOR_SISTEMA.contacto}<br/>
+    ${PIE_PROVEEDOR}<br/>
     </div>
     </body></html>`
     const w=window.open("","_blank","width=320,height=600"); w?.document.write(html); w?.document.close(); w?.print()
