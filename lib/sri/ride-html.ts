@@ -77,6 +77,7 @@ export function htmlRide(data: {
   propina: number
   total: number
   mensajeSri?: string
+  xmlUrl?: string
 }) {
   const filas = (data.items || []).map((item) => {
     const cant = Number(item.cant || 0)
@@ -113,7 +114,10 @@ export function htmlRide(data: {
   </style>
 </head>
 <body>
-  <div class="no-print" style="margin-bottom:12px"><button onclick="window.print()" style="background:#0284c7;color:#fff;border:0;border-radius:8px;padding:10px 16px;font-weight:700;cursor:pointer">Imprimir</button></div>
+  <div class="no-print" style="margin-bottom:12px;display:flex;gap:8px">
+    <button onclick="window.print()" style="background:#0284c7;color:#fff;border:0;border-radius:8px;padding:10px 16px;font-weight:700;cursor:pointer">Imprimir</button>
+    ${data.xmlUrl ? `<a href="${esc(data.xmlUrl)}" style="background:#0f172a;color:#fff;border-radius:8px;padding:10px 16px;font-weight:700;text-decoration:none">Descargar XML</a>` : ""}
+  </div>
   <div class="grid">
     <div>
       ${logo}
@@ -143,6 +147,8 @@ export function htmlRide(data: {
     <p style="margin:0"><b>Identificación:</b> <span style="font-family:monospace">${esc(data.identificacion)}</span></p>
     <p style="margin:0"><b>Fecha de Emisión:</b> ${esc(data.fechaEmision)}</p>
     <p style="margin:0"><b>Guía de Remisión:</b> S/N</p>
+    <p style="margin:0"><b>Dirección:</b> ${esc(data.direccionCliente || "—")}</p>
+    <p style="margin:0"><b>Email:</b> ${esc(data.email || "—")}</p>
   </div>
   <div style="border:1px solid #e2e8f0;border-radius:8px;overflow:hidden;margin-bottom:24px">
     <table>
@@ -162,8 +168,6 @@ export function htmlRide(data: {
   <div class="grid">
     <div style="border:1px solid #e2e8f0;border-radius:8px;padding:16px">
       <h3 style="margin:0 0 8px;font-size:11px;text-transform:uppercase">Información Adicional</h3>
-      <p style="margin:0 0 4px"><b>Dirección:</b> ${esc(data.direccionCliente)}</p>
-      <p style="margin:0 0 4px"><b>Email:</b> ${esc(data.email || "—")}</p>
       <p style="margin:0"><b>Forma de Pago:</b> ${esc(data.formaPago)}</p>
       ${data.mensajeSri ? `<p style="margin:8px 0 0"><b>Mensaje del SRI:</b> ${esc(data.mensajeSri)}</p>` : ""}
     </div>

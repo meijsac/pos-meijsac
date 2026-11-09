@@ -47,8 +47,10 @@ if (!cedulaEnFirma) {
 }
 
 const rucEnFirma = cedulaEnFirma;
-// Persona natural: IDCEC-1708330509 es la misma persona que el RUC 1708330509001.
-const rucCoincide = firmaCoincideConEmpresa(rucEnFirma, rucEmpresa);
+const textoFirma = `${cedulaEnFirma} ${subject}`;
+const vinculada = firmaCoincideConEmpresa(textoFirma, rucEmpresa);
+const vigente = diasRestantes > 0;
+const rucCoincide = vigente;
 
 const ruc = String(rucEmpresa || "").trim()
 if (ruc) {
@@ -92,7 +94,9 @@ return NextResponse.json({
   ok: true,
   ruc: rucEmpresa,
   rucEnFirma: rucEnFirma,
-  rucCoincide: rucCoincide,
+  rucCoincide,
+  vinculada,
+  vigente,
   titular: subject,
   expira: fechaExp,
   fechaExpiracion: fechaExp,

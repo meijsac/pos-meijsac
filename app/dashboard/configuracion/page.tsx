@@ -2,7 +2,6 @@
 import { useState, useEffect } from "react";
 import { feriadosIvaReducido } from '@/lib/iva-feriados.config';
 import { cargarEmpresaSesion } from "@/lib/sesion-cliente";
-import { firmaCoincideConEmpresa } from "@/lib/sri/cedula-ruc";
 import { errorLogo } from "@/lib/logo-empresa";
 import DocumentosLegales from "./documentos-legales";
 
@@ -214,7 +213,7 @@ export default function ConfiguracionAvanzadaSRI() {
 
   if(data.ok){
     // CLAVE CORRECTA: SÍ se guarda
-    setCfg((prev:any)=>({...prev, firma:{...prev.firma, clave: prev.firma?.clave || "", nombre: file.name, expira: data.fechaExpiracion, diasRestantes: data.diasRestantes, rucDetectado: data.rucEnFirma, guardada: data.guardada}}));
+    setCfg((prev:any)=>({...prev, firma:{...prev.firma, clave: prev.firma?.clave || "", archivo: file, nombre: file.name, expira: data.fechaExpiracion, diasRestantes: data.diasRestantes, rucDetectado: data.rucEnFirma, guardada: data.guardada}}));
   } else {
     // CLAVE INCORRECTA: NO SE GUARDA NADA
     alert("❌ Clave incorrecta. La firma NO se guardó.");
@@ -269,7 +268,19 @@ export default function ConfiguracionAvanzadaSRI() {
         delete payload.logoFile;
         delete payload.firmaFile;
         const claveFirma = String(payload.firma?.clave || "");
+        const archivoFirma = payload.firma?.archivo instanceof File ? payload.firma.archivo : null;
         if (payload.firma) payload.firma = { ...payload.firma, clave: "" };
+        delete payload.firma?.archivo;
+        if (archivoFirma && claveFirma) {
+          const form = new FormData();
+          form.append("p12", archivoFirma);
+          form.append("clave", claveFirma);
+          form.append("rucEmpresa", payload.ruc || "");
+          const subidaFirma = await fetch("/api/sri/validar-firma", { method: "POST", body: form });
+          const dataFirma = await subidaFirma.json().catch(() => ({}));
+          if (!subidaFirma.ok || !dataFirma.ok) throw new Error(dataFirma.error || "No se pudo guardar la firma");
+          if (dataFirma.valido === false) throw new Error("El certificado está vencido");
+        }
         if (claveFirma) {
           const guardada = await fetch("/api/sri/clave-firma", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ clave: claveFirma }) });
           const dataClave = await guardada.json().catch(() => ({}));
@@ -581,10 +592,8 @@ base.sucursales = datosReales.sucursales || base.sucursales || [];
                       <p className="text-[9px] text-white/40 mb-3">Arrastra tu.p12 aquí o selecciona</p>
                       <input type="file" accept=".p12" onChange={(e:any)=>{ const f=e.target.files?.[0]; if(f){ if(!f.name.toLowerCase().endsWith('.p12')){ alert('Solo se permite archivo.p12'); return; } setCfg((p:any)=>({...p, firma:{...p?.firma, nombre:f.name}})); handleFirmaChange(e); } }} className="mt-3 text-xs mx-auto block text-white" />
                       {cfg?.firma?.nombre && <p className="mt-3 text-[11px] text-[#00f5d4]">Archivo cargado: {cfg.firma.nombre}</p>}
-                      {!infoFirma && cfg?.firma?.rucDetectado && (
-                        firmaCoincideConEmpresa(cfg.firma.rucDetectado, cfg?.ruc)
-                          ? <p className="mt-2 text-[12px] font-bold text-green-400">✓ Firma coincide con el RUC de la empresa</p>
-                          : <p className="mt-2 text-[12px] font-bold text-red-400">La cédula de la firma no corresponde al RUC de la empresa</p>
+                      {!infoFirma && cfg?.firma?.nombre && (
+                        <p className="mt-2 text-[12px] font-bold text-green-400">Firma cargada. Guarda para dejar el .p12 y la clave cifrados.</p>
                       )}
                     </div>
 
@@ -594,11 +603,11 @@ base.sucursales = datosReales.sucursales || base.sucursales || [];
                         {infoFirma.ok && (
                           <>
                             <p className="text-white">📅 Expira: {new Date(infoFirma.fechaExpiracion).toLocaleDateString()} ({infoFirma.diasRestantes} días)</p>
-                            <p className="text-white">🪪 RUC en firma: {infoFirma.rucEnFirma}</p>
-                            {firmaCoincideConEmpresa(infoFirma.rucEnFirma, cfg?.ruc) ? (
-                              <p className="text-green-400 font-bold mt-2">✓ Firma coincide con el RUC de la empresa</p>
+                            <p className="text-white">🪪 Identificación en firma: {infoFirma.rucEnFirma || "no figura en el certificado"}</p>
+                            {infoFirma.valido === false ? (
+                              <p className="text-red-400 font-bold mt-2">El certificado está vencido</p>
                             ) : (
-                              <p className="text-red-400 font-bold mt-2 text-[12px]">La cédula de la firma no corresponde al RUC de la empresa</p>
+                              <p className="text-green-400 font-bold mt-2">{infoFirma.vinculada ? "Firma válida. La cédula del certificado está dentro del RUC." : "Firma válida y vigente. El SRI comprueba el vínculo con el RUC al autorizar."}</p>
                             )}
                           </>
                         )}

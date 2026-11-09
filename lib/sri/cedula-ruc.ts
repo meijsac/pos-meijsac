@@ -5,13 +5,18 @@ export function cedulaBase(valor: unknown) {
 }
 
 /**
- * Persona natural: RUC = cédula + 001.
- * Coincide si los primeros 10 dígitos son iguales.
- * Si falta uno de los dos, no se marca como distinta: el SRI valida el vínculo al recibir el XML.
+ * El .p12 de una persona natural trae la cédula (1708330509) o IDCEC-1708330509.
+ * El RUC de la empresa es esa cédula más 001 (1708330509001). No se exige el mismo texto.
+ * Si el certificado no trae un identificador claro, no se bloquea: el SRI comprueba el vínculo al recibir el XML.
  */
 export function firmaCoincideConEmpresa(idFirma: unknown, rucEmpresa: unknown) {
-  const cedulaFirma = cedulaBase(idFirma)
-  const cedulaRuc = cedulaBase(rucEmpresa)
-  if (cedulaFirma.length < 10 || cedulaRuc.length < 10) return true
-  return cedulaFirma === cedulaRuc
+  const texto = String(idFirma || "")
+  const ruc = String(rucEmpresa || "").replace(/\D/g, "")
+  const base = ruc.slice(0, 10)
+  if (base.length < 10) return true
+  const digitos = texto.replace(/\D/g, "")
+  if (digitos.length < 10) return true
+  if (digitos.includes(base) || ruc.includes(digitos.slice(0, 10))) return true
+  const grupos = texto.match(/\d{10,13}/g) || []
+  return grupos.some((grupo) => grupo.slice(0, 10) === base || ruc.includes(grupo.slice(0, 10)))
 }

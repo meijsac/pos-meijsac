@@ -990,14 +990,16 @@ const total = subtotalSin + iva15 + ivaDiferenciado + valorICE + valorIRBPNR + p
       cargarPunto()
       localStorage.setItem("meijsac_ultima_factura_pendiente", JSON.stringify(facturaPendiente))
       const claveRide = String(guardada.claveAcceso || facturaPendiente.claveAcceso || "").replace(/\D/g, "")
+      const autorizado = Boolean(String(guardada.fechaAutorizacion || "").trim())
       const urlRide = `/dashboard/factura-xml/pdf/${claveRide}`
-      if (claveRide && venta) venta.location.href = urlRide
-      else if (claveRide) window.open(urlRide, "_blank")
-      else {
+      if (autorizado && claveRide.length === 49) {
+        if (venta) venta.location.href = urlRide
+        else window.open(urlRide, "_blank")
+      } else {
         venta?.close()
-        alert("No se pudo obtener la clave de acceso del comprobante.")
+        const aviso = guardada.mensaje || guardada.error
+        if (aviso) alert(aviso)
       }
-      if (guardada.conectado === false) alert(guardada.error || guardada.mensaje || "No hubo conexión con el SRI.")
     } catch {
       venta?.close()
       alert("No se pudo guardar la factura en la base.")

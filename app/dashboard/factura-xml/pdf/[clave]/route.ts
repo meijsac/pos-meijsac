@@ -31,6 +31,22 @@ export async function GET(req: Request, context: { params: Promise<{ clave: stri
   const fecha = String(p.fechaAutorizacion || "").trim()
   const autorizado = String(fila.estado || p.estadoSRI || "").toUpperCase() === "AUTORIZADO" && fecha.length > 0
   const numero = [p.establecimiento, p.secuencial].filter(Boolean).join("-")
+  const xmlAutorizado = (() => {
+    const aut = p.sriAutorizacion?.RespuestaAutorizacionComprobante?.autorizaciones?.autorizacion
+    const comp = Array.isArray(aut) ? aut.find((a: { estado?: string }) => a?.estado === "AUTORIZADO")?.comprobante || aut[0]?.comprobante : aut?.comprobante
+    return String(comp || p.xmlContent || "")
+  })()
+  const pedido = new URL(req.url)
+  if (pedido.searchParams.get("xml") === "1") {
+    if (!autorizado || !xmlAutorizado) return pagina("XML", "El SRI todavía no autorizó este comprobante.", 409)
+    return new NextResponse(xmlAutorizado, {
+      headers: {
+        "Content-Type": "text/xml; charset=utf-8",
+        "Content-Disposition": `attachment; filename="factura-${clave}.xml"`,
+        "Cache-Control": "no-store",
+      },
+    })
+  }
   const html = htmlRide({
     razonSocial: emisor.razon || "",
     nombreComercial: emisor.comercial || "",
@@ -62,6 +78,7 @@ export async function GET(req: Request, context: { params: Promise<{ clave: stri
     propina: t.propina,
     total: t.total,
     mensajeSri: autorizado ? "" : (p.mensajeSri || ""),
+    xmlUrl: autorizado ? `/dashboard/factura-xml/pdf/${clave}?xml=1` : "",
   })
   return new NextResponse(html, { headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store" } })
 }
