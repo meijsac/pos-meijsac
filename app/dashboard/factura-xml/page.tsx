@@ -111,6 +111,7 @@ export default function FacturadorXMLReal(){
         regimen: conTexto(cfg.regimen, empresa.regimen),
         ambiente,
         logo: [cfg.logo_url, cfg.logoUrl, cfg.marca?.logo, empresa.logo_url, empresa.logoUrl].map(v => String(v || "").trim()).find(v => v.startsWith("http") || v.startsWith("data:")) || "",
+        modo_negocio: conTexto(cfg.modo_negocio, empresa.modo_negocio),
         datosTransferencia: cfg.datosTransferencia || cfg.transferencia || null,
         datosTransferenciaActivo: Boolean(cfg.datosTransferenciaActivo || cfg.transferenciaActiva || cfg.datosTransferencia?.activo || cfg.transferencia?.activo),
       }
@@ -665,6 +666,20 @@ const total = subtotalSin + iva15 + ivaDiferenciado + valorICE + valorIRBPNR + p
     const poolRaw = localStorage.getItem("meijsac_split_pool")
 
     // --- CORRECCIÓN 2: EMPAQUETA TODO PARA LOS 3 DESTINOS ---
+    let modoNegocio = "GENERAL"
+    try {
+      const cfg = JSON.parse(localStorage.getItem("meijsac_config") || "{}")
+      const rest = JSON.parse(localStorage.getItem("meijsac_config_restaurante") || "{}")
+      const empresaLocal = JSON.parse(localStorage.getItem("meijsac_empresa") || "{}")
+      const marca = cfg.tipoNegocio || rest.tipoNegocio || empresaLocal.modo_negocio || configEmisor?.modo_negocio
+      if (marca === "restaurante" || marca === "RESTAURANTE") modoNegocio = "RESTAURANTE"
+    } catch {}
+    let mesaNombre = ""
+    try {
+      const mesas = JSON.parse(localStorage.getItem("meijsac_restaurante_mesas") || "[]")
+      const mesa = mesas.find((m: any) => m.id === transitoActual?.mesaOrigenId)
+      mesaNombre = mesa?.nombre || transitoActual?.mesaNombre || ""
+    } catch {}
     const facturaPendiente: any = {
       id: Date.now(),
       claveAcceso: clave,
@@ -692,7 +707,9 @@ const total = subtotalSin + iva15 + ivaDiferenciado + valorICE + valorIRBPNR + p
       pagos: { ...pagosReales, efectivo: netoEmit, cambio: vueltoEmit, vuelto: vueltoEmit, entregado: entregadoEmit, efectivoRecibido: entregadoEmit, formaPago: formaPagoEmit },
       refs: { refTarjeta, refTransfer, tipoCobro, plazoElegido },
       transito: transitoActual,
-      mesaOrigenId: transitoActual?.mesaOrigenId || null
+      mesaOrigenId: transitoActual?.mesaOrigenId || null,
+      mesaNombre,
+      modo_negocio: modoNegocio
     }
 
     if(poolRaw){

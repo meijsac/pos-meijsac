@@ -38,16 +38,71 @@ function cobroGuardado(d: any) {
   return { formaPago, entregado: entregado ?? total, efectivoRecibido: entregado ?? total, vuelto }
 }
 
+function dinero(v: unknown) {
+  const n = typeof v === "number" ? v : Number(v)
+  return Number.isFinite(n) ? n : null
+}
+
+function resumenContable(d: any) {
+  const items: any[] = Array.isArray(d?.items) ? d.items : []
+  const neto = (it: any) => (Number(it?.cant) || 0) * (Number(it?.pUnit) || 0) * (1 - (Number(it?.descPorc) || 0) / 100)
+  const cod = (it: any) => String(it?.codigoPorcentaje ?? "")
+  const suma = (codigos: string[]) => items.filter((it) => codigos.includes(cod(it))).reduce((s, it) => s + neto(it), 0)
+  const t = d?.totales || {}
+  const subtotalSin = dinero(t.subtotalSin) ?? items.reduce((s, it) => s + neto(it), 0)
+  const base15 = dinero(t.base15) ?? suma(["4"])
+  const base0 = dinero(t.base0) ?? suma(["0"])
+  const baseNoObjeto = dinero(t.baseNoObjeto) ?? suma(["6"])
+  const baseExento = dinero(t.baseExento) ?? suma(["7"])
+  const baseDiferenciado = dinero(t.baseDiferenciado) ?? suma(["10", "5", "8", "2", "3"])
+  const descuento = dinero(t.descuento) ?? items.reduce((s, it) => s + (Number(it?.cant) || 0) * (Number(it?.pUnit) || 0) * ((Number(it?.descPorc) || 0) / 100), 0)
+  const ice = dinero(t.valorICE) ?? items.reduce((s, it) => s + (Number(it?.ice) || 0), 0)
+  const irbpnr = dinero(t.valorIRBPNR) ?? items.filter((it) => it?.esPlastico).reduce((s, it) => s + (Number(it?.cant) || 0) * 0.02, 0)
+  const iva = dinero(t.iva15) ?? Math.round(base15 * 0.15 * 100) / 100
+  const propina = dinero(t.propina) ?? 0
+  const total = dinero(t.total) ?? Math.round((subtotalSin + iva + (dinero(t.ivaDiferenciado) ?? 0) + ice + irbpnr + propina) * 100) / 100
+  return { subtotalSin, base15, base0, baseNoObjeto, baseExento, baseDiferenciado, descuento, ice, irbpnr, iva, propina, total }
+}
+
+function htmlResumen(d: any) {
+  const r = resumenContable(d)
+  const usd = (n: number) => `$${n.toFixed(2)}`
+  const filas: [string, string][] = [
+    ["Subtotal sin Impuestos:", usd(r.subtotalSin)],
+    ["Subtotal IVA 15% (o vig.):", usd(r.base15)],
+    ["Subtotal IVA 0%:", usd(r.base0)],
+    ["Subtotal No objeto de IVA:", usd(r.baseNoObjeto)],
+    ["Subtotal Exento de IVA:", usd(r.baseExento)],
+    ["Subtotal IVA Diferenciado:", usd(r.baseDiferenciado)],
+    ["Total Descuentos:", usd(r.descuento)],
+    ["Valor ICE:", usd(r.ice)],
+    ["Valor IRBPNR (Plásticos):", usd(r.irbpnr)],
+    ["IVA Oficial:", usd(r.iva)],
+    ["Propina 10%:", usd(r.propina)],
+    ["VALOR TOTAL A PAGAR:", usd(r.total)],
+  ]
+  return { filas, total: r.total }
+}
+
 export default function EstadoSRI(){
   const router = useRouter()
   const [estado, setEstado] = useState<"PROCESANDO"|"AUTORIZADO"|"PENDIENTE">("PROCESANDO")
   const [data, setData] = useState<any>({})
-  const [tipoNegocio, setTipoNegocio] = useState("restaurante")
+  const [modoNegocio, setModoNegocio] = useState("GENERAL")
 
   useEffect(()=>{
-    const cfg = JSON.parse(localStorage.getItem("meijsac_config") || localStorage.getItem("meijsac_config_restaurante") || "{}")
-    setTipoNegocio(cfg.tipoNegocio || "restaurante")
     const factura = JSON.parse(localStorage.getItem("meijsac_ultima_factura_pendiente")||"{}")
+    let modo = factura.modo_negocio === "RESTAURANTE" ? "RESTAURANTE" : "GENERAL"
+    if (!factura.modo_negocio) {
+      try {
+        const cfg = JSON.parse(localStorage.getItem("meijsac_config") || "{}")
+        const rest = JSON.parse(localStorage.getItem("meijsac_config_restaurante") || "{}")
+        const empresa = JSON.parse(localStorage.getItem("meijsac_empresa") || "{}")
+        const marca = cfg.modo_negocio || cfg.tipoNegocio || rest.modo_negocio || rest.tipoNegocio || empresa.modo_negocio
+        if (marca === "restaurante" || marca === "RESTAURANTE") modo = "RESTAURANTE"
+      } catch {}
+    }
+    setModoNegocio(modo)
     const cobro = cobroGuardado(factura)
     const facturaConCobro = {...factura, formaPago: cobro.formaPago, montoEntregado: cobro.entregado, efectivoRecibido: cobro.efectivoRecibido, vuelto: cobro.vuelto, pagos: {...(factura.pagos||{}), ...cobro, cambio: cobro.vuelto, entregado: cobro.entregado}}
     setData(facturaConCobro)
@@ -269,15 +324,8 @@ export default function EstadoSRI(){
         <div class="pie">${PIE_PROVEEDOR}</div>
       </div>
       <div class="tot borde">
-        <div class="linea"><span>SUBTOTAL 15%</span><b>${usd(base15!)}</b></div>
-        <div class="linea"><span>SUBTOTAL 0%</span><b>${usd(base0!)}</b></div>
-        <div class="linea"><span>SUBTOTAL NO OBJETO DE IVA</span><b>${usd(baseNoObjeto!)}</b></div>
-        <div class="linea"><span>SUBTOTAL EXENTO DE IVA</span><b>${usd(baseExento!)}</b></div>
-        <div class="linea"><span>TOTAL DESCUENTO</span><b>${usd(descuento!)}</b></div>
-        <div class="linea"><span>ICE</span><b>${usd(ice!)}</b></div>
-        <div class="linea"><span>IVA</span><b>${usd(iva!)}</b></div>
-        <div class="linea"><span>PROPINA 10%</span><b>${usd(propina!)}</b></div>
-        <div class="linea total"><span>VALOR TOTAL</span><b>${usd(total!)}</b></div>
+        <b>RESUMEN CONTABLE FACTURA (SRI)</b>
+        ${htmlResumen(d).filas.map(([nombre, valor]) => `<div class="linea${nombre.startsWith("VALOR") ? " total" : ""}"><span>${nombre}</span><b>${valor}</b></div>`).join("")}
         <div class="pagos">
           ${avisoCobro(d, total)}
           <div><b>FORMAS DE PAGO (Tabla 24)</b></div>
@@ -300,9 +348,6 @@ export default function EstadoSRI(){
     const cobro = cobroGuardado(d)
     const cambio = cobro.vuelto
     const entregado = cobro.entregado
-    const enCaja = numeroGuardado(typeof d.pagos?.efectivo === "object" ? d.pagos?.efectivo?.monto : d.pagos?.efectivo) ?? cobro.efectivoRecibido
-    const subtotal = d.totales?.base15 || d.totales?.subtotalSin || 0
-    const iva = d.totales?.iva15 || 0
     const formaPagoTxt = cobro.formaPago
     const html = `
     <html><head><title>TICKET</title>
@@ -322,9 +367,8 @@ export default function EstadoSRI(){
     <div class="line"></div>
     ${(d.items||[]).map((it:any)=>`<div>${it.cant} x ${it.descripcion}<br/>P.Unit $${it.pUnit?.toFixed(2)} = $${(it.cant*it.pUnit).toFixed(2)}</div>`).join("")}
     <div class="line"></div>
-    <div>SUBTOTAL 15%: $${Number(subtotal).toFixed(2)}</div>
-    <div>IVA 15%: $${Number(iva).toFixed(2)}</div>
-    <div class="b" style="font-size:13px">TOTAL: $${d.totales?.total?.toFixed(2)}</div>
+    <div class="b">RESUMEN CONTABLE FACTURA (SRI)</div>
+    ${htmlResumen(d).filas.map(([nombre, valor]) => `<div${nombre.startsWith("VALOR") ? ' class="b"' : ""}>${nombre} ${valor}</div>`).join("")}
     <div class="line"></div>
     <div>FORMA PAGO: ${formaPagoTxt} $${d?.tipo_cobro === "PENDIENTE_DE_PAGO" || d?.tipo_cobro === "CREDITO" ? "0.00" : Number(d.totales?.total || 0).toFixed(2)}</div>
     ${d?.tipo_cobro === "PENDIENTE_DE_PAGO" ? `<div class="b">PENDIENTE DE PAGO - Saldo Pendiente $${Number(d.totales?.total || 0).toFixed(2)}</div>` : ""}
@@ -358,7 +402,7 @@ export default function EstadoSRI(){
     <div className="min-h-screen bg-[#0f172a] text-white p-6">
       <div className="bg-green-500/20 border border-green-500 p-4 rounded-xl font-black text-xl flex justify-between items-center">
         <span>✓ COMPROBANTE AUTORIZADO POR EL SRI</span>
-        <span className="text-[10px] bg-white text-black px-2 py-1 rounded-full uppercase">{tipoNegocio}</span>
+        <span className="text-[10px] bg-white text-black px-2 py-1 rounded-full uppercase">{modoNegocio}</span>
       </div>
       <div className="mt-4 bg-[#1e293b] p-4 rounded-xl text-[11px]">
         <div>Clave 49: <b className="font-mono break-all">{data.claveAcceso}</b></div>
@@ -371,10 +415,11 @@ export default function EstadoSRI(){
         <button onClick={imprimirTicket} className="bg-[#00f5d4] text-black p-4 rounded-xl font-black">🧾 TICKET 80mm TÉRMICO</button>
       </div>
       <div className="mt-4 space-y-2">
-        {tipoNegocio === "restaurante" && (<button onClick={()=> liberarMesaYVolver("/dashboard/restaurante")} className="w-full bg-black border border-white/20 p-4 rounded-xl font-black">VOLVER A MESAS - MESA LIBRE AZUL</button>)}
-        {tipoNegocio === "general" && (<button onClick={()=> liberarMesaYVolver("/dashboard/comprobantes/emitidos")} className="w-full bg-[#ffbe0a] text-black p-4 rounded-xl font-black">← VOLVER A COMPROBANTES EMITIDOS</button>)}
-        {tipoNegocio === "distribuidora" && (<button onClick={()=> liberarMesaYVolver("/dashboard/facturacion")} className="w-full bg-cyan-400 text-black p-4 rounded-xl font-black">← VOLVER A FACTURACIÓN DISTRIBUIDORA</button>)}
-        {tipoNegocio === "servicios" && (<button onClick={()=> liberarMesaYVolver("/dashboard")} className="w-full bg-slate-800 border p-4 rounded-xl font-black">← DASHBOARD</button>)}
+        {modoNegocio === "RESTAURANTE" ? (
+          <button onClick={()=> liberarMesaYVolver("/dashboard/restaurante")} className="w-full bg-black border border-white/20 p-4 rounded-xl font-black">VOLVER A MESAS - {data.mesaNombre || "MESA"}</button>
+        ) : (
+          <button onClick={()=> router.push("/dashboard/factura-xml")} className="w-full bg-black border border-white/20 p-4 rounded-xl font-black">VOLVER A FACTURA</button>
+        )}
         <button onClick={()=> router.push("/dashboard")} className="w-full bg-white/5 text-white/40 p-3 rounded-xl text-[11px] font-bold">← DASHBOARD</button>
       </div>
     </div>

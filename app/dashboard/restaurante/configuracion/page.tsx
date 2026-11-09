@@ -49,9 +49,12 @@ export default function ConfiguracionPage() {
 
   const guardar = () => {
     // Guardamos en los dos keys para que tu sistema restaurante y el general lo lean
-    localStorage.setItem("meijsac_config_restaurante", JSON.stringify(c))
-    localStorage.setItem("meijsac_config", JSON.stringify(c)) // Este es el que lee el IF de la página de estado
+    const modo = c.tipoNegocio === "restaurante" ? "RESTAURANTE" : "GENERAL"
+    const ficha = { ...c, modo_negocio: modo }
+    localStorage.setItem("meijsac_config_restaurante", JSON.stringify(ficha))
+    localStorage.setItem("meijsac_config", JSON.stringify(ficha))
     localStorage.setItem("meijsac_secuencial", c.secuencial)
+    fetch("/api/configuracion", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ruc: c.ruc, modo_negocio: modo }) }).catch(() => {})
 
     alert(`✅ Configuración guardada:\nTipo: ${c.tipoNegocio.toUpperCase()}\nRUC ${c.ruc}\nSerie ${c.estab}-${c.pto}-${c.secuencial}\nAmbiente ${c.ambiente}`)
 

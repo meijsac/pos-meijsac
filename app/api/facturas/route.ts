@@ -23,6 +23,15 @@ export async function POST(req: Request) {
         fechaVencimiento: vence && !Number.isNaN(vence.getTime()) ? vence : null,
       },
     })
+    if (body.modo_negocio === "RESTAURANTE" || body.modo_negocio === "GENERAL") {
+      const prev = sesion.empresa.datosRegistro && typeof sesion.empresa.datosRegistro === "object" && !Array.isArray(sesion.empresa.datosRegistro)
+        ? sesion.empresa.datosRegistro as Record<string, unknown>
+        : {}
+      await prisma.empresa.update({
+        where: { id: sesion.empresa.id },
+        data: { datosRegistro: { ...prev, modo_negocio: body.modo_negocio } },
+      })
+    }
     return NextResponse.json({ id: factura.id })
   } catch (e: any) {
     return NextResponse.json({ error: e.message || "No se pudo guardar la factura" }, { status: 500 })

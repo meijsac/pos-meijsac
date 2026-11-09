@@ -50,6 +50,7 @@ export async function POST(request: Request) {
             provincia: datos.provincia ?? prev.provincia ?? "",
             ciudad: datos.ciudad ?? prev.ciudad ?? "",
             actividad: datos.actividad ?? prev.actividad ?? "",
+            modo_negocio: datos.modo_negocio ?? prev.modo_negocio ?? "",
           } as any,
         },
       });

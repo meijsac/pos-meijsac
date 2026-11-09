@@ -45,6 +45,7 @@ export function empresaParaCliente(
     contribuyenteEspecial: String(extra.contribuyenteEspecial || ""),
     tipoContribuyente: String(extra.tipoContribuyente || ""),
     sector: String(extra.sector || ""),
+    modo_negocio: String(extra.modo_negocio || ""),
     celular: String(extra.celular || ""),
     respNombre: String(extra.respNombre || ""),
     respCelular: String(extra.respCelular || ""),
