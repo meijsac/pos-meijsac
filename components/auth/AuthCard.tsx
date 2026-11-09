@@ -3,6 +3,7 @@ import { FormEvent, useState } from "react"
 import { useRouter } from "next/navigation"
 import { motion } from "framer-motion"
 import { guardarEmpresaLocal } from "@/lib/sesion-cliente"
+import { Turnstile } from "@/components/auth/Turnstile"
 
 export function AuthCard({ dark, setDark, onOpenRegister }: { dark: boolean; setDark: (v: boolean) => void; onOpenRegister: () => void }) {
   const router = useRouter()
@@ -10,34 +11,41 @@ export function AuthCard({ dark, setDark, onOpenRegister }: { dark: boolean; set
   const [ruc, setRuc] = useState("")
   const [clave, setClave] = useState("")
   const [loading, setLoading] = useState(false)
+  const [captcha, setCaptcha] = useState("")
+  const [error, setError] = useState("")
 
   async function ingresar(e?: FormEvent) {
     e?.preventDefault()
     if (loading) return
     const rucValue = ruc.trim()
-    if (rucValue.length !== 13 || !/^[0-9]+$/.test(rucValue)) {
-      alert("SRI: El RUC debe tener 13 dígitos numéricos")
+    if (!captcha) {
+      setError("Resuelve el captcha para entrar")
       return
     }
-    if (!clave) { alert("Ingresa tu contraseña"); return; }
+    if (rucValue.length !== 13 || !/^[0-9]+$/.test(rucValue)) {
+      setError("SRI: El RUC debe tener 13 dígitos numéricos")
+      return
+    }
+    if (!clave) { setError("Ingresa tu contraseña"); return; }
+    setError("")
     setLoading(true)
     try {
-      // AHORA SÍ pregunta a meijsac.com / Supabase
       const res = await fetch('/api/auth/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ruc: rucValue, password: clave })
+        body: JSON.stringify({ ruc: rucValue, password: clave, captcha, canal: tab === "CAJA" ? "POS" : "LOGIN" })
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'RUC o clave incorrectos');
 
-      if (data.empresa) guardarEmpresaLocal(data.empresa, data.token, data.usuario)
-      else localStorage.setItem("meijsac_token", data.token)
+      if (data.empresa) guardarEmpresaLocal(data.empresa, undefined, data.usuario)
+      localStorage.removeItem("meijsac_token")
 
       const dest = tab === "ADMIN" ? "/dashboard" : "/dashboard/pos-ticket"
       router.replace(dest)
     } catch (err: any) {
-      alert(err.message);
+      setError(err.message);
+      setCaptcha("")
     } finally {
       setLoading(false)
     }
@@ -84,9 +92,11 @@ export function AuthCard({ dark, setDark, onOpenRegister }: { dark: boolean; set
           <label className={`text-[10px] font-bold tracking-widest ${dark ? "text-white/60" : "text-black/60"}`}>CONTRASEÑA PRINCIPAL</label>
           <input id="clave" type="password" value={clave} onChange={(e) => setClave(e.target.value)} className={`w-full mt-2 p-4 rounded-2xl border outline-none text-sm ${dark ? "bg-black/60 border-white/10 text-white focus:border-[#ff00a8]" : "bg-gray-100 border-black/10 text-black focus:border-[#ff00a8]"}`} />
         </div>
-        <button type="submit" disabled={loading} className="w-full py-4 rounded-2xl bg-[#00f5d4] text-black font-black tracking-wide shadow-[0_0_20px_#00f5d4]/40 hover:shadow-[0_0_30px_#00f5d4]/60 transition disabled:opacity-50">
-          {loading ? "VERIFICANDO EN MEIJSAC.COM..." : "INGRESAR →"}
+        <button type="submit" disabled={loading || !captcha} className={`w-full py-4 rounded-2xl font-black tracking-wide transition disabled:cursor-not-allowed ${captcha ? "bg-green-500 text-black" : "bg-white/15 text-white/70"}`}>
+          {loading ? "VERIFICANDO EN MEIJSAC.COM..." : captcha ? "ENTRAR" : "Resuelve el captcha para entrar"}
         </button>
+        <Turnstile onToken={setCaptcha} />
+        {error && <p className="text-sm font-bold text-red-400">{error}</p>}
         <div className="flex justify-between text-[11px] mt-3">
           <span className={dark ? "text-white/50" : "text-black/50"}>✓ Recordarme</span>
           <span className="text-[#00f5d4] font-bold">¿Olvidaste tu contraseña?</span>
