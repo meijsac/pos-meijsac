@@ -5,9 +5,9 @@ if (process.env.VERCEL !== "1") {
   process.exit(0)
 }
 
-const databaseUrl = process.env.DATABASE_URL
+const databaseUrl = process.env.DIRECT_URL
 if (!databaseUrl) {
-  console.error("Falta DATABASE_URL")
+  console.error("Falta DIRECT_URL")
   process.exit(1)
 }
 
