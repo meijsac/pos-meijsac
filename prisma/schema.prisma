@@ -95,6 +95,7 @@ model FacturaEmitida {
   empresaId        String
   empresa          Empresa   @relation(fields: [empresaId], references: [id], onDelete: Cascade)
   estado           String
+  sriStatus        String?   @map("sri_status")
   payload          Json
   tipoCobro        String?   @map("tipo_cobro")
   estadoPago       String?   @map("estado_pago")

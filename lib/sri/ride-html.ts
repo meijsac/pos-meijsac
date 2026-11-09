@@ -78,6 +78,7 @@ export function htmlRide(data: {
   total: number
   mensajeSri?: string
   xmlUrl?: string
+  vuelto?: number
 }) {
   const filas = (data.items || []).map((item) => {
     const cant = Number(item.cant || 0)
@@ -169,6 +170,7 @@ export function htmlRide(data: {
     <div style="border:1px solid #e2e8f0;border-radius:8px;padding:16px">
       <h3 style="margin:0 0 8px;font-size:11px;text-transform:uppercase">Información Adicional</h3>
       <p style="margin:0"><b>Forma de Pago:</b> ${esc(data.formaPago)}</p>
+      ${Number(data.vuelto) > 0 ? `<p style="margin:4px 0 0"><b>Vuelto:</b> ${dinero(data.vuelto)}</p>` : ""}
       ${data.mensajeSri ? `<p style="margin:8px 0 0"><b>Mensaje del SRI:</b> ${esc(data.mensajeSri)}</p>` : ""}
     </div>
     <div style="border:1px solid #e2e8f0;border-radius:8px;overflow:hidden;font-family:monospace">
@@ -184,6 +186,60 @@ export function htmlRide(data: {
       <div class="total"><span style="font-family:Arial">VALOR TOTAL</span><span>${dinero(data.total)}</span></div>
     </div>
   </div>
+</body>
+</html>`
+}
+
+export function htmlTicket(data: Parameters<typeof htmlRide>[0]) {
+  const filas = (data.items || []).map((item) => {
+    const cant = Number(item.cant || 0)
+    const precio = Number(item.pUnit || 0)
+    const desc = Number(item.descDolar || 0) || cant * precio * Number(item.descPorc || 0) / 100
+    const total = Number.isFinite(Number(item.total)) ? Number(item.total) : cant * precio - desc
+    return `<tr>
+      <td style="text-align:left;padding:2px 0">${esc(item.descripcion || "")}</td>
+      <td style="text-align:right;padding:2px 0">${cant.toFixed(2)}</td>
+      <td style="text-align:right;padding:2px 0">${dinero(total)}</td>
+    </tr>`
+  }).join("")
+  return `<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <title>Ticket ${esc(data.numeroFactura)}</title>
+  <style>
+    @page { size: 80mm auto; margin: 0; }
+    body { width: 80mm; margin: 0; padding: 2mm; font-family: monospace; font-size: 11px; background: #fff; color: #000; }
+    hr { border: 0; border-top: 1px dashed #000; margin: 5px 0; }
+    table { width: 100%; border-collapse: collapse; }
+    @media print { .no-print { display: none; } }
+  </style>
+</head>
+<body>
+  <div class="no-print" style="margin-bottom:6px"><button onclick="window.print()">Imprimir ticket</button></div>
+  <div style="text-align:center;text-transform:uppercase;font-weight:bold">${esc(data.razonSocial)}</div>
+  <p style="text-align:center;margin:2px 0">RUC: ${esc(data.ruc)}</p>
+  <hr>
+  <p style="margin:2px 0">FACTURA: ${esc(data.numeroFactura)}</p>
+  <p style="margin:2px 0">CLIENTE: ${esc(data.cliente)}</p>
+  <p style="margin:2px 0">ID: ${esc(data.identificacion)}</p>
+  <p style="margin:2px 0">FECHA: ${esc(data.fechaEmision)}</p>
+  <hr>
+  <table>
+    <thead>
+      <tr style="border-bottom:1px solid #000">
+        <th style="text-align:left">DESCRIPCIÓN</th>
+        <th style="text-align:right">CANT</th>
+        <th style="text-align:right">TOTAL</th>
+      </tr>
+    </thead>
+    <tbody>${filas}</tbody>
+  </table>
+  <hr>
+  <p style="margin:2px 0">PAGO: ${esc(data.formaPago)}</p>
+  ${Number(data.vuelto) > 0 ? `<p style="margin:2px 0">VUELTO: ${dinero(data.vuelto)}</p>` : ""}
+  <p style="text-align:right;font-weight:bold;margin:4px 0">TOTAL: ${dinero(data.total)}</p>
+  <p style="font-size:9px;word-break:break-all;margin:4px 0">${esc(String(data.claveAcceso || "").replace(/\D/g, ""))}</p>
 </body>
 </html>`
 }

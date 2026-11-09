@@ -64,6 +64,39 @@ function tipoIdentificacion(id: string, codigo?: unknown) {
   return "06"
 }
 
+function montoPago(valor: unknown) {
+  const n = Number(valor)
+  if (!Number.isFinite(n) || n <= 0) return 0
+  return Math.round(n * 100) / 100
+}
+
+/** Tabla 24: 01 efectivo, 16 débito, 19 crédito, 20 transferencia. El efectivo se informa neto, sin el vuelto. */
+export function cuadrarPagosSri(body: any, importe: number): Array<[string, number]> {
+  const vuelto = montoPago(body?.pagos?.vuelto ?? body?.vuelto)
+  let efectivo = montoPago(body?.pagos?.efectivo)
+  if (vuelto > 0) efectivo = Math.max(0, Math.round((efectivo - vuelto) * 100) / 100)
+  const lineas: Array<[string, number]> = [
+    ["01", efectivo],
+    ["15", montoPago(body?.pagos?.compensacion)],
+    ["16", montoPago(body?.pagos?.debito)],
+    ["17", montoPago(body?.pagos?.dineroElec)],
+    ["18", montoPago(body?.pagos?.prepago)],
+    ["19", montoPago(body?.pagos?.tarjeta)],
+    ["20", montoPago(body?.pagos?.redBancaria)],
+    ["21", montoPago(body?.pagos?.endoso)],
+  ].filter((fila): fila is [string, number] => fila[1] > 0)
+  if (!lineas.length) return [["01", Math.round(importe * 100) / 100]]
+  const suma = lineas.reduce((total, fila) => total + fila[1], 0)
+  const diff = Math.round((importe - suma) * 100) / 100
+  if (Math.abs(diff) >= 0.01) {
+    const idx = Math.max(0, lineas.findIndex((fila) => fila[0] === "01"))
+    const ajustado = Math.round((lineas[idx][1] + diff) * 100) / 100
+    if (ajustado > 0) lineas[idx][1] = ajustado
+    else lineas.splice(idx, 1)
+  }
+  return lineas.length ? lineas : [["01", Math.round(importe * 100) / 100]]
+}
+
 export function armarXmlFactura(empresa: {
   ruc?: string | null
   razonSocial?: string | null
@@ -143,23 +176,9 @@ export function armarXmlFactura(empresa: {
   const importe = totalSin + totalIva + propina
   const totalesXml = Object.entries(grupos).map(([cod, g]) => `<totalImpuesto><codigo>2</codigo><codigoPorcentaje>${cod}</codigoPorcentaje><baseImponible>${dinero(g.base)}</baseImponible><valor>${dinero(g.valor)}</valor></totalImpuesto>`).join("")
 
-  const montoPago = (valor: unknown) => {
-    const n = Number(valor)
-    if (!Number.isFinite(n) || n <= 0) return 0
-    return Math.round(n * 100) / 100
-  }
   const listaPagos: Array<[string, number]> = body?.tipo_cobro === "CREDITO"
     ? [["20", importe]]
-    : [
-        ["01", montoPago(body?.pagos?.efectivo)],
-        ["15", montoPago(body?.pagos?.compensacion)],
-        ["16", montoPago(body?.pagos?.debito)],
-        ["17", montoPago(body?.pagos?.dineroElec)],
-        ["18", montoPago(body?.pagos?.prepago)],
-        ["19", montoPago(body?.pagos?.tarjeta)],
-        ["20", montoPago(body?.pagos?.redBancaria)],
-        ["21", montoPago(body?.pagos?.endoso)],
-      ].filter((fila): fila is [string, number] => Number(fila[1]) > 0)
+    : cuadrarPagosSri(body, importe)
   const pagos = (listaPagos.length ? listaPagos : [["01", importe] as [string, number]])
     .map(([codigo, monto]) => `<pago><formaPago>${codigo}</formaPago><total>${dinero(monto)}</total></pago>`)
     .join("")

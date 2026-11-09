@@ -238,4 +238,5 @@ CREATE TABLE IF NOT EXISTS "firma_electronica" (
 );
 ALTER TABLE "firma_electronica" ADD COLUMN IF NOT EXISTS "claveCifrada" TEXT NOT NULL DEFAULT '';
 ALTER TABLE "firma_electronica" ENABLE ROW LEVEL SECURITY;
+ALTER TABLE "FacturaEmitida" ADD COLUMN IF NOT EXISTS "sri_status" TEXT;
 ALTER TABLE "seguridad_logs" ENABLE ROW LEVEL SECURITY;

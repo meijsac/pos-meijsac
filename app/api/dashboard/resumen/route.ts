@@ -18,7 +18,7 @@ export async function GET(req: Request) {
   const sesion = await usuarioConEmpresaDesdeRequest(req)
   if ("error" in sesion) return NextResponse.json({ error: sesion.error }, { status: sesion.status })
   const filas = await prisma.facturaEmitida.findMany({
-    where: { empresaId: sesion.empresa.id },
+    where: { empresaId: sesion.empresa.id, OR: [{ sriStatus: "AUTORIZADO" }, { estado: "AUTORIZADO" }] },
     orderBy: { createdAt: "asc" },
   })
   const ahora = new Date()

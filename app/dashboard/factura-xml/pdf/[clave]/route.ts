@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
 import { usuarioConEmpresaDesdeRequest } from "@/lib/empresa-sesion"
-import { htmlRide } from "@/lib/sri/ride-html"
+import { htmlRide, htmlTicket } from "@/lib/sri/ride-html"
 
 export const dynamic = "force-dynamic"
 
@@ -37,8 +37,9 @@ export async function GET(req: Request, context: { params: Promise<{ clave: stri
     return String(comp || p.xmlContent || "")
   })()
   const pedido = new URL(req.url)
+  const vuelto = Number(p.pagos?.vuelto || p.vuelto || 0)
   if (pedido.searchParams.get("xml") === "1") {
-    if (!autorizado || !xmlAutorizado) return pagina("XML", "El SRI todavía no autorizó este comprobante.", 409)
+    if (!xmlAutorizado) return pagina("XML", "Esta factura no tiene XML.", 404)
     return new NextResponse(xmlAutorizado, {
       headers: {
         "Content-Type": "text/xml; charset=utf-8",
@@ -78,7 +79,34 @@ export async function GET(req: Request, context: { params: Promise<{ clave: stri
     propina: t.propina,
     total: t.total,
     mensajeSri: autorizado ? "" : (p.mensajeSri || ""),
-    xmlUrl: autorizado ? `/dashboard/factura-xml/pdf/${clave}?xml=1` : "",
+    xmlUrl: `/dashboard/factura-xml/pdf/${clave}?xml=1`,
+    vuelto,
   })
+  if (pedido.searchParams.get("ticket") === "1") {
+    return new NextResponse(htmlTicket({
+      razonSocial: emisor.razon || "",
+      nombreComercial: emisor.comercial || "",
+      ruc: emisor.ruc || "",
+      dirMatriz: emisor.matriz || "",
+      dirSucursal: emisor.sucursal || "",
+      obligado: emisor.obligado || "",
+      regimen: emisor.regimen || "",
+      logoUrl: "",
+      numeroFactura: numero,
+      claveAcceso: clave,
+      fechaAutorizacion: autorizado ? fecha : "",
+      ambiente: clave[23] === "2" ? "PRODUCCIÓN" : "PRUEBAS",
+      cliente: cliente.razon || "",
+      identificacion: cliente.identificacion || "",
+      fechaEmision: p.fechaEmisionFormato || "",
+      email: cliente.email || "",
+      direccionCliente: cliente.direccion || "",
+      formaPago: p.formaPago || "",
+      items: Array.isArray(p.items) ? p.items : [],
+      base15: t.base15, base0: t.base0, baseNoObjeto: t.baseNoObjeto, baseExento: t.baseExento,
+      subtotalSin: t.subtotalSin, descuento: t.descuento, ice: t.valorICE, iva: t.iva15,
+      propina: t.propina, total: t.total, vuelto,
+    }), { headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store" } })
+  }
   return new NextResponse(html, { headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store" } })
 }

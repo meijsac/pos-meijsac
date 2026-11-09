@@ -138,7 +138,7 @@ export default function EmitidosPage(){
         })
       }
     })
-    setDocs(Array.from(map.values()).reverse())
+    setDocs(Array.from(map.values()).filter((d) => d.estadoSRI === "AUTORIZADO" && d.fechaAutorizacion).reverse())
   }
 
   const consultarDeNuevo = async (doc: ComprobanteHistorialSRI) => {

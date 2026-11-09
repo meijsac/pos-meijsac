@@ -105,7 +105,7 @@ export default function EmitidosPage(){
       receptorIdentificacion: d.receptorIdentificacion || d.ruc || d.rucProveedor || d.receptorRuc || "9999999999999",
       receptorNombre: d.receptorNombre || d.razon || d.proveedor || d.proveedorNombre || "CONSUMIDOR FINAL",
       valorTotal: Number(d.valorTotal ?? d.total ?? d.valorRetenido ?? 0),
-      estadoSRI: d.estadoSRI || d.estado || 'AUTORIZADO',
+      estadoSRI: d.fechaAutorizacion ? "AUTORIZADO" : (d.estadoSRI || d.estado || "PENDIENTE"),
       xmlContent: d.xmlContent || d.xml || "",
       motivoAnulacion: d.motivoAnulacion,
       fechaAnulacion: d.fechaAnulacion,

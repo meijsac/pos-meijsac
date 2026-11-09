@@ -785,20 +785,26 @@ const total = subtotalSin + iva15 + ivaDiferenciado + valorICE + valorIRBPNR + p
       const n = Number(monto)
       if (Number.isFinite(n) && n > 0) formasEmit.push(`${codigo} - ${nombre}`)
     }
-    anotarForma("01", "SIN UTILIZACION DEL SISTEMA FINANCIERO", pagosReales.efectivo)
+    const efectivoRecibido = sinCobro ? 0 : Number(abonos.efectivo || 0)
+    const tarjetaRecibida = sinCobro ? 0 : Number(abonos.tarjeta || 0)
+    const transferenciaRecibida = sinCobro ? 0 : Number(abonos.transfer || 0)
+    const debitoRecibido = tarjetaData.tipoSRI === "16" ? tarjetaRecibida : plata(pagos.debito)
+    const creditoRecibido = tarjetaData.tipoSRI === "16" ? plata(pagos.tarjeta) : (tarjetaRecibida || plata(pagos.tarjeta))
+    const efectivoNeto = Math.max(0, Math.round((efectivoRecibido - (sinCobro ? 0 : vueltoEmit)) * 100) / 100)
+    anotarForma("01", "SIN UTILIZACION DEL SISTEMA FINANCIERO", efectivoNeto)
     anotarForma("15", "COMPENSACION DE DEUDAS", pagosReales.compensacion)
-    anotarForma("16", "TARJETA DE DEBITO", pagosReales.debito)
+    anotarForma("16", "TARJETA DE DEBITO", debitoRecibido)
     anotarForma("17", "DINERO ELECTRONICO", pagosReales.dineroElec)
     anotarForma("18", "TARJETA PREPAGO", pagosReales.prepago)
-    anotarForma("19", "TARJETA DE CREDITO", pagosReales.tarjeta)
-    anotarForma("20", "OTROS CON UTILIZACION DEL SISTEMA FINANCIERO", pagosReales.redBancaria)
+    anotarForma("19", "TARJETA DE CREDITO", creditoRecibido)
+    anotarForma("20", "OTROS CON UTILIZACION DEL SISTEMA FINANCIERO", transferenciaRecibida || pagosReales.redBancaria)
     anotarForma("21", "ENDOSO DE TITULOS", pagosReales.endoso)
     const venceCredito = tipoCobro === "credito" ? fechaVencimientoCredito() : null
     const formaPagoEmit = tipoCobro === "pendiente"
       ? formaPendiente
       : tipoCobro === "credito"
         ? "20 - OTROS CON UTILIZACION DEL SISTEMA FINANCIERO"
-        : (formasEmit.length ? formasEmit.join(" | ") : "01 - SIN UTILIZACION DEL SISTEMA FINANCIERO")
+        : (formasEmit.length ? `${formasEmit.join(" | ")}${vueltoEmit > 0 ? ` | Vuelto $${vueltoEmit.toFixed(2)}` : ""}` : "01 - SIN UTILIZACION DEL SISTEMA FINANCIERO")
     const tipoCobroGuardado = tipoCobro === "pendiente" ? "PENDIENTE_DE_PAGO" : tipoCobro === "credito" ? "CREDITO" : tipoCobro === "tarjeta" ? "TARJETA" : tipoCobro === "transfer" ? "TRANSF" : "EFECTIVO"
     const estadoPagoGuardado = tipoCobro === "pendiente" ? "PENDIENTE DE PAGO" : tipoCobro === "credito" ? "PENDIENTE DE PAGO - CRÉDITO" : "PAGADO"
     console.log('Generando XML con pagos:', pagosReales, ' refs:', refTarjeta, refTransfer)
@@ -854,16 +860,16 @@ const total = subtotalSin + iva15 + ivaDiferenciado + valorICE + valorIRBPNR + p
       vuelto: vueltoEmit,
       caja: { efectivo: sinCobro ? 0 : Number(abonos.efectivo || 0), transfer: sinCobro ? 0 : Number(abonos.transfer || 0), tarjeta: sinCobro ? 0 : Number(abonos.tarjeta || 0), credito: 0 },
       formasPago: [
-        { codigo: "01", nombre: "SIN UTILIZACION DEL SISTEMA FINANCIERO", monto: plata(pagosReales.efectivo) },
+        { codigo: "01", nombre: "SIN UTILIZACION DEL SISTEMA FINANCIERO", monto: efectivoNeto },
         { codigo: "15", nombre: "COMPENSACION DE DEUDAS", monto: plata(pagosReales.compensacion) },
-        { codigo: "16", nombre: "TARJETA DE DEBITO", monto: plata(pagosReales.debito) },
+        { codigo: "16", nombre: "TARJETA DE DEBITO", monto: plata(debitoRecibido) },
         { codigo: "17", nombre: "DINERO ELECTRONICO", monto: plata(pagosReales.dineroElec) },
         { codigo: "18", nombre: "TARJETA PREPAGO", monto: plata(pagosReales.prepago) },
-        { codigo: "19", nombre: "TARJETA DE CREDITO", monto: plata(pagosReales.tarjeta) },
-        { codigo: "20", nombre: "OTROS CON UTILIZACION DEL SISTEMA FINANCIERO", monto: plata(pagosReales.redBancaria) },
+        { codigo: "19", nombre: "TARJETA DE CREDITO", monto: plata(creditoRecibido) },
+        { codigo: "20", nombre: "OTROS CON UTILIZACION DEL SISTEMA FINANCIERO", monto: plata(transferenciaRecibida || pagosReales.redBancaria) },
         { codigo: "21", nombre: "ENDOSO DE TITULOS", monto: plata(pagosReales.endoso) },
       ].filter((f) => f.monto > 0),
-      pagos: { ...pagosReales, efectivo: plata(pagosReales.efectivo), cambio: vueltoEmit, vuelto: vueltoEmit, entregado: entregadoEmit, efectivoRecibido: entregadoEmit, formaPago: formaPagoEmit },
+      pagos: { ...pagosReales, efectivo: efectivoRecibido, debito: plata(debitoRecibido), tarjeta: plata(creditoRecibido), redBancaria: plata(transferenciaRecibida || pagosReales.redBancaria), cambio: vueltoEmit, vuelto: vueltoEmit, entregado: entregadoEmit, efectivoRecibido, formaPago: formaPagoEmit },
       refs: { refTarjeta, refTransfer, tipoCobro, plazoElegido },
       transito: transitoActual,
       mesaOrigenId: transitoActual?.mesaOrigenId || null,
@@ -926,7 +932,7 @@ const total = subtotalSin + iva15 + ivaDiferenciado + valorICE + valorIRBPNR + p
     guardarSecuencialUsado(serieAhora, secAhora)
     cargarPunto(cliente.codSucursal)
     try {
-      const guardado = await fetch("/api/facturar", { method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${localStorage.getItem("meijsac_token") || ""}` }, body: JSON.stringify({ ...facturaPendiente, estadoSRI: "PENDIENTE_DE_AUTORIZAR" }) })
+      const guardado = await fetch("/api/facturar", { method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${localStorage.getItem("meijsac_token") || ""}` }, body: JSON.stringify({ ...facturaPendiente, estadoSRI: "PENDIENTE", diferirSri: true }) })
       const guardada = await guardado.json().catch(() => ({}))
       if (!guardado.ok) {
         const faltan = Array.isArray(guardada.faltantes) ? `\n${guardada.faltantes.join("\n")}` : ""
@@ -990,15 +996,13 @@ const total = subtotalSin + iva15 + ivaDiferenciado + valorICE + valorIRBPNR + p
       cargarPunto()
       localStorage.setItem("meijsac_ultima_factura_pendiente", JSON.stringify(facturaPendiente))
       const claveRide = String(guardada.claveAcceso || facturaPendiente.claveAcceso || "").replace(/\D/g, "")
-      const autorizado = Boolean(String(guardada.fechaAutorizacion || "").trim())
-      const urlRide = `/dashboard/factura-xml/pdf/${claveRide}`
-      if (autorizado && claveRide.length === 49) {
+      const urlRide = `/dashboard/factura-xml/visor/${claveRide}`
+      if (claveRide.length === 49) {
         if (venta) venta.location.href = urlRide
         else window.open(urlRide, "_blank")
       } else {
         venta?.close()
-        const aviso = guardada.mensaje || guardada.error
-        if (aviso) alert(aviso)
+        alert("No se pudo obtener la clave de acceso del comprobante.")
       }
     } catch {
       venta?.close()

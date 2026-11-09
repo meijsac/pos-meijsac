@@ -7,7 +7,7 @@ import { FaltanDatosSri, armarXmlFactura } from "@/lib/sri/xml-factura"
 import { firmarFacturaXml } from "@/lib/sri/firmar"
 import { codigoAmbiente } from "@/lib/sri/ambiente"
 import { URLS_SRI, enviarAlSri } from "@/lib/sri/cliente-sri"
-import { clasificarEstadoSri } from "@/lib/sri/estado-visible"
+import { guardarRespuestaSri, sriStatusDe } from "@/lib/sri/guardar-respuesta"
 import { elegirSecuencial, serieDeAmbiente } from "@/lib/sri/punto-emision"
 import { desencriptarBytes, desencriptar } from "@/lib/seguridad"
 
@@ -21,6 +21,8 @@ export async function POST(req: Request) {
     const body = await req.json()
     const caja = String(body?.caja || sesion.usuario.id)
     if (anotarFacturaCaja(caja, Date.now()) > 30) return NextResponse.json({ error: "Demasiadas facturas por minuto" }, { status: 429 })
+    const diferirSri = body?.diferirSri === true
+    if (body) delete body.diferirSri
     if (body?.cliente) body.cliente.razon = sanitizarTexto(body.cliente.razon)
     const claveFirma = String(body?.claveFirma || "")
     delete body.claveFirma
@@ -105,7 +107,8 @@ export async function POST(req: Request) {
     const factura = await prisma.facturaEmitida.create({
       data: {
         empresaId: sesion.empresa.id,
-        estado: "PENDIENTE_DE_AUTORIZAR",
+        estado: "PENDIENTE",
+        sriStatus: sriStatusDe(String(body.estadoSRI || "PENDIENTE"), ""),
         payload: body,
         tipoCobro: body.tipo_cobro ? String(body.tipo_cobro) : null,
         estadoPago: body.estado_pago ? String(body.estado_pago) : null,
@@ -122,6 +125,18 @@ export async function POST(req: Request) {
       await prisma.empresa.update({
         where: { id: sesion.empresa.id },
         data: { datosRegistro: { ...prev, modo_negocio: body.modo_negocio } },
+      })
+    }
+    if (diferirSri) {
+      return NextResponse.json({
+        id: factura.id,
+        claveAcceso: armado.claveAcceso,
+        establecimiento: `${armado.estab}-${armado.pto}`,
+        secuencial: armado.secuencial,
+        estado: "PENDIENTE",
+        firmado,
+        fechaAutorizacion: "",
+        conectado: null,
       })
     }
     const urls = URLS_SRI[ambiente]
@@ -144,68 +159,16 @@ export async function POST(req: Request) {
       }
       throw error
     }
-    const resultado = {
-      fechaAutorizacion: real.fechaAutorizacion,
-      estado: real.status === "AUTORIZADO" ? "AUTORIZADO" : real.status === "DEVUELTA" ? "DEVUELTA" : real.status === "RECHAZADO" ? "NO AUTORIZADO" : "PENDIENTE_DE_AUTORIZAR",
-      mensaje: real.mensajes.join(" | ") || real.error || real.status,
-      mensajes: real.mensajes,
-      numeroAutorizacion: real.fechaAutorizacion ? real.numeroAutorizacion : "",
-      estadoRecepcion: real.recepcion?.RespuestaRecepcionComprobantes.estado || "",
-      mensajeRecepcion: real.mensajes.join(" | "),
-      fechaRecepcion: "",
-      estadoAutorizacion: real.status === "AUTORIZADO" && real.fechaAutorizacion ? "AUTORIZADO" : real.status === "RECHAZADO" ? "RECHAZADO" : "",
-      mensajeAutorizacion: real.mensajes.join(" | "),
-      enviado: real.conectado,
-      conectado: real.conectado,
-      statusSri: real.status,
-      errorRed: real.error || "",
-      recepcionSri: real.recepcion,
-      autorizacionSri: real.autorizacion,
-    }
-    const fechaSri = resultado.fechaAutorizacion || ""
-    const visible = clasificarEstadoSri(resultado.estado, fechaSri)
-    const estadoGuardado = visible === "AUTORIZADO" ? "AUTORIZADO" : visible
-    body.estadoSRI = estadoGuardado
-    body.mensajeSri = resultado.mensaje
-    body.mensajesSri = resultado.mensajes
-    body.numeroAutorizacion = fechaSri ? (resultado.numeroAutorizacion || "") : ""
-    body.fechaAutorizacion = fechaSri
-    body.estadoRecepcion = resultado.estadoRecepcion || ""
-    body.mensajeRecepcion = resultado.mensajeRecepcion || ""
-    body.fechaRecepcion = resultado.fechaRecepcion || ""
-    body.estadoAutorizacion = resultado.estadoAutorizacion || ""
-    body.mensajeAutorizacion = resultado.mensajeAutorizacion || ""
-    body.enviado = resultado.enviado
-    body.conectado = resultado.conectado !== false
-    body.sriRecepcion = resultado.recepcionSri || null
-    body.sriAutorizacion = resultado.autorizacionSri || null
-    try {
-      await prisma.facturaEmitida.update({
-        where: { id: factura.id },
-        data: { estado: estadoGuardado, payload: body },
-      })
-    } catch {}
+    const cerrado = await guardarRespuestaSri(factura.id, body, real)
     return NextResponse.json({
       id: factura.id,
       claveAcceso: armado.claveAcceso,
       establecimiento: `${armado.estab}-${armado.pto}`,
       secuencial: armado.secuencial,
-      estado: estadoGuardado,
-      mensaje: resultado.mensaje,
-      mensajes: resultado.mensajes,
-      numeroAutorizacion: fechaSri ? (resultado.numeroAutorizacion || "") : "",
-      fechaAutorizacion: fechaSri,
-      estadoRecepcion: resultado.estadoRecepcion || "",
-      mensajeRecepcion: resultado.mensajeRecepcion || "",
-      fechaRecepcion: resultado.fechaRecepcion || "",
       xml,
       firmado,
-      enviado: resultado.enviado,
-      conectado: resultado.conectado !== false,
-      error: resultado.errorRed || "",
-      status: resultado.statusSri === "ERROR_SRI" || resultado.statusSri === "DEVUELTA" ? resultado.statusSri : (resultado.estado === "DEVUELTA" || resultado.estadoRecepcion === "DEVUELTA" ? "DEVUELTA" : estadoGuardado),
-      sriRecepcion: resultado.recepcionSri || null,
-      sriAutorizacion: resultado.autorizacionSri || null,
+      enviado: real.conectado,
+      ...cerrado,
     })
   } catch (e: any) {
     const code = String(e?.cause?.code || e?.code || e?.codigo || "")
