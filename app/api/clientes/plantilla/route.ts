@@ -15,19 +15,27 @@ export async function GET() {
       cell.numFmt = "@"
     })
   }
-  ;[24, 22, 32, 28, 16, 28, 16, 24].forEach((ancho, i) => {
+  ;[28, 24, 22, 32, 28, 16, 28, 16, 24].forEach((ancho, i) => {
     ws.getColumn(i + 1).width = ancho
     ws.getColumn(i + 1).numFmt = "@"
   })
   ws.dataValidations.add("A2:A2000", {
     type: "list",
     allowBlank: false,
-    formulae: ['"CEDULA,RUC,PASAPORTE,CONSUMIDOR FINAL"'],
+    formulae: ['"04,05,06,07,08"'],
+    showErrorMessage: true,
+    errorTitle: "Código",
+    error: "04 RUC, 05 CÉDULA, 06 PASAPORTE, 07 CONSUMIDOR FINAL, 08 EXTERIOR",
+  })
+  ws.dataValidations.add("B2:B2000", {
+    type: "list",
+    allowBlank: false,
+    formulae: ['"CEDULA,RUC,PASAPORTE,CONSUMIDOR FINAL,IDENTIFICACION DEL EXTERIOR"'],
     showErrorMessage: true,
     errorTitle: "Tipo",
-    error: "Solo CEDULA, RUC, PASAPORTE o CONSUMIDOR FINAL",
+    error: "Tiene que coincidir con el código de la Tabla 6 del SRI",
   })
-  ws.dataValidations.add("H2:H2000", {
+  ws.dataValidations.add("I2:I2000", {
     type: "list",
     allowBlank: false,
     formulae: ['"SI,NO"'],

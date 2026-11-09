@@ -2,7 +2,7 @@ import ExcelJS from "exceljs"
 import { NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
 import { usuarioConEmpresaDesdeRequest } from "@/lib/empresa-sesion"
-import { datosGuardables, matrizDesdeCsv, revisarTabla, textoCelda } from "@/lib/clientes-masivo"
+import { COLUMNAS_CLIENTE, datosGuardables, matrizDesdeCsv, revisarTabla, textoCelda } from "@/lib/clientes-masivo"
 
 export const dynamic = "force-dynamic"
 export const maxDuration = 60
@@ -18,7 +18,7 @@ async function matrizDelArchivo(file: File) {
   const ultima = Math.max(ws.actualRowCount || 0, ws.rowCount || 0)
   for (let r = 1; r <= ultima; r++) {
     const fila: unknown[] = []
-    for (let c = 1; c <= 8; c++) fila.push(textoCelda(ws.getRow(r).getCell(c).value))
+    for (let c = 1; c <= COLUMNAS_CLIENTE.length; c++) fila.push(textoCelda(ws.getRow(r).getCell(c).value))
     matriz.push(fila)
   }
   return matriz

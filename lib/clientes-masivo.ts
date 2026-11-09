@@ -1,4 +1,5 @@
 export const COLUMNAS_CLIENTE = [
+  "codigo_tipo_identificacion",
   "tipo_identificacion",
   "identificacion",
   "nombre_razon_social",
@@ -9,15 +10,25 @@ export const COLUMNAS_CLIENTE = [
   "es_cliente_frecuente",
 ] as const
 
+export const CODIGO_TIPO: Record<string, string> = {
+  "04": "RUC",
+  "05": "CEDULA",
+  "06": "PASAPORTE",
+  "07": "CONSUMIDOR FINAL",
+  "08": "IDENTIFICACION DEL EXTERIOR",
+}
+
 export const EJEMPLOS_CLIENTE = [
-  ["CEDULA", "1708330509", "María Pérez", "maria@gmail.com", "0999999999", "Av. Amazonas 123", "Quito", "SI"],
-  ["RUC", "1793243789001", "MEIJSAC S.A.S.", "ventas@meijisac.com", "022222222", "Av. 6 de Diciembre", "Quito", "SI"],
-  ["PASAPORTE", "AB123456", "John Smith", "john@gmail.com", "0987654321", "Calle Falsa 123", "Quito", "NO"],
+  ["04", "RUC", "1793243789001", "MEIJSAC S.A.S.", "ventas@meijisac.com", "022222222", "Av. 6 de Diciembre", "Quito", "SI"],
+  ["05", "CEDULA", "1708330509", "María Pérez", "maria@gmail.com", "0999999999", "Av. Amazonas 123", "Quito", "SI"],
+  ["06", "PASAPORTE", "AB123456", "John Smith", "john@gmail.com", "0987654321", "Calle Falsa 123", "Quito", "NO"],
+  ["07", "CONSUMIDOR FINAL", "9999999999999", "CONSUMIDOR FINAL", "-", "-", "-", "Quito", "NO"],
 ]
 
-const TIPOS = new Set(["CEDULA", "RUC", "PASAPORTE", "CONSUMIDOR FINAL"])
+const TIPOS = new Set(["CEDULA", "RUC", "PASAPORTE", "CONSUMIDOR FINAL", "IDENTIFICACION DEL EXTERIOR"])
 
 export type FilaCliente = {
+  codigo_tipo_identificacion: string
   tipo_identificacion: string
   identificacion: string
   nombre_razon_social: string
@@ -46,6 +57,12 @@ export function textoCelda(valor: unknown): string {
   return String(valor).trim()
 }
 
+export function normalizarCodigo(valor: string) {
+  const limpio = valor.replace(/\s/g, "")
+  if (/^\d{1,2}$/.test(limpio)) return limpio.padStart(2, "0")
+  return limpio
+}
+
 export function normalizarTipo(valor: string) {
   return valor
     .normalize("NFD")
@@ -70,8 +87,9 @@ export function validarCedulaEC(ced: string) {
 }
 
 function filaDesde(celdas: string[]): FilaCliente {
-  const [tipo, identificacion, nombre, email, telefono, direccion, ciudad, frecuente] = celdas
+  const [codigo, tipo, identificacion, nombre, email, telefono, direccion, ciudad, frecuente] = celdas
   return {
+    codigo_tipo_identificacion: normalizarCodigo(codigo || ""),
     tipo_identificacion: normalizarTipo(tipo || ""),
     identificacion: (identificacion || "").trim(),
     nombre_razon_social: (nombre || "").trim(),
@@ -89,21 +107,32 @@ function vacia(fila: FilaCliente) {
 
 export function erroresDeFila(fila: FilaCliente): string[] {
   const errores: string[] = []
+  const codigo = fila.codigo_tipo_identificacion
+  const tipoOficial = CODIGO_TIPO[codigo]
+  if (!codigo) errores.push("codigo_tipo_identificacion vacío")
+  else if (!tipoOficial) errores.push("codigo_tipo_identificacion solo acepta 04, 05, 06, 07, 08")
+  else if (fila.tipo_identificacion && fila.tipo_identificacion !== tipoOficial) {
+    errores.push(`El código ${codigo} es ${tipoOficial}, no ${fila.tipo_identificacion}. Corrígelo`)
+  }
   if (!fila.tipo_identificacion) errores.push("tipo_identificacion vacío")
-  else if (!TIPOS.has(fila.tipo_identificacion)) errores.push("tipo_identificacion solo acepta CEDULA, RUC, PASAPORTE, CONSUMIDOR FINAL")
+  else if (!TIPOS.has(fila.tipo_identificacion)) {
+    errores.push("tipo_identificacion solo acepta CEDULA, RUC, PASAPORTE, CONSUMIDOR FINAL, IDENTIFICACION DEL EXTERIOR")
+  }
   if (!fila.identificacion) errores.push("identificacion vacía")
   if (!fila.nombre_razon_social) errores.push("nombre_razon_social vacío")
   if (!fila.email) errores.push("email vacío")
-  else if (!fila.email.includes("@")) errores.push("email sin @")
+  else if (fila.email !== "-" && !fila.email.includes("@")) errores.push("email sin @")
   if (!fila.telefono) errores.push("telefono vacío")
   if (!fila.direccion) errores.push("direccion vacía")
   if (!fila.ciudad) errores.push("ciudad vacía")
   if (!fila.es_cliente_frecuente) errores.push("es_cliente_frecuente vacío")
   else if (fila.es_cliente_frecuente !== "SI" && fila.es_cliente_frecuente !== "NO") errores.push("es_cliente_frecuente solo acepta SI o NO")
 
-  if (fila.tipo_identificacion === "CEDULA" && fila.identificacion && !validarCedulaEC(fila.identificacion)) errores.push("cédula mal escrita")
-  if (fila.tipo_identificacion === "RUC" && fila.identificacion && !/^\d{13}$/.test(fila.identificacion)) errores.push("RUC que no tiene 13 dígitos")
-  if (fila.tipo_identificacion === "CONSUMIDOR FINAL" && fila.identificacion && fila.identificacion !== "9999999999999") {
+  const tipoRegla = tipoOficial || fila.tipo_identificacion
+  if (tipoRegla === "CEDULA" && fila.identificacion && !validarCedulaEC(fila.identificacion)) errores.push("cédula mal escrita")
+  if (tipoRegla === "RUC" && fila.identificacion && !/^\d{13}$/.test(fila.identificacion)) errores.push("RUC que no tiene 13 dígitos")
+  if (tipoRegla === "PASAPORTE" && fila.identificacion && !/^[A-Za-z0-9]+$/.test(fila.identificacion)) errores.push("pasaporte solo acepta letras y números")
+  if (tipoRegla === "CONSUMIDOR FINAL" && fila.identificacion && fila.identificacion !== "9999999999999") {
     errores.push("CONSUMIDOR FINAL usa la identificación 9999999999999")
   }
   return errores
@@ -163,22 +192,28 @@ export function matrizDesdeCsv(texto: string): unknown[][] {
 }
 
 export function tipoIdDe(tipo: string) {
-  if (tipo === "RUC") return "04"
-  if (tipo === "PASAPORTE") return "06"
-  if (tipo === "CONSUMIDOR FINAL") return "07"
-  return "05"
+  const par = Object.entries(CODIGO_TIPO).find(([, nombre]) => nombre === tipo)
+  return par ? par[0] : "05"
+}
+
+export function codigoDesdeCliente(tipoId: string, identificacion: string) {
+  const codigo = normalizarCodigo(String(tipoId || ""))
+  if (CODIGO_TIPO[codigo]) return codigo
+  return tipoIdDe(tipoDesdeCliente("", identificacion))
 }
 
 export function tipoDesdeCliente(tipoId: string, identificacion: string) {
-  if (identificacion === "9999999999999" || tipoId === "07") return "CONSUMIDOR FINAL"
-  if (tipoId === "04") return "RUC"
-  if (tipoId === "06" || tipoId === "08") return "PASAPORTE"
-  return "CEDULA"
+  const codigo = normalizarCodigo(String(tipoId || ""))
+  if (CODIGO_TIPO[codigo]) return CODIGO_TIPO[codigo]
+  if (identificacion === "9999999999999") return "CONSUMIDOR FINAL"
+  if (/^\d{13}$/.test(identificacion)) return "RUC"
+  if (/^\d{10}$/.test(identificacion)) return "CEDULA"
+  return "PASAPORTE"
 }
 
 export function datosGuardables(fila: FilaCliente) {
   return {
-    tipoId: tipoIdDe(fila.tipo_identificacion),
+    tipoId: fila.codigo_tipo_identificacion || tipoIdDe(fila.tipo_identificacion),
     identificacion: fila.identificacion,
     razonSocial: fila.nombre_razon_social,
     email: fila.email,

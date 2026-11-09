@@ -2,7 +2,7 @@ import ExcelJS from "exceljs"
 import { NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
 import { usuarioConEmpresaDesdeRequest } from "@/lib/empresa-sesion"
-import { COLUMNAS_CLIENTE, tipoDesdeCliente } from "@/lib/clientes-masivo"
+import { COLUMNAS_CLIENTE, codigoDesdeCliente, tipoDesdeCliente } from "@/lib/clientes-masivo"
 
 export const dynamic = "force-dynamic"
 
@@ -27,6 +27,7 @@ export async function GET(req: Request) {
   ws.getRow(1).font = { bold: true }
   for (const c of filtrados) {
     const row = ws.addRow([
+      codigoDesdeCliente(c.tipoId, c.identificacion),
       tipoDesdeCliente(c.tipoId, c.identificacion),
       c.identificacion,
       c.razonSocial,
@@ -40,7 +41,7 @@ export async function GET(req: Request) {
       cell.numFmt = "@"
     })
   }
-  ;[24, 22, 32, 28, 16, 28, 16, 24].forEach((ancho, i) => {
+  ;[28, 24, 22, 32, 28, 16, 28, 16, 24].forEach((ancho, i) => {
     ws.getColumn(i + 1).width = ancho
   })
   const buffer = await wb.xlsx.writeBuffer()
