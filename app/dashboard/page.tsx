@@ -31,7 +31,7 @@ function getColor(dias: number){
 }
 
 type Serie = { dia: number[]; semana: number[]; mes: number[]; año: number[] }
-type Metrica = { ventas: number; pedidos: number; carrito: number; visitas: number; tasa: number; beneficio: number }
+type Metrica = { ventas: number; pedidos: number; carrito: number }
 
 function BarrasColoresCompact({ series }: { series: Serie }){
   const [filtro, setFiltro] = useState<'dia'|'semana'|'mes'|'año'>('dia')
@@ -64,14 +64,11 @@ function BarrasColoresCompact({ series }: { series: Serie }){
 function VentasAreaCompact({ series, metricas }: { series: Serie; metricas: Record<string, Metrica> }){
   const [filtro, setFiltro] = useState<'dia'|'semana'|'mes'|'año'>('mes')
   const [tab, setTab] = useState(0)
-  const m = metricas[filtro] || { ventas: 0, pedidos: 0, carrito: 0, visitas: 0, tasa: 0, beneficio: 0 }
+  const m = metricas[filtro] || { ventas: 0, pedidos: 0, carrito: 0 }
   const tabs = [
     { label: 'Ventas', value: `$${m.ventas.toFixed(2)}` },
     { label: 'Pedidos', value: String(m.pedidos) },
-    { label: 'Valor carrito', value: `$${m.carrito.toFixed(2)}` },
-    { label: 'Visitas', value: String(m.visitas) },
-    { label: 'Tasa', value: `${m.tasa.toFixed(2)}%` },
-    { label: 'Beneficio', value: `$${m.beneficio.toFixed(2)}` },
+    { label: 'Valor carrito', value: m.pedidos ? `$${m.carrito.toFixed(2)}` : '$0.00' },
   ]
   const points = series[filtro] || []
   const max = Math.max(...points, 0)
@@ -82,7 +79,7 @@ function VentasAreaCompact({ series, metricas }: { series: Serie; metricas: Reco
           <button key={f} onClick={()=>setFiltro(f)} className={`text-[7px] px-2 py-0.5 rounded-full font-bold uppercase ${filtro===f ? 'bg-white text-black' : 'text-white/40'}`}>{f}</button>
         ))}
       </div>
-      <div className="grid grid-cols-6 border-b border-white/[0.06]">
+      <div className="grid grid-cols-3 border-b border-white/[0.06]">
         {tabs.map((t,i)=>(
           <button key={t.label} onClick={()=>setTab(i)} className={`p-1.5 text-left border-r border-white/[0.04] last:border-0 ${tab===i ? 'bg-[#0f6cb6] text-white' : 'text-white/30 hover:text-white/60'}`}>
             <p className="text-[7px] font-bold truncate">{t.label}</p>
@@ -105,8 +102,7 @@ export default function DashboardMeijsac(){
   const [firmaSubida, setFirmaSubida] = useState(false)
   const [mounted, setMounted] = useState(false)
   const [porCobrar, setPorCobrar] = useState(0)
-  const [ventas, setVentas] = useState({ hoy: 0, mes: 0 })
-  const [liquidez, setLiquidez] = useState<number | null>(null)
+  const [ventas, setVentas] = useState({ hoy: 0, mes: 0, pedidosHoy: 0, pedidosMes: 0 })
   const [docsLegales, setDocsLegales] = useState<{ id: string; tipo: string; nombre: string; fecha_caducidad: string }[]>([])
   const vacioSerie = { dia: [], semana: [], mes: [], año: [] }
   const [series, setSeries] = useState<Serie>(vacioSerie)
@@ -162,9 +158,8 @@ export default function DashboardMeijsac(){
         ])
         if (!cancel && resumenRes.ok) {
           const resumen = await resumenRes.json()
-          setVentas({ hoy: Number(resumen.ventasHoy || 0), mes: Number(resumen.ventasMes || 0) })
+          setVentas({ hoy: Number(resumen.ventasHoy || 0), mes: Number(resumen.ventasMes || 0), pedidosHoy: Number(resumen.pedidosHoy || 0), pedidosMes: Number(resumen.pedidosMes || 0) })
           setPorCobrar(Number(resumen.cxc || 0))
-          setLiquidez(resumen.liquidez === null || resumen.liquidez === undefined ? null : Number(resumen.liquidez))
           if (resumen.series) setSeries(resumen.series)
           if (resumen.metricas) setMetricas(resumen.metricas)
         }
@@ -301,11 +296,11 @@ export default function DashboardMeijsac(){
         <div className="max-w-[1600px] mx-auto grid grid-cols-12 gap-3 mb-5">
           <div className="col-span-12 md:col-span-6 grid grid-cols-3 gap-3">
             <div className="bg-[#12141d] rounded-2xl border border-white/[0.05] p-3 shadow-sm flex flex-col justify-between h-[188px]">
-              <div><p className="text-[9px] opacity-40 tracking-widest">VENTAS HOY</p><p className="text-[16px] font-black mt-1">${ventas.hoy.toFixed(2)}</p><p className="text-[9px] opacity-50 mt-1">Mes: ${ventas.mes.toFixed(2)} • CxC ${porCobrar.toFixed(2)}</p></div>
+              <div><p className="text-[9px] opacity-40 tracking-widest">VENTAS HOY</p><p className="text-[16px] font-black mt-1">${ventas.hoy.toFixed(2)}</p><p className="text-[9px] opacity-50 mt-1">{ventas.pedidosHoy} facturas autorizadas hoy</p><p className="text-[9px] opacity-50">Mes: ${ventas.mes.toFixed(2)} • {ventas.pedidosMes} autorizadas • CxC ${porCobrar.toFixed(2)}</p></div>
             </div>
             <div className="bg-[#12141d] rounded-2xl border border-white/[0.05] p-3 shadow-sm flex flex-col justify-between h-[188px]">
-              <div><p className="text-[9px] opacity-40 tracking-widest">ESTADO FINANCIERO</p>{liquidez === null ? <p className="text-[13px] font-bold mt-3">Sin datos aún</p> : <p className="text-[13px] font-bold mt-3">Liquidez {Math.round(liquidez * 100)}%</p>}</div>
-              <div><div className="flex justify-between text-[9px] mb-1"><span className="opacity-50">Ingresos del mes menos egresos</span><span>{liquidez === null ? "—" : `${Math.round(liquidez * 100)}%`}</span></div><div className="h-1.5 bg-white/10 rounded-full overflow-hidden"><div className="h-full" style={{ width: `${liquidez === null ? 0 : Math.max(0, Math.min(100, liquidez * 100))}%`, background: CORPORATE }} /></div></div>
+              <div><p className="text-[9px] opacity-40 tracking-widest">ESTADO FINANCIERO</p><p className="text-[13px] font-bold mt-3">Sin egresos registrados</p><p className="text-[9px] opacity-50 mt-1">Ingresos ${ventas.mes.toFixed(2)} - Egresos $0.00 (sin compras registradas)</p></div>
+              <div><div className="h-1.5 bg-white/10 rounded-full overflow-hidden"><div className="h-full w-0" style={{ background: CORPORATE }} /></div></div>
             </div>
             <div className="bg-[#12141d] rounded-2xl border border-white/[0.05] p-3 shadow-sm h-[188px]">
               <p className="text-[9px] opacity-40 tracking-widest mb-2">CUMPLIMIENTO DOCUMENTAL</p>

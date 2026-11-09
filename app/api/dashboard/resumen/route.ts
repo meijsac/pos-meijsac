@@ -2,10 +2,10 @@ import { NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
 import { usuarioConEmpresaDesdeRequest } from "@/lib/empresa-sesion"
 
-function ventaValida(estado: string) {
+function esAutorizada(estado: string) {
   const e = estado.toUpperCase()
-  if (e.includes("ANUL") || e.includes("BORRADOR")) return false
-  return e === "AUTORIZADO" || e === "EMITIDA" || e.includes("AUTORIZ")
+  if (e.includes("ANUL") || e.includes("BORRADOR") || e.includes("EMITIDA") || e.includes("PENDIENTE")) return false
+  return e === "AUTORIZADO" || e.includes("AUTORIZADO")
 }
 
 function pendiente(estadoPago: string | null) {
@@ -22,14 +22,30 @@ export async function GET(req: Request) {
     orderBy: { createdAt: "asc" },
   })
   const ahora = new Date()
-  const ventas = filas.filter((f) => ventaValida(f.estado)).map((f) => {
-    const total = Number((f.payload as any)?.totales?.total || 0)
-    return { fecha: f.createdAt, total: Number.isFinite(total) ? total : 0, estadoPago: f.estadoPago }
+  const ventas = filas.filter((f) => {
+    const payload = (f.payload || {}) as any
+    const textos = [f.estado, payload.estadoSRI, payload.estado].map((x) => String(x || "").toUpperCase())
+    if (textos.some((t) => t.includes("ANUL") || t.includes("BORRADOR"))) return false
+    return textos.some((t) => esAutorizada(t))
+  }).map((f) => {
+    const payload = (f.payload || {}) as any
+    const total = Number(payload?.totales?.total || 0)
+    const emitida = payload.fechaEmision ? new Date(payload.fechaEmision) : f.createdAt
+    const fecha = Number.isNaN(emitida.getTime()) ? f.createdAt : emitida
+    return { fecha, total: Number.isFinite(total) ? total : 0, estadoPago: f.estadoPago || payload.estado_pago || "" }
   })
+  const porCobrar = filas.filter((f) => {
+    const payload = (f.payload || {}) as any
+    const estado = String(f.estado || payload.estadoSRI || payload.estado || "").toUpperCase()
+    if (estado.includes("ANUL") || estado.includes("BORRADOR")) return false
+    return pendiente(f.estadoPago || payload.estado_pago || "")
+  }).map((f) => Number((f.payload as any)?.totales?.total || 0)).filter((n) => Number.isFinite(n))
   const mismoDia = (a: Date, b: Date) => a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate()
-  const hoy = ventas.filter((v) => mismoDia(v.fecha, ahora)).reduce((s, v) => s + v.total, 0)
-  const mes = ventas.filter((v) => v.fecha.getFullYear() === ahora.getFullYear() && v.fecha.getMonth() === ahora.getMonth()).reduce((s, v) => s + v.total, 0)
-  const cxc = ventas.filter((v) => pendiente(v.estadoPago)).reduce((s, v) => s + v.total, 0)
+  const deHoy = ventas.filter((v) => mismoDia(v.fecha, ahora))
+  const delMes = ventas.filter((v) => v.fecha.getFullYear() === ahora.getFullYear() && v.fecha.getMonth() === ahora.getMonth())
+  const hoy = deHoy.reduce((s, v) => s + v.total, 0)
+  const mes = delMes.reduce((s, v) => s + v.total, 0)
+  const cxc = porCobrar.reduce((s, n) => s + n, 0)
   const enRango = (desde: Date) => ventas.filter((v) => v.fecha >= desde && v.fecha <= ahora)
   const inicioDia = new Date(ahora); inicioDia.setHours(0, 0, 0, 0)
   const inicioSemana = new Date(inicioDia); inicioSemana.setDate(inicioDia.getDate() - 6)
@@ -52,18 +68,18 @@ export async function GET(req: Request) {
       ventas: suma,
       pedidos: lista.length,
       carrito: lista.length ? suma / lista.length : 0,
-      visitas: 0,
-      tasa: 0,
-      beneficio: 0,
     }
   }
   return NextResponse.json({
     ventasHoy: hoy,
+    pedidosHoy: deHoy.length,
     ventasMes: mes,
+    pedidosMes: delMes.length,
     cxc,
     ingresosMes: mes,
-    egresosMes: 0,
-    liquidez: mes > 0 ? (mes - 0) / mes : null,
+    egresosMes: null,
+    liquidez: null,
+    nota: "FacturaEmitida con estado AUTORIZADO. No hay tabla de compras o egresos.",
     series: {
       dia: serie(inicioDia, 12, (d) => d.setHours(d.getHours() + 2)),
       semana: serie(inicioSemana, 7, (d) => d.setDate(d.getDate() + 1)),
