@@ -7,6 +7,7 @@ import { FaltanDatosSri, armarXmlFactura } from "@/lib/sri/xml-factura"
 import { firmarFacturaXml } from "@/lib/sri/firmar"
 import { codigoAmbiente } from "@/lib/sri/ambiente"
 import { enviarComprobante } from "@/lib/sri/soap"
+import { clasificarEstadoSri } from "@/lib/sri/estado-visible"
 import { desencriptarBytes, desencriptar } from "@/lib/seguridad"
 
 export const maxDuration = 60
@@ -84,26 +85,36 @@ export async function POST(req: Request) {
       })
     }
     const resultado = await enviarComprobante({ xmlFirmado: xml, claveAcceso: armado.claveAcceso, ambiente })
-    body.estadoSRI = resultado.estado
+    const fechaSri = resultado.fechaAutorizacion || ""
+    const estadoGuardado = clasificarEstadoSri(resultado.estado, fechaSri) === "AUTORIZADO" ? "AUTORIZADO" : resultado.estado
+    body.estadoSRI = estadoGuardado
     body.mensajeSri = resultado.mensaje
     body.mensajesSri = resultado.mensajes
-    body.numeroAutorizacion = resultado.numeroAutorizacion || ""
-    body.fechaAutorizacion = resultado.fechaAutorizacion || ""
+    body.numeroAutorizacion = fechaSri ? (resultado.numeroAutorizacion || "") : ""
+    body.fechaAutorizacion = fechaSri
+    body.estadoRecepcion = resultado.estadoRecepcion || ""
+    body.mensajeRecepcion = resultado.mensajeRecepcion || ""
+    body.fechaRecepcion = resultado.fechaRecepcion || ""
+    body.estadoAutorizacion = resultado.estadoAutorizacion || ""
+    body.mensajeAutorizacion = resultado.mensajeAutorizacion || ""
     body.enviado = resultado.enviado
     try {
       await prisma.facturaEmitida.update({
         where: { id: factura.id },
-        data: { estado: resultado.estado, payload: body },
+        data: { estado: estadoGuardado, payload: body },
       })
     } catch {}
     return NextResponse.json({
       id: factura.id,
       claveAcceso: armado.claveAcceso,
-      estado: resultado.estado,
+      estado: estadoGuardado,
       mensaje: resultado.mensaje,
       mensajes: resultado.mensajes,
-      numeroAutorizacion: resultado.numeroAutorizacion || "",
-      fechaAutorizacion: resultado.fechaAutorizacion || "",
+      numeroAutorizacion: fechaSri ? (resultado.numeroAutorizacion || "") : "",
+      fechaAutorizacion: fechaSri,
+      estadoRecepcion: resultado.estadoRecepcion || "",
+      mensajeRecepcion: resultado.mensajeRecepcion || "",
+      fechaRecepcion: resultado.fechaRecepcion || "",
       xml,
       firmado,
       enviado: resultado.enviado,
@@ -140,7 +151,15 @@ export async function GET(req: Request) {
         receptorIdentificacion: p.cliente?.identificacion || "",
         receptorNombre: p.cliente?.razon || "",
         valorTotal: Number(p.totales?.total || 0),
-        estadoSRI: f.estado,
+        estadoSRI: clasificarEstadoSri(p.estadoSRI || f.estado, p.fechaAutorizacion),
+        estadoCrudo: p.estadoSRI || f.estado,
+        fechaAutorizacion: p.fechaAutorizacion || "",
+        numeroAutorizacion: p.numeroAutorizacion || "",
+        mensajeSri: p.mensajeSri || p.mensajeAutorizacion || "",
+        estadoRecepcion: p.estadoRecepcion || "",
+        mensajeRecepcion: p.mensajeRecepcion || "",
+        fechaRecepcion: p.fechaRecepcion || "",
+        xmlContent: p.xmlContent || "",
         tipo_cobro: f.tipoCobro || p.tipo_cobro || "",
         estado_pago: f.estadoPago || p.estado_pago || "",
         plazo: f.plazo ?? p.plazo ?? null,

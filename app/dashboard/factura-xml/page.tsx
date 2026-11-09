@@ -402,6 +402,7 @@ const toggleTurismoFeriado = (checked: boolean) => {
   const [tarjetaData, setTarjetaData] = useState({ tipoSRI:"19", forma:"CORRIENTE", plazo:0, franquicia:"Datafast - Visa / Mastercard" })
   const [conteoCaja, setConteoCaja] = useState({ "100":0,"50":0,"20":0,"10":0,"5":0,"1":0,"0.50":0,"0.25":0,"0.10":0,"0.05":0,"0.01":0 } as any)
   const [pagoRealizado, setPagoRealizado] = useState(false)
+  const [comprobanteEmitido, setComprobanteEmitido] = useState<any>(null)
   const [cajaAbierta, setCajaAbierta] = useState(false)
   const [tipoCobro, setTipoCobro] = useState<'efectivo'|'tarjeta'|'transfer'|'pendiente'|'credito'>('efectivo')
   const [refTarjeta, setRefTarjeta] = useState("")
@@ -888,7 +889,11 @@ const total = subtotalSin + iva15 + ivaDiferenciado + valorICE + valorIRBPNR + p
         receptorIdentificacion: facturaPendiente.cliente?.identificacion,
         receptorNombre: facturaPendiente.cliente?.razon,
         valorTotal: facturaPendiente.totales?.total,
-        estadoSRI: "AUTORIZADO",
+        estadoSRI: guardada.fechaAutorizacion ? "AUTORIZADO" : (guardada.estado || "PENDIENTE_DE_AUTORIZAR"),
+        fechaAutorizacion: guardada.fechaAutorizacion || "",
+        numeroAutorizacion: guardada.numeroAutorizacion || "",
+        mensajeSri: guardada.mensaje || "",
+        estadoRecepcion: guardada.estadoRecepcion || "",
         xmlContent: facturaPendiente.xmlContent || "",
         tipo_cobro: facturaPendiente.tipo_cobro,
         estado_pago: facturaPendiente.estado_pago,
@@ -902,12 +907,11 @@ const total = subtotalSin + iva15 + ivaDiferenciado + valorICE + valorIRBPNR + p
         localStorage.setItem(clave, JSON.stringify([...previa, listaDoc]))
       })
       localStorage.setItem("meijsac_ultima_factura_pendiente", JSON.stringify(facturaPendiente))
+      setComprobanteEmitido({ ...listaDoc, xmlContent: facturaPendiente.xmlContent || guardada.xml || "" })
     } catch {
       alert("No se pudo guardar la factura en la base.")
       return
     }
-    // --- CORRECCIÓN 3: NO IMPRIMAS AQUÍ - VA A LA PANTALLA DE DESPACHO ---
-    window.location.href = `/dashboard/factura-xml/estado?id=${facturaPendiente.id}`;
   }
       const buscarEnClientesDB = async () => {
     if (!cliente.identificacion) return alert("Pon RUC/Cédula");
@@ -1349,6 +1353,35 @@ const total = subtotalSin + iva15 + ivaDiferenciado + valorICE + valorIRBPNR + p
     {configEmisor.ambiente === "PRODUCCIÓN" ? "ENVIAR A SRI PRODUCCIÓN" : "ENVIAR A SRI PRUEBAS"}
   </button>
 </div>
+{comprobanteEmitido && (
+  <div className="mt-3 space-y-2">
+    <p className="text-[11px] font-bold">{comprobanteEmitido.fechaAutorizacion ? "El SRI autorizó esta factura." : "El SRI todavía no autorizó esta factura. Puedes imprimirla, pero no queda como AUTORIZADO."}</p>
+    <p className="text-[10px] break-all">Clave: {comprobanteEmitido.claveAcceso || "sin clave"}</p>
+    <p className="text-[10px]">Fecha de autorización: {comprobanteEmitido.fechaAutorizacion || "—"} · {comprobanteEmitido.mensajeSri || "Sin mensaje del SRI"}</p>
+    <div className="grid grid-cols-2 gap-2">
+      <button type="button" onClick={() => {
+        const d = comprobanteEmitido
+        const w = window.open("", "", "width=800,height=900")
+        if (!w) return
+        w.document.write(`<html><body style="font-family:Arial;padding:24px"><h1>Factura ${d.secuencial || ""}</h1><p>${d.receptorNombre || ""}</p><p>Total: $${Number(d.valorTotal || 0).toFixed(2)}</p><p>Clave: ${d.claveAcceso || ""}</p><p>Estado: ${d.estadoSRI || ""}</p><p>Autorización: ${d.numeroAutorizacion || "—"}</p><p>Fecha SRI: ${d.fechaAutorizacion || "—"}</p><p>${d.mensajeSri || ""}</p><script>window.print()</script></body></html>`)
+      }} className="bg-white text-black font-black py-3 rounded-xl text-xs">IMPRIMIR PDF</button>
+      <button type="button" onClick={() => {
+        const d = comprobanteEmitido
+        const w = window.open("", "", "width=320,height=640")
+        if (!w) return
+        w.document.write(`<html><body style="width:80mm;font-family:monospace;font-size:11px"><b>FACTURA</b><br/>${d.secuencial || ""}<br/>${d.receptorNombre || ""}<br/>TOTAL $${Number(d.valorTotal || 0).toFixed(2)}<br/>${d.claveAcceso || ""}<br/><script>window.print()</script></body></html>`)
+      }} className="bg-[#00f5d4] text-black font-black py-3 rounded-xl text-xs">IMPRIMIR TICKET</button>
+      <button type="button" onClick={() => {
+        const blob = new Blob([comprobanteEmitido.xmlContent || ""], { type: "text/xml" })
+        const a = document.createElement("a")
+        a.href = URL.createObjectURL(blob)
+        a.download = `${comprobanteEmitido.secuencial || "factura"}.xml`
+        a.click()
+      }} className="bg-[#3a86ff] text-white font-black py-3 rounded-xl text-xs">DESCARGAR XML</button>
+      <button type="button" onClick={() => { setComprobanteEmitido(null); setItems([]); setPagoRealizado(false) }} className="bg-white/10 font-black py-3 rounded-xl text-xs">VOLVER A FACTURAR</button>
+    </div>
+  </div>
+)}
 
           {cajaAbierta && (
   <div className="fixed inset-0 bg-black/90 z-[150] flex items-center justify-center p-4">

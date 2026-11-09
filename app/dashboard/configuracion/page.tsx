@@ -471,6 +471,9 @@ base.sucursales = datosReales.sucursales || base.sucursales || [];
     </div>
     <button onClick={() => location.href = '/dashboard'} className="bg-white/10 px-4 py-2 rounded-xl text-xs">← Dashboard</button>
 </div>
+<div className={`mb-4 rounded-2xl border px-6 py-5 text-center text-[28px] font-black tracking-widest ${(cfg?.ambiente === "PRODUCCIÓN" || cfg?.ambiente === "2" || cfg?.firma?.ambiente === "2") ? "border-[#00ff5d] text-[#00ff5d]" : "border-[#00f5d4] text-[#00f5d4]"}`}>
+  AMBIENTE: {(cfg?.ambiente === "PRODUCCIÓN" || cfg?.ambiente === "2" || cfg?.firma?.ambiente === "2") ? "PRODUCCIÓN" : "PRUEBAS"}
+</div>
 
 
             <div className="flex gap-2 mb-4 overflow-x-auto pb-2">

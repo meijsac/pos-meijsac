@@ -2,6 +2,7 @@
 import { useState, useEffect, useMemo } from "react"
 import { useRouter } from "next/navigation"
 import { etiquetaCobro, marcarPagadoLocal, pasaFiltroCobro } from "@/lib/cobro-etiqueta"
+import { clasificarEstadoSri, estadoEnModal } from "@/lib/sri/estado-visible"
 
 // === AUMENTADO: COMPONENTE CHISMOSO - NO BORRA NADA ===
 function Chismoso({ children, texto, pos="top" }:{children:any, texto:string, pos?:string}){
@@ -28,7 +29,11 @@ interface ComprobanteHistorialSRI {
   receptorIdentificacion: string;
   receptorNombre: string;
   valorTotal: number;
-  estadoSRI: 'AUTORIZADO' | 'PENDIENTE' | 'ANULADO';
+  estadoSRI: 'AUTORIZADO' | 'PENDIENTE' | 'RECHAZADO' | 'ANULADO';
+  fechaAutorizacion?: string;
+  numeroAutorizacion?: string;
+  mensajeSri?: string;
+  estadoRecepcion?: string;
   motivoAnulacion?: string;
   fechaAnulacion?: string;
   xmlContent?: string;
@@ -45,6 +50,8 @@ export default function EmitidosPage(){
   const [filtroCobro,setFiltroCobro]=useState("todos")
   const [pagoDoc,setPagoDoc]=useState<ComprobanteHistorialSRI|null>(null)
   const [showAnular,setShowAnular]=useState<ComprobanteHistorialSRI|null>(null)
+  const [verSri,setVerSri]=useState<ComprobanteHistorialSRI|null>(null)
+  const [consultando,setConsultando]=useState("")
 
   // 1. INYECCION UNIFICADA - Aquí está la solución al POS
   const cargar = async ()=>{
@@ -68,58 +75,99 @@ export default function EmitidosPage(){
         id: r.id, tipoComprobante:'07', secuencial:r.numRetencion||r.secuencial,
         claveAcceso: r.claveAccesoSustento||r.clave, fechaEmision: r.fechaGeneracion||r.fecha,
         receptorIdentificacion: r.proveedorRuc||r.ruc, receptorNombre: r.proveedorNombre||r.razon,
-        valorTotal: (Number(r.valorRetRenta)||0)+(Number(r.valorRetIva)||0), estadoSRI: r.estado||'AUTORIZADO',
+        valorTotal: (Number(r.valorRetRenta)||0)+(Number(r.valorRetIva)||0), estadoSRI: r.estado || "PENDIENTE",
+        fechaAutorizacion: r.fechaAutorizacion || "", numeroAutorizacion: r.numeroAutorizacion || "", mensajeSri: r.mensajeSri || "",
         xmlContent: r.xml
       }))
     ]
 
-    const unificados: ComprobanteHistorialSRI[] = fuentes.map((d:any,i:number)=>({
-      id: d.id || `doc-${i}-${d.secuencial}`,
-      tipoComprobante: d.tipoComprobante || (d.tipo?.includes('07')?'07':d.tipo?.includes('04')?'04':d.tipo?.includes('05')?'05':d.tipo?.includes('06')?'06':'01'),
-      secuencial: d.secuencial || d.numRetencion || `001-001-00000${i}`,
-      claveAcceso: d.claveAcceso || d.clave || d.claveAccesoSustento || `000000000000000000000000${i}`,
-      fechaEmision: d.fechaEmision || d.fecha || d.fechaGeneracion || new Date().toLocaleDateString(),
-      receptorIdentificacion: d.receptorIdentificacion || d.ruc || d.rucProveedor || d.receptorRuc || "9999999999999",
-      receptorNombre: d.receptorNombre || d.razon || d.proveedor || d.proveedorNombre || "CONSUMIDOR FINAL",
-      valorTotal: Number(d.valorTotal ?? d.total ?? d.valorRetenido ?? 0),
-      estadoSRI: String(d.estadoSRI || d.estado || "AUTORIZADO").toUpperCase().includes("ANUL") ? "ANULADO" : "AUTORIZADO",
-      xmlContent: d.xmlContent || d.xml || "",
-      motivoAnulacion: d.motivoAnulacion,
-      fechaAnulacion: d.fechaAnulacion,
-      tipo_cobro: d.tipo_cobro || d.tipoCobro || "",
-      estado_pago: d.estado_pago || d.estadoPago || "",
-      fecha_vencimiento: d.fecha_vencimiento || d.fechaVencimiento || "",
-      facturaId: d.facturaId || ""
-    }))
+    const ficha = (d: any, i: number): ComprobanteHistorialSRI => {
+      const fechaAutorizacion = String(d.fechaAutorizacion || "")
+      const crudo = String(d.estadoSRI || d.estado || "")
+      const anulado = crudo.toUpperCase().includes("ANUL")
+      return {
+        id: d.id || d.facturaId || `doc-${i}-${d.secuencial || i}`,
+        tipoComprobante: d.tipoComprobante || (String(d.tipo || "").includes("07") ? "07" : String(d.tipo || "").includes("04") ? "04" : String(d.tipo || "").includes("05") ? "05" : String(d.tipo || "").includes("06") ? "06" : "01"),
+        secuencial: d.secuencial || d.numRetencion || "",
+        claveAcceso: String(d.claveAcceso || d.clave || d.claveAccesoSustento || "").replace(/\s/g, ""),
+        fechaEmision: d.fechaEmision || d.fecha || d.fechaGeneracion || "",
+        receptorIdentificacion: d.receptorIdentificacion || d.ruc || d.rucProveedor || d.receptorRuc || "",
+        receptorNombre: d.receptorNombre || d.razon || d.proveedor || d.proveedorNombre || "",
+        valorTotal: Number(d.valorTotal ?? d.total ?? d.valorRetenido ?? 0),
+        estadoSRI: anulado ? "ANULADO" : clasificarEstadoSri(crudo, fechaAutorizacion),
+        xmlContent: d.xmlContent || d.xml || "",
+        motivoAnulacion: d.motivoAnulacion,
+        fechaAnulacion: d.fechaAnulacion,
+        tipo_cobro: d.tipo_cobro || d.tipoCobro || "",
+        estado_pago: d.estado_pago || d.estadoPago || "",
+        fecha_vencimiento: d.fecha_vencimiento || d.fechaVencimiento || "",
+        facturaId: d.facturaId || d.id || "",
+        fechaAutorizacion,
+        numeroAutorizacion: fechaAutorizacion ? String(d.numeroAutorizacion || "") : "",
+        mensajeSri: String(d.mensajeSri || d.mensajeAutorizacion || d.mensaje || ""),
+        estadoRecepcion: String(d.estadoRecepcion || ""),
+      }
+    }
+    const unificados: ComprobanteHistorialSRI[] = fuentes.map(ficha)
     try {
       const res = await fetch("/api/facturas", { credentials: "same-origin", headers: { Authorization: `Bearer ${localStorage.getItem("meijsac_token") || ""}` } })
       if (res.ok) {
         const remotas = await res.json()
-        if (Array.isArray(remotas)) {
-          unificados.push(...remotas.map((d: any) => ({
-            ...d,
-            estadoSRI: String(d.estadoSRI || d.estado || "AUTORIZADO").toUpperCase().includes("ANUL") ? "ANULADO" : "AUTORIZADO",
-          })))
-        }
+        if (Array.isArray(remotas)) unificados.push(...remotas.map(ficha))
       }
     } catch {}
 
     const map = new Map()
     unificados.forEach(d=>{
-      const prev = map.get(d.secuencial)
-      if (!prev) map.set(d.secuencial, d)
-      else map.set(d.secuencial, { ...prev, ...d, tipo_cobro: d.tipo_cobro || prev.tipo_cobro, estado_pago: d.estado_pago || prev.estado_pago, facturaId: d.facturaId || prev.facturaId, fecha_vencimiento: d.fecha_vencimiento || prev.fecha_vencimiento })
+      const llave = d.claveAcceso || d.secuencial || d.id
+      const prev = map.get(llave)
+      if (!prev) map.set(llave, d)
+      else {
+        const fecha = d.fechaAutorizacion || prev.fechaAutorizacion || ""
+        const anulado = d.estadoSRI === "ANULADO" || prev.estadoSRI === "ANULADO"
+        map.set(llave, {
+          ...prev, ...d,
+          fechaAutorizacion: fecha,
+          numeroAutorizacion: d.numeroAutorizacion || prev.numeroAutorizacion,
+          mensajeSri: d.mensajeSri || prev.mensajeSri,
+          estadoSRI: anulado ? "ANULADO" : clasificarEstadoSri(fecha ? "AUTORIZADO" : (d.estadoSRI === "RECHAZADO" ? "DEVUELTA" : d.estadoSRI), fecha),
+          tipo_cobro: d.tipo_cobro || prev.tipo_cobro,
+          estado_pago: d.estado_pago || prev.estado_pago,
+          facturaId: d.facturaId || prev.facturaId,
+          fecha_vencimiento: d.fecha_vencimiento || prev.fecha_vencimiento,
+        })
+      }
     })
-    const lista = Array.from(map.values()).reverse()
-    const previa = get("meijsac_comprobantes_sri")
-    const porClave = new Map(previa.map((d: any) => [d.claveAcceso || d.secuencial, d]))
-    lista.forEach((d) => {
-      if (d.estadoSRI === "ANULADO") return
-      const clave = d.claveAcceso || d.secuencial
-      if (!porClave.has(clave)) porClave.set(clave, { ...d, estadoSRI: "AUTORIZADO" })
-    })
-    localStorage.setItem("meijsac_comprobantes_sri", JSON.stringify(Array.from(porClave.values())))
-    setDocs(lista)
+    setDocs(Array.from(map.values()).reverse())
+  }
+
+  const consultarDeNuevo = async (doc: ComprobanteHistorialSRI) => {
+    setConsultando(doc.id)
+    try {
+      const res = await fetch("/api/sri/consultar", {
+        method: "POST",
+        credentials: "same-origin",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: doc.facturaId || doc.id, claveAcceso: doc.claveAcceso }),
+      })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok) {
+        setVerSri({ ...doc, mensajeSri: data.error || data.mensaje || "No se pudo consultar al SRI." })
+        return
+      }
+      setVerSri({
+        ...doc,
+        estadoSRI: data.visible || doc.estadoSRI,
+        fechaAutorizacion: data.fechaAutorizacion || "",
+        numeroAutorizacion: data.numeroAutorizacion || "",
+        mensajeSri: data.mensaje || "",
+      })
+      await cargar()
+    } catch {
+      setVerSri({ ...doc, mensajeSri: "No se pudo consultar al SRI. Inténtalo de nuevo." })
+    } finally {
+      setConsultando("")
+    }
   }
 
   useEffect(()=>{
@@ -183,7 +231,7 @@ export default function EmitidosPage(){
     cargar()
   }
 
-  const filtrados = useMemo(()=>docs.filter(d=> (d.secuencial.includes(filtro) || d.receptorNombre.toLowerCase().includes(filtro.toLowerCase())) && pasaFiltroCobro(d, filtroCobro)),[docs,filtro,filtroCobro])
+  const filtrados = useMemo(()=>docs.filter(d=> ((d.secuencial || "").includes(filtro) || (d.receptorNombre || "").toLowerCase().includes(filtro.toLowerCase())) && pasaFiltroCobro(d, filtroCobro)),[docs,filtro,filtroCobro])
   const registrarPago = async (doc: ComprobanteHistorialSRI) => {
     marcarPagadoLocal(doc)
     if (doc.facturaId) await fetch("/api/facturas", { method: "PATCH", headers: { "Content-Type": "application/json", Authorization: `Bearer ${localStorage.getItem("meijsac_token") || ""}` }, body: JSON.stringify({ id: doc.facturaId }) })
@@ -216,12 +264,13 @@ export default function EmitidosPage(){
           <div className="col-span-1 text-right"><Chismoso texto="Botones de despacho: descarga física para cliente y contador" pos="bottom">ACCIONES ⓘ</Chismoso></div>
         </div>
         {filtrados.map((d,i)=>(
-          <div key={i} className={`grid grid-cols-12 p-3 border-t border-white/5 text-[11px] items-center hover:bg-white/[0.03] ${d.estadoSRI==='ANULADO'?'opacity-40 grayscale':''}`}>
+          <div key={d.claveAcceso || d.id || i} className={`border-t border-white/5 ${d.estadoSRI==='ANULADO'?'opacity-40 grayscale':''}`}>
+          <div className="grid grid-cols-12 p-3 text-[11px] items-center hover:bg-white/[0.03]">
             <div className="col-span-1"><Chismoso texto={d.tipoComprobante==='07'?'Esta retención 07 ya está indexada y le retuviste a tu proveedor':'Factura 01 emitida desde POS chifa o facturador'}><span className={`px-2 py-1 rounded-full text-[9px] font-black ${d.tipoComprobante==='07'?'bg-orange-500/20 text-orange-400 border border-orange-500/30': d.estadoSRI==='ANULADO'?'bg-red-500/20 text-red-400' : 'bg-[#ffbe0a]/20 text-[#ffbe0a]'}`}>{d.tipoComprobante} - {d.tipoComprobante==='07'?'RETENCIÓN':d.tipoComprobante==='01'?'FACTURA':'DOC'}</span></Chismoso></div>
             <div className="col-span-2"><Chismoso texto={`Clave Acceso 49 dígitos: ${d.claveAcceso.slice(0,22)}... Esta clave es tu autorización SRI`}><span className="font-mono font-bold text-[#ffbe0a]">{d.secuencial}</span></Chismoso></div>
             <div className="col-span-2 truncate"><Chismoso texto={`RUC: ${d.receptorIdentificacion} | Fecha: ${d.fechaEmision} | Clave completa en PDF`}><span>{d.receptorNombre} <span className="opacity-30">{d.receptorIdentificacion.slice(0,10)}</span></span></Chismoso></div>
             <div className="col-span-1"><Chismoso texto={d.estadoSRI==='ANULADO'?'Ya no suma en reportes ni ATS. Queda en $0.00':'Valor exacto que declaras al SRI y a tu contador'}><span className="font-black">${d.estadoSRI==='ANULADO'?'0.00':d.valorTotal.toFixed(2)}</span></Chismoso></div>
-            <div className="col-span-1"><Chismoso texto={d.estadoSRI==='AUTORIZADO'?'✓ Autorizado por SRI con numeroAutorizacion':'🚫 Ya anulado en SRI en Línea - conservado por secuencia'}><span className={`px-2 py-1 rounded-full text-[9px] font-black ${d.estadoSRI==='ANULADO'?'bg-zinc-700 text-zinc-400':'bg-emerald-500/20 text-emerald-400'}`}>{d.estadoSRI==='ANULADO'?'🚫 ANULADO':'✓ AUTORIZADO'}</span></Chismoso></div>
+            <div className="col-span-1"><span className={`px-2 py-1 rounded-full text-[9px] font-black ${d.estadoSRI==='AUTORIZADO'?'bg-emerald-500/20 text-emerald-400': d.estadoSRI==='RECHAZADO'?'bg-red-500/20 text-red-300': d.estadoSRI==='ANULADO'?'bg-zinc-700 text-zinc-400':'bg-yellow-500/20 text-yellow-300'}`}>{d.estadoSRI==='AUTORIZADO'?'✓ AUTORIZADO': d.estadoSRI==='RECHAZADO'?'RECHAZADO / DEVUELTO': d.estadoSRI==='ANULADO'?'ANULADO':'PENDIENTE'}</span></div>
             <div className="col-span-2"><span className="text-[10px]">{d.tipo_cobro || "EFECTIVO"}</span></div>
             <div className="col-span-2">{(() => { const e = etiquetaCobro(d); if (!e.texto) return null; return <button onClick={() => { if (e.clave !== "pagado") setPagoDoc(d) }} className={`px-2 py-1 rounded-full text-[9px] font-black ${e.clase}`}>{e.texto}</button> })()}</div>
             <div className="col-span-1 flex justify-end gap-1 flex-wrap">
@@ -232,9 +281,34 @@ export default function EmitidosPage(){
               <Chismoso texto="¡CUIDADO! No borra, anula en SRI con tu link oficial"><button onClick={()=>setShowAnular(d)} className="bg-red-500/20 text-red-400 border border-red-500/30 px-2 py-1 rounded-lg text-[10px] font-black hover:bg-red-500 hover:text-white">🚫</button></Chismoso>
             </div>
           </div>
+          <div className="px-3 pb-3 text-[10px] leading-relaxed space-y-1">
+            <p className="font-mono break-all">Clave de acceso: {d.claveAcceso.length === 49 ? d.claveAcceso : "Sin clave de 49 dígitos"}</p>
+            <p>Fecha y hora de autorización del SRI: {d.fechaAutorizacion || "—"}</p>
+            <p>Número de autorización del SRI: {d.numeroAutorizacion || "—"}</p>
+            <div className="flex gap-2 pt-1">
+              <button onClick={() => setVerSri(d)} className="bg-white text-black px-3 py-1 rounded-full text-[10px] font-black">VERIFICAR CON SRI</button>
+              {d.estadoSRI === "PENDIENTE" && <button disabled={consultando === d.id} onClick={() => consultarDeNuevo(d)} className="bg-yellow-400 text-black px-3 py-1 rounded-full text-[10px] font-black disabled:opacity-50">{consultando === d.id ? "Consultando..." : "Consultar de nuevo al SRI"}</button>}
+            </div>
+          </div>
+          </div>
         ))}
       </div>
 
+      {verSri && (
+        <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-4">
+          <div className="bg-[#11131a] border border-white/10 rounded-2xl p-5 max-w-lg w-full text-sm">
+            <h2 className="font-black mb-3">Verificar con el SRI</h2>
+            <p className="text-[10px] opacity-60 mb-1">Clave de Acceso (49 dígitos)</p>
+            <p className="font-mono text-[12px] break-all mb-2">{verSri.claveAcceso.length === 49 ? verSri.claveAcceso : "Esta fila no tiene una clave de 49 dígitos."}</p>
+            <button onClick={() => { if (verSri.claveAcceso.length === 49) navigator.clipboard.writeText(verSri.claveAcceso) }} className="bg-white/10 px-3 py-1 rounded-full text-[10px] font-bold mb-3">Copiar</button>
+            <p>Estado SRI: <b>{estadoEnModal(verSri.estadoSRI === "RECHAZADO" ? "DEVUELTA" : verSri.estadoSRI, verSri.fechaAutorizacion, verSri.estadoRecepcion)}</b></p>
+            <p className="mt-2">Fecha de Autorización SRI: <b>{verSri.fechaAutorizacion || "El SRI no devolvió fecha"}</b></p>
+            <p className="mt-2">Mensaje del SRI: <b>{verSri.mensajeSri || "El SRI no devolvió un mensaje para este comprobante."}</b></p>
+            <a href="https://srienlinea.sri.gob.ec/comprobantes-electronicos-internet/publico/validezComprobantes.jsf" target="_blank" rel="noreferrer" className="block mt-4 text-[#00f5d4] font-bold text-[12px]">Verificar en SRI en Línea</a>
+            <button onClick={() => setVerSri(null)} className="mt-4 w-full bg-white text-black py-2 rounded-xl text-xs font-black">Cerrar</button>
+          </div>
+        </div>
+      )}
       {pagoDoc && (
         <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-4">
           <div className="bg-[#11131a] border border-white/10 rounded-2xl p-5 max-w-sm w-full">
@@ -279,7 +353,7 @@ export default function EmitidosPage(){
       )}
 
       <div className="mt-6 text-[10px] opacity-30 leading-relaxed max-w-3xl">
-        En esta sección solo ves los comprobantes que ya fueron autorizados por el SRI.
+        AUTORIZADO solo aparece si el SRI devolvió la fecha de autorización. Si no, queda PENDIENTE o RECHAZADO.
       </div>
     </div>
   )
