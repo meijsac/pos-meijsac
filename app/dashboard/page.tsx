@@ -365,7 +365,7 @@ export default function DashboardMeijsac(){
             )
           })}
         </div>
-        <p className="text-center text-[8px] opacity-20 tracking-[0.2em] mt-6">MEIJSAC • ESCRITORIO • IA + CUMPLIMIENTO + FINANZAS</p>
+        <p className="text-center text-[8px] opacity-30 mt-6">Potenciado con IA - MEIJSAC</p>
       </div>
     </div>
   )

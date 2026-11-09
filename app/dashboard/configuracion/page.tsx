@@ -353,7 +353,7 @@ base.sucursales = datosReales.sucursales || base.sucursales || [];
 
 
             <div className="flex gap-2 mb-4 overflow-x-auto pb-2">
-                {["IDENTIDAD", "FIRMA", "SECUENCIALES", "IMPUESTOS", "MARCA RIDE", "DOCUMENTOS", "PERMISOS", "AMBIENTE SRI"].map(t => (
+                {["IDENTIDAD", "FIRMA", "SECUENCIALES", "IMPUESTOS", "MARCA RIDE", "DOCUMENTOS", "PERMISOS", "TÉRMINOS", "AMBIENTE SRI"].map(t => (
                     <button key={t} onClick={() => setTab(t)} className={`px-4 py-2 rounded-xl text-[10px] font-black whitespace-nowrap ${tab === t ? 'bg-[#00f5d4] text-black' : 'bg-[#11131a] border border-white/10'}`}>{t}</button>
                 ))}
             </div>
@@ -639,6 +639,13 @@ base.sucursales = datosReales.sucursales || base.sucursales || [];
                       <div><label className="text-[9px] text-white/40">Color Primario RIDE</label><input type="color" value={cfg?.colorPrimario || "#00f5d4"} onChange={(e:any)=> setCfg((p:any)=>({...p, colorPrimario: e.target.value}))} className="w-full h-9 bg-black rounded" /></div>
                       <div><label className="text-[9px] text-white/40">Slogan / Leyenda</label><input placeholder="Tu confianza, nuestra calidad" value={cfg?.slogan || ""} onChange={(e:any)=> setCfg((p:any)=>({...p, slogan: e.target.value}))} className="w-full bg-[#1e293b] rounded p-2 text-[12px] text-white" /></div>
                     </div>
+                  </div>
+                )}
+
+                {tab === "TÉRMINOS" && (
+                  <div className="space-y-3">
+                    <p className="text-[#00f5d4] font-bold text-[11px]">TÉRMINOS Y CONDICIONES</p>
+                    <p className="text-[12px] leading-relaxed text-white/80">MEIJSAC usa asistencia de Inteligencia Artificial para agilizar procesos. El usuario es responsable de revisar sus facturas antes de enviarlas al SRI.</p>
                   </div>
                 )}
 
