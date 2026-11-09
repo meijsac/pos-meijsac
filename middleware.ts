@@ -3,12 +3,13 @@ import type { NextRequest } from "next/server"
 
 const visitas = new Map<string, number[]>()
 
-function proteger(res: NextResponse) {
-  res.headers.set("X-Frame-Options", "DENY")
+function proteger(res: NextResponse, permitirMarco = false) {
+  res.headers.set("X-Frame-Options", permitirMarco ? "SAMEORIGIN" : "DENY")
   res.headers.set("X-Content-Type-Options", "nosniff")
   res.headers.set("Referrer-Policy", "strict-origin-when-cross-origin")
   res.headers.set("Strict-Transport-Security", "max-age=31536000; includeSubDomains")
-  res.headers.set("Content-Security-Policy", "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' blob: https://challenges.cloudflare.com; frame-src https://challenges.cloudflare.com; child-src https://challenges.cloudflare.com; worker-src blob: https://challenges.cloudflare.com; connect-src 'self' https://challenges.cloudflare.com; img-src 'self' data: blob: https://challenges.cloudflare.com; style-src 'self' 'unsafe-inline' https://challenges.cloudflare.com")
+  const ancestros = permitirMarco ? "frame-ancestors 'self'; " : "frame-ancestors 'none'; "
+  res.headers.set("Content-Security-Policy", `default-src 'self'; ${ancestros}script-src 'self' 'unsafe-inline' 'unsafe-eval' blob: https://challenges.cloudflare.com; frame-src 'self' https://challenges.cloudflare.com; child-src 'self' https://challenges.cloudflare.com; worker-src blob: https://challenges.cloudflare.com; connect-src 'self' https://challenges.cloudflare.com; img-src 'self' data: blob: https://challenges.cloudflare.com; style-src 'self' 'unsafe-inline' https://challenges.cloudflare.com`)
   return res
 }
 
@@ -27,7 +28,8 @@ export function middleware(req: NextRequest) {
     visitas.set(ip, previas)
     if (previas.length > 100) return proteger(NextResponse.json({ error: "Demasiadas solicitudes" }, { status: 429 }))
   }
-  return proteger(NextResponse.next())
+  const comprobante = req.nextUrl.pathname.startsWith("/dashboard/factura-xml/pdf")
+  return proteger(NextResponse.next(), comprobante)
 }
 
 export const config = { matcher: ["/((?!_next/static|_next/image|favicon.ico).*)"] }
