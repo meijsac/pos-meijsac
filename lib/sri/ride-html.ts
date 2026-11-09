@@ -174,12 +174,15 @@ export function htmlRide(data: {
     </table>
   </div>
   <div class="grid">
-    <div style="border:1px solid #e2e8f0;border-radius:8px;padding:16px">
-      <h3 style="margin:0 0 8px;font-size:11px;text-transform:uppercase">Información Adicional</h3>
-      <p style="margin:0"><b>Forma de Pago:</b> ${esc(data.formaPago)}</p>
-      ${Number(data.vuelto) > 0 ? `<p style="margin:4px 0 0"><b>Vuelto:</b> ${dinero(data.vuelto)}</p>` : ""}
-      <p style="margin:8px 0 0"><b>Proveedor del sistema:</b> MEIJSAC S.A.S. RUC 1793243789001</p>
-      ${data.mensajeSri ? `<p style="margin:8px 0 0"><b>Mensaje del SRI:</b> ${esc(data.mensajeSri)}</p>` : ""}
+    <div style="border:1px solid #e2e8f0;border-radius:8px;padding:16px;display:flex;flex-direction:column;height:100%">
+      <div>
+        <h3 style="margin:0 0 8px;font-size:11px;text-transform:uppercase">Información Adicional</h3>
+        <p style="margin:0"><b>Forma de Pago:</b> ${esc(data.formaPago)}</p>
+        ${Number(data.recibido) > 0 ? `<p style="margin:4px 0 0"><b>Valor recibido:</b> ${dinero(data.recibido)}</p>` : ""}
+        ${Number(data.vuelto) > 0 ? `<p style="margin:4px 0 0"><b>Vuelto entregado:</b> ${dinero(data.vuelto)}</p>` : ""}
+        ${data.mensajeSri ? `<p style="margin:8px 0 0"><b>Mensaje del SRI:</b> ${esc(data.mensajeSri)}</p>` : ""}
+      </div>
+      <p style="margin:16px 0 0;margin-top:auto"><b>Proveedor del sistema:</b> MEIJSAC S.A.S. RUC 1793243789001</p>
     </div>
     <div style="border:1px solid #e2e8f0;border-radius:8px;overflow:hidden;font-family:monospace">
       <div class="tot"><span style="font-family:Arial">SUBTOTAL 15%</span><span>${dinero(data.base15)}</span></div>
@@ -277,6 +280,7 @@ export function htmlTicket(data: Parameters<typeof htmlRide>[0]) {
   ${barrasCode128(clave)}
   <p style="font-size:8px;word-break:break-all;margin:4px 0">${esc(clave)}</p>
   <p style="text-align:center;margin:8px 0 0;font-style:italic">¡Gracias por su pago${data.nombreComercial ? ` en ${esc(data.nombreComercial)}` : ""}!</p>
+  <p style="text-align:center;margin:4px 0 0;font-size:9px">Proveedor del sistema: MEIJSAC S.A.S. RUC 1793243789001</p>
 </body>
 </html>`
 }
