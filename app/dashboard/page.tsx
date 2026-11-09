@@ -6,13 +6,6 @@ import { cargarEmpresaSesion } from "@/lib/sesion-cliente"
 
 const CORPORATE = "#23AAB3"
 
-const docsMock = [
-  { id: "ruc", label: "RUC Actualizado", vence: "2027-01-15", ok: true },
-  { id: "firma", label: "Firma Electrónica", vence: "2026-11-10", ok: true },
-  { id: "bomberos", label: "Permiso Bomberos", vence: "2026-09-05", ok: false },
-  { id: "patente", label: "Patente Municipal", vence: "2026-12-31", ok: true },
-]
-
 const modules = [
   { title: "CONFIGURACIÓN", desc: "Datos de tu empresa, RUC, firma y SRI", href: "/dashboard/configuracion", icon: "⚙️", size: "col-span-1", primary: false },
   { title: "COMPROBANTES ELECTRÓNICOS", desc: "Facturas, NC, ND, Guías y SRI", href: "/dashboard/comprobantes", icon: "📄", size: "col-span-1", primary: true },
@@ -37,16 +30,15 @@ function getColor(dias: number){
   return { bg: "bg-emerald-500/10 border-emerald-500/20 text-emerald-300", dot: "bg-emerald-400", label: "ACTIVO" }
 }
 
-function BarrasColoresCompact(){
+type Serie = { dia: number[]; semana: number[]; mes: number[]; año: number[] }
+type Metrica = { ventas: number; pedidos: number; carrito: number; visitas: number; tasa: number; beneficio: number }
+
+function BarrasColoresCompact({ series }: { series: Serie }){
   const [filtro, setFiltro] = useState<'dia'|'semana'|'mes'|'año'>('dia')
-  const data = {
-    dia: { values: [9,14,10,7,4,3,1,6,8,3,5,2] },
-    semana: { values: [6,9,4,11,8,14,10] },
-    mes: { values: [40,65,55,85] },
-    año: { values: [30,45,35,60,50,75,65,80,70,85,90,95] },
-  }[filtro]
+  const values = series[filtro] || []
+  const max = Math.max(...values, 0)
+  const vacio = max <= 0
   const colors = ['#ff7a7a','#c5b3ff','#ff8a8a','#ff9f6e','#ffd76e','#ffe08a','#a0e8a0','#23AAB3','#e879f9','#60a5fa']
-  const max = Math.max(...data.values)
   return (
     <div className="rounded-2xl border border-white/[0.05] bg-[#12141d] p-3 h-[72px] overflow-hidden">
       <div className="flex justify-between items-center mb-2">
@@ -57,45 +49,53 @@ function BarrasColoresCompact(){
           ))}
         </div>
       </div>
-      <div className="flex items-end gap-[3px] h-[30px]">
-        {data.values.map((v,i)=>{
-          const h = (v/max)*100
-          return <div key={i} className="flex-1 rounded-t-[4px] transition-all duration-500" style={{ height: `${h}%`, background: colors[i%colors.length] }} />
-        })}
-      </div>
+      {vacio ? <p className="text-[10px] opacity-50">Sin movimientos aún</p> : (
+        <div className="flex items-end gap-[3px] h-[30px]">
+          {values.map((v,i)=>{
+            const h = (v/max)*100
+            return <div key={i} className="flex-1 rounded-t-[4px] transition-all duration-500" style={{ height: `${Math.max(h, v > 0 ? 8 : 0)}%`, background: colors[i%colors.length] }} />
+          })}
+        </div>
+      )}
     </div>
   )
 }
 
-function VentasAreaCompact(){
+function VentasAreaCompact({ series, metricas }: { series: Serie; metricas: Record<string, Metrica> }){
+  const [filtro, setFiltro] = useState<'dia'|'semana'|'mes'|'año'>('mes')
   const [tab, setTab] = useState(0)
+  const m = metricas[filtro] || { ventas: 0, pedidos: 0, carrito: 0, visitas: 0, tasa: 0, beneficio: 0 }
   const tabs = [
-    { label: 'Ventas', value: '$ 32.329,38' },
-    { label: 'Pedidos', value: '247' },
-    { label: 'Valor carrito', value: '$ 130,89' },
-    { label: 'Visitas', value: '1.691k' },
-    { label: 'Tasa', value: '0.01%' },
-    { label: 'Beneficio', value: '$ 18.3k' },
+    { label: 'Ventas', value: `$${m.ventas.toFixed(2)}` },
+    { label: 'Pedidos', value: String(m.pedidos) },
+    { label: 'Valor carrito', value: `$${m.carrito.toFixed(2)}` },
+    { label: 'Visitas', value: String(m.visitas) },
+    { label: 'Tasa', value: `${m.tasa.toFixed(2)}%` },
+    { label: 'Beneficio', value: `$${m.beneficio.toFixed(2)}` },
   ]
-  const points = [5,12,8,2,3,1,4,9,2,8,2,5,2,13,2,1,2,11,2,3,24,1,2,1,2,1,5,2,3,2,18,2,15,2,4,2,2,2,5,1,3,2,9,6,6,2,12]
+  const points = series[filtro] || []
+  const max = Math.max(...points, 0)
   return (
     <div className="rounded-2xl border border-white/[0.05] bg-[#12141d] overflow-hidden h-[108px] flex flex-col">
+      <div className="flex justify-end gap-1 px-2 pt-1">
+        {(['dia','semana','mes','año'] as const).map(f => (
+          <button key={f} onClick={()=>setFiltro(f)} className={`text-[7px] px-2 py-0.5 rounded-full font-bold uppercase ${filtro===f ? 'bg-white text-black' : 'text-white/40'}`}>{f}</button>
+        ))}
+      </div>
       <div className="grid grid-cols-6 border-b border-white/[0.06]">
         {tabs.map((t,i)=>(
-          <button key={t.label} onClick={()=>setTab(i)} className={`p-2 text-left border-r border-white/[0.04] last:border-0 ${tab===i ? 'bg-[#0f6cb6] text-white' : 'text-white/30 hover:text-white/60'}`}>
+          <button key={t.label} onClick={()=>setTab(i)} className={`p-1.5 text-left border-r border-white/[0.04] last:border-0 ${tab===i ? 'bg-[#0f6cb6] text-white' : 'text-white/30 hover:text-white/60'}`}>
             <p className="text-[7px] font-bold truncate">{t.label}</p>
             <p className="text-[10px] font-black truncate">{t.value}</p>
           </button>
         ))}
       </div>
-      <div className="flex-1 relative p-2">
-        <svg viewBox="0 0 1000 60" className="w-full h-[46px]">
-          <polyline fill="none" stroke="#1f7fcf" strokeWidth="1.5" points={points.map((v,i)=> `${(i/(points.length-1))*1000},${60 - (v/25)*50}`).join(' ')} />
-          <polyline fill="rgba(31,127,207,0.12)" stroke="none" points={`0,60 ${points.map((v,i)=> `${(i/(points.length-1))*1000},${60 - (v/25)*50}`).join(' ')} 1000,60`} />
-        </svg>
-        <div className="flex justify-between text-[7px] text-white/20 px-1">
-          <span>1/1/2026</span><span>31/3/2026</span><span>28/5/2026</span><span>19/10/2026</span>
-        </div>
+      <div className="flex-1 relative px-2">
+        {max <= 0 ? <p className="text-[10px] opacity-50 pt-2">Sin movimientos aún</p> : (
+          <svg viewBox="0 0 1000 40" className="w-full h-[28px]">
+            <polyline fill="none" stroke="#1f7fcf" strokeWidth="2" points={points.map((v,i)=> `${points.length === 1 ? 0 : (i/(points.length-1))*1000},${40 - (v/max)*34}`).join(' ')} />
+          </svg>
+        )}
       </div>
     </div>
   )
@@ -104,24 +104,25 @@ function VentasAreaCompact(){
 export default function DashboardMeijsac(){
   const [firmaSubida, setFirmaSubida] = useState(false)
   const [mounted, setMounted] = useState(false)
-  const [porCobrar, setPorCobrar] = useState("0.00")
+  const [porCobrar, setPorCobrar] = useState(0)
   const [ventas, setVentas] = useState({ hoy: 0, mes: 0 })
+  const [liquidez, setLiquidez] = useState<number | null>(null)
+  const [docsLegales, setDocsLegales] = useState<{ id: string; tipo: string; nombre: string; fecha_caducidad: string }[]>([])
+  const vacioSerie = { dia: [], semana: [], mes: [], año: [] }
+  const [series, setSeries] = useState<Serie>(vacioSerie)
+  const [metricas, setMetricas] = useState<Record<string, Metrica>>({})
   const router = useRouter()
   const [bg, setBg] = useState<{type:'color'|'image', value:string}>({type:'color', value:'#090b11'})
   const [showBg, setShowBg] = useState(false)
   // === AQUI VA LO REAL - DENTRO DEL COMPONENTE ===
   const [miSuscripcion, setMiSuscripcion] = useState<any>(null)
   const [accesoPlan, setAccesoPlan] = useState<any>(null)
-  const [firmaMock, setFirmaMock] = useState({ vence: "2026-11-10", titular: "MEIJSAC CIA LTDA" })
-  const [planMock, setPlanMock] = useState({ vence: "2026-10-30", nombre: "PLAN DE PRUEBA" })
+  const [firmaMock, setFirmaMock] = useState({ vence: "", titular: "" })
+  const [planMock, setPlanMock] = useState({ vence: "", nombre: "" })
   const [userMock, setUserMock] = useState({ razon: "Cargando...", ruc: "", logo: "" })
   
   useEffect(()=>{
     setMounted(true)
-    const cxc = JSON.parse(localStorage.getItem("meijsac_cxc")||"[]")
-    setPorCobrar(cxc.reduce((s:any, c:any)=> s + (c.saldo||0),0).toFixed(2))
-    const v = JSON.parse(localStorage.getItem("meijsac_ventas")||"[]")
-    setVentas({ hoy: v.filter((x:any)=> new Date(x.fecha).toDateString() === new Date().toDateString()).reduce((s:any,c:any)=>s+c.total,0), mes: v.reduce((s:any,c:any)=>s+c.total,0) })
     const savedBg = localStorage.getItem('meijsac_bg')
     if(savedBg){ try{ setBg(JSON.parse(savedBg)) }catch{} }
     const firmaGuardada = localStorage.getItem('meijsac_firma') || localStorage.getItem('meijsac_config_pro')
@@ -135,7 +136,7 @@ export default function DashboardMeijsac(){
       try {
         const e = await cargarEmpresaSesion()
         if (cancel) return
-        setUserMock({ razon: e.razon || e.razonSocial || e.nombreComercial || "Sin nombre", ruc: e.ruc || "", logo: "" })
+        setUserMock({ razon: e.razon || e.razonSocial || e.nombreComercial || "Sin nombre", ruc: e.ruc || "", logo: e.logo_url || e.logoUrl || "" })
         if (cfgPro?.firma?.expira) setFirmaMock({ vence: cfgPro.firma.expira, titular: e.razon })
         const ctrl = new AbortController()
         const timer = setTimeout(() => ctrl.abort(), 8000)
@@ -154,6 +155,23 @@ export default function DashboardMeijsac(){
         } finally {
           clearTimeout(timer)
         }
+        const headers = { Authorization: `Bearer ${localStorage.getItem("meijsac_token") || ""}` }
+        const [resumenRes, docsRes] = await Promise.all([
+          fetch("/api/dashboard/resumen", { headers }),
+          fetch("/api/documentos-legales", { headers }),
+        ])
+        if (!cancel && resumenRes.ok) {
+          const resumen = await resumenRes.json()
+          setVentas({ hoy: Number(resumen.ventasHoy || 0), mes: Number(resumen.ventasMes || 0) })
+          setPorCobrar(Number(resumen.cxc || 0))
+          setLiquidez(resumen.liquidez === null || resumen.liquidez === undefined ? null : Number(resumen.liquidez))
+          if (resumen.series) setSeries(resumen.series)
+          if (resumen.metricas) setMetricas(resumen.metricas)
+        }
+        if (!cancel && docsRes.ok) {
+          const lista = await docsRes.json()
+          if (Array.isArray(lista)) setDocsLegales(lista)
+        }
       } catch (err: any) {
         if (!cancel) setUserMock({ razon: err?.message || "No se pudo cargar la empresa", ruc: "", logo: "" })
       }
@@ -166,10 +184,21 @@ export default function DashboardMeijsac(){
     localStorage.setItem('meijsac_bg', JSON.stringify(newBg))
   }
 
-  const diasFirma = getDias(firmaMock.vence)
-  const diasPlan = getDias(planMock.vence)
-  const colFirma = getColor(diasFirma)
-  const colPlan = getColor(diasPlan)
+  const diasFirma = firmaMock.vence ? getDias(firmaMock.vence) : null
+  const diasPlan = planMock.vence ? getDias(planMock.vence) : null
+  const colFirma = diasFirma === null ? null : getColor(diasFirma)
+  const colPlan = diasPlan === null ? null : getColor(diasPlan)
+  const inicial = (userMock.razon || "E").trim().charAt(0).toUpperCase()
+  const docsVista = [
+    ...(firmaMock.vence && !docsLegales.some((d) => d.tipo === "Firma Electrónica") ? [{ id: "firma-config", tipo: "Firma Electrónica", nombre: "Firma Electrónica", fecha_caducidad: String(firmaMock.vence).slice(0, 10) }] : []),
+    ...docsLegales,
+  ]
+  const etiquetaDoc = (vence: string) => {
+    const dias = Math.ceil((new Date(vence).getTime() - Date.now()) / 86400000)
+    if (dias < 0) return { clase: "text-red-300", texto: `VENCIDO - Venció hace ${Math.abs(dias)} días` }
+    if (dias <= 30) return { clase: "text-amber-300", texto: `POR VENCER - Faltan ${dias} días` }
+    return { clase: "text-emerald-300", texto: `AL DÍA - Vence en ${dias} días` }
+  }
   const estaBloqueado = accesoPlan ? accesoPlan.estado === "BLOQUEADO" : miSuscripcion?.estado === "BLOQUEADO"
   const estaPorVencer = accesoPlan ? false : miSuscripcion?.estado === "POR VENCER"
 
@@ -202,23 +231,24 @@ export default function DashboardMeijsac(){
     </a>
   </div>
 )}
-        <div className="flex justify-between items-center mb-4 max-w-[1600px] mx-auto">
+        <div className="flex flex-col lg:flex-row lg:justify-between lg:items-center gap-3 mb-4 max-w-[1600px] mx-auto">
           <div className="flex items-center gap-3">
-            <div className="w-8 h-8 rounded-lg grid place-items-center font-black text-xs" style={{background: CORPORATE}}>M</div>
-            <h1 className="text-[15px] font-[900]">MEIJSAC <span className="ml-2 text-[8px] px-2 py-0.5 rounded-full text-white" style={{background: CORPORATE}}>SRI ECUADOR</span></h1>
+            <div className="w-12 h-12 rounded-xl grid place-items-center font-black text-lg" style={{background: CORPORATE}}>M</div>
+            <h1 className="text-[22px] font-black">MEIJSAC</h1>
           </div>
-          <div className="flex items-center gap-2">
-            <div className={`text-[9px] px-2.5 py-1 rounded-full border flex items-center gap-1.5 ${colFirma.bg}`}><span className={`w-1.5 h-1.5 rounded-full animate-pulse ${colFirma.dot}`}></span> FIRMA {colFirma.label}</div>
-            <div className={`text-[9px] px-2.5 py-1 rounded-full border flex items-center gap-1.5 ${colPlan.bg}`}><span className={`w-1.5 h-1.5 rounded-full animate-pulse ${colPlan.dot}`}></span> {accesoPlan?.planNombre || "PLAN"} · {colPlan.label}</div>
-            <div className="h-6 w-[1px] bg-white/10 mx-1"></div>
+          <div className="flex items-center gap-3 min-w-0">
+            <div className="w-14 h-14 rounded-full bg-white text-black grid place-items-center text-[22px] font-black overflow-hidden shrink-0">
+              {userMock.logo ? <img src={userMock.logo} alt="" className="w-full h-full object-contain" /> : inicial}
+            </div>
+            <div className="min-w-0">
+              <p className="text-[18px] font-black leading-tight">{userMock.razon}</p>
+              <p className="text-[14px] leading-tight">RUC: {userMock.ruc || "—"}</p>
+            </div>
+          </div>
+          <div className="flex items-center gap-2 flex-wrap">
+            {colFirma && <div className={`text-[9px] px-2.5 py-1 rounded-full border flex items-center gap-1.5 ${colFirma.bg}`}><span className={`w-1.5 h-1.5 rounded-full animate-pulse ${colFirma.dot}`}></span> FIRMA {colFirma.label}</div>}
+            {colPlan && <div className={`text-[9px] px-2.5 py-1 rounded-full border flex items-center gap-1.5 ${colPlan.bg}`}><span className={`w-1.5 h-1.5 rounded-full animate-pulse ${colPlan.dot}`}></span> {accesoPlan?.planNombre || "PLAN"} · {colPlan.label}</div>}
             <div className="flex items-center gap-2 bg-[#12141d] border border-white/10 rounded-full pl-1 pr-1 py-1 relative">
-              <div className="w-7 h-7 rounded-full bg-white/10 grid place-items-center text-[11px] font-black overflow-hidden">
-                {userMock.logo ? <img src={userMock.logo} className="w-full h-full object-cover" /> : "M"}
-              </div>
-              <div className="pr-2 hidden md:block">
-                <p className="text-[9px] font-black leading-none truncate max-w-[150px]">{userMock.razon}</p>
-                <p className="text-[7px] opacity-50 leading-none">{userMock.ruc}</p>
-              </div>
               <button onClick={()=>setShowBg(!showBg)} className="text-[8px] bg-white/5 hover:bg-white/15 border border-white/10 px-2.5 py-1 rounded-full font-bold transition">🎨 Fondo</button>
               <button onClick={()=>{ localStorage.clear(); window.location.href = "/"; }} className="text-[8px] bg-white/10 hover:bg-white/20 border border-white/10 px-3 py-1 rounded-full font-bold transition">Cerrar sesión</button>
               {showBg && (
@@ -271,22 +301,26 @@ export default function DashboardMeijsac(){
         <div className="max-w-[1600px] mx-auto grid grid-cols-12 gap-3 mb-5">
           <div className="col-span-12 md:col-span-6 grid grid-cols-3 gap-3">
             <div className="bg-[#12141d] rounded-2xl border border-white/[0.05] p-3 shadow-sm flex flex-col justify-between h-[188px]">
-              <div><p className="text-[9px] opacity-40 tracking-widest">VENTAS HOY</p><p className="text-[16px] font-black mt-1">${ventas.hoy.toFixed(2)}</p><p className="text-[9px] opacity-50 mt-1">Mes: ${ventas.mes.toFixed(2)} • CxC ${porCobrar}</p></div>
-              <div className="flex gap-[2px]">{[30,50,20,80,60,90,40].map((h,i)=><div key={i} className="flex-1 rounded-full" style={{height: `${h/8}px`, background: CORPORATE, opacity: 0.3+i*0.1}} />)}</div>
+              <div><p className="text-[9px] opacity-40 tracking-widest">VENTAS HOY</p><p className="text-[16px] font-black mt-1">${ventas.hoy.toFixed(2)}</p><p className="text-[9px] opacity-50 mt-1">Mes: ${ventas.mes.toFixed(2)} • CxC ${porCobrar.toFixed(2)}</p></div>
             </div>
             <div className="bg-[#12141d] rounded-2xl border border-white/[0.05] p-3 shadow-sm flex flex-col justify-between h-[188px]">
-              <div><p className="text-[9px] opacity-40 tracking-widest">ESTADO FINANCIERO</p><p className="text-[12px] font-bold mt-2 text-emerald-300">● Saludable</p></div>
-              <div><div className="flex justify-between text-[9px] mb-1"><span className="opacity-50">Liquidez</span><span>82%</span></div><div className="h-1.5 bg-white/10 rounded-full overflow-hidden"><div className="h-full w-[82%]" style={{background: CORPORATE}} /></div></div>
+              <div><p className="text-[9px] opacity-40 tracking-widest">ESTADO FINANCIERO</p>{liquidez === null ? <p className="text-[13px] font-bold mt-3">Sin datos aún</p> : <p className="text-[13px] font-bold mt-3">Liquidez {Math.round(liquidez * 100)}%</p>}</div>
+              <div><div className="flex justify-between text-[9px] mb-1"><span className="opacity-50">Ingresos del mes menos egresos</span><span>{liquidez === null ? "—" : `${Math.round(liquidez * 100)}%`}</span></div><div className="h-1.5 bg-white/10 rounded-full overflow-hidden"><div className="h-full" style={{ width: `${liquidez === null ? 0 : Math.max(0, Math.min(100, liquidez * 100))}%`, background: CORPORATE }} /></div></div>
             </div>
             <div className="bg-[#12141d] rounded-2xl border border-white/[0.05] p-3 shadow-sm h-[188px]">
               <p className="text-[9px] opacity-40 tracking-widest mb-2">CUMPLIMIENTO DOCUMENTAL</p>
-              <div className="space-y-1.5">
-                {docsMock.filter(d=>{ const dias=getDias(d.vence); return !(d.ok && dias>30)}).map(d=>{
-                  const dias = getDias(d.vence)
+              <div className="space-y-1.5 overflow-auto max-h-[150px]">
+                {docsVista.length === 0 ? (
+                  <div className="text-[10px] leading-snug">
+                    <p>No tienes documentos agregados. Agrega tus permisos en Configuración &gt; Documentos Legales</p>
+                    <Link href="/dashboard/configuracion?tab=DOCUMENTOS" className="inline-block mt-2 bg-white text-black px-2 py-1 rounded-full font-black">Ir a Configuración</Link>
+                  </div>
+                ) : docsVista.map((d) => {
+                  const est = etiquetaDoc(d.fecha_caducidad)
                   return (
-                    <div key={d.id} className="flex justify-between items-center text-[10px] bg-white/[0.03] px-2 py-1.5 rounded-full border border-white/[0.05]">
-                      <span>{d.ok ? '✅' : '⚠️'} {d.label}</span>
-                      <span className={`text-[8px] ${dias < 0 ? 'text-red-400' : 'text-orange-300'}`}>{dias < 0 ? 'VENCIDO' : `${dias}d`}</span>
+                    <div key={d.id} className="text-[10px] bg-white/[0.03] px-2 py-1.5 rounded-xl border border-white/[0.05]">
+                      <div className="font-bold">{d.nombre}</div>
+                      <div className={est.clase}>{est.texto}</div>
                     </div>
                   )
                 })}
@@ -294,8 +328,8 @@ export default function DashboardMeijsac(){
             </div>
           </div>
           <div className="col-span-12 md:col-span-6 flex flex-col gap-3 h-[188px]">
-            <BarrasColoresCompact />
-            <VentasAreaCompact />
+            <BarrasColoresCompact series={series} />
+            <VentasAreaCompact series={series} metricas={metricas} />
           </div>
         </div>
 

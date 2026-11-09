@@ -80,6 +80,24 @@ BEGIN
   ALTER TABLE "FacturaEmitida" ADD COLUMN IF NOT EXISTS "cuotas" INTEGER;
   ALTER TABLE "FacturaEmitida" ADD COLUMN IF NOT EXISTS "fecha_vencimiento" TIMESTAMP(3);
 
+  CREATE TABLE IF NOT EXISTS "documentos_legales" (
+    "id" TEXT NOT NULL,
+    "empresa_id" TEXT NOT NULL,
+    "tipo" TEXT NOT NULL,
+    "nombre" TEXT NOT NULL,
+    "fecha_emision" TIMESTAMP(3) NOT NULL,
+    "fecha_caducidad" TIMESTAMP(3) NOT NULL,
+    "archivo_url" TEXT,
+    "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT "documentos_legales_pkey" PRIMARY KEY ("id")
+  );
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'documentos_legales_empresa_id_fkey') THEN
+    ALTER TABLE "documentos_legales"
+      ADD CONSTRAINT "documentos_legales_empresa_id_fkey"
+      FOREIGN KEY ("empresa_id") REFERENCES "Empresa"("id")
+      ON DELETE CASCADE ON UPDATE CASCADE;
+  END IF;
+
   IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'FacturaEmitida_empresaId_fkey') THEN
     ALTER TABLE "FacturaEmitida"
       ADD CONSTRAINT "FacturaEmitida_empresaId_fkey"

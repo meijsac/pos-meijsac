@@ -56,6 +56,21 @@ model Empresa {
   proveedores     Proveedor[]
   movimientos     MovimientoInventario[]
   facturas        FacturaEmitida[]
+  documentosLegales DocumentoLegal[]
+}
+
+model DocumentoLegal {
+  id             String   @id @default(cuid())
+  empresaId      String   @map("empresa_id")
+  empresa        Empresa  @relation(fields: [empresaId], references: [id], onDelete: Cascade)
+  tipo           String
+  nombre         String
+  fechaEmision   DateTime @map("fecha_emision")
+  fechaCaducidad DateTime @map("fecha_caducidad")
+  archivoUrl     String?  @map("archivo_url") @db.Text
+  createdAt      DateTime @default(now()) @map("created_at")
+
+  @@map("documentos_legales")
 }
 
 model FacturaEmitida {

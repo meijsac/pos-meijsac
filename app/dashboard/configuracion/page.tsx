@@ -3,6 +3,7 @@ import { useState, useEffect } from "react";
 import { feriadosIvaReducido } from '@/lib/iva-feriados.config';
 import { cargarEmpresaSesion } from "@/lib/sesion-cliente";
 import { errorLogo } from "@/lib/logo-empresa";
+import DocumentosLegales from "./documentos-legales";
 
 const SRI_URLS = {
     "1": { nombre: "PRUEBAS", url: "https://celcer.sri.gob.ec/comprobantes-electronicos-ws/RecepcionComprobantesOffline?wsdl", auth: "https://celcer.sri.gob.ec/comprobantes-electronicos-ws/AutorizacionComprobantesOffline?wsdl" },
@@ -71,6 +72,10 @@ export const calcularTotalesUniversal = (itemsCarrito: any[]) => {
 
 export default function ConfiguracionAvanzadaSRI() {
     const [tab, setTab] = useState("IDENTIDAD");
+    useEffect(() => {
+        const pedido = new URLSearchParams(window.location.search).get("tab");
+        if (pedido === "DOCUMENTOS") setTab("DOCUMENTOS");
+    }, []);
     const [cfg, setCfg] = useState<any>(null);
     const [logs, setLogs] = useState<any[]>([]);
     const [infoFirma, setInfoFirma] = useState<any>(null);
@@ -348,7 +353,7 @@ base.sucursales = datosReales.sucursales || base.sucursales || [];
 
 
             <div className="flex gap-2 mb-4 overflow-x-auto pb-2">
-                {["IDENTIDAD", "FIRMA", "SECUENCIALES", "IMPUESTOS", "MARCA RIDE", "PERMISOS", "AMBIENTE SRI"].map(t => (
+                {["IDENTIDAD", "FIRMA", "SECUENCIALES", "IMPUESTOS", "MARCA RIDE", "DOCUMENTOS", "PERMISOS", "AMBIENTE SRI"].map(t => (
                     <button key={t} onClick={() => setTab(t)} className={`px-4 py-2 rounded-xl text-[10px] font-black whitespace-nowrap ${tab === t ? 'bg-[#00f5d4] text-black' : 'bg-[#11131a] border border-white/10'}`}>{t}</button>
                 ))}
             </div>
@@ -571,6 +576,8 @@ base.sucursales = datosReales.sucursales || base.sucursales || [];
                   </div>
                 )}
                 
+                {tab === "DOCUMENTOS" && <DocumentosLegales />}
+
                 {tab === "MARCA RIDE" && (
                   <div className="space-y-5">
                     <p className="text-[#00f5d4] font-bold text-[11px]">5. MARCA RIDE - IMAGEN PARA FACTURA ELECTRÓNICA</p>
