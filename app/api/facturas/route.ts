@@ -30,7 +30,8 @@ export async function POST(req: Request) {
       : {}
     const ambientePrevio = codigoAmbiente(extraPrevio.ambiente || extraPrevio.ambienteCodigo || body?.configEmisor?.ambiente)
     if (body?.estadoSRI !== "BORRADOR") {
-      const serie = serieDeAmbiente(ambientePrevio)
+      const pedida = String(body?.establecimiento || "").trim()
+      const serie = /^\d{3}-\d{3}$/.test(pedida) ? pedida : serieDeAmbiente(ambientePrevio)
       const previas = await prisma.facturaEmitida.findMany({
         where: { empresaId: sesion.empresa.id },
         select: { payload: true },

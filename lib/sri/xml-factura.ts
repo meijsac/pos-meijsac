@@ -84,11 +84,6 @@ export function armarXmlFactura(empresa: {
   let pto = ptoRaw
   const fecha = fechaSri(body?.fechaEmisionFormato || body?.fechaEmision)
   const ambiente = codigoAmbiente(extra.ambiente || extra.ambienteCodigo || body?.configEmisor?.ambiente)
-  if (body?.estadoSRI !== "BORRADOR") {
-    const fija = ambiente === "2" ? "001-001" : "001-002"
-    estab = fija.slice(0, 3)
-    pto = fija.slice(4)
-  }
   const obligado = obligadoRaw === "SI" ? "SI" : "NO"
   const comercial = String(empresa.nombreComercial || "").trim()
   const dirEstablecimiento = String(

@@ -2,15 +2,15 @@ import { XMLParser } from "fast-xml-parser"
 import { URL_AUTORIZACION_PRODUCCION, URL_AUTORIZACION_PRUEBAS, URL_RECEPCION_PRODUCCION, URL_RECEPCION_PRUEBAS, codigoAmbiente, type CodigoAmbiente } from "@/lib/sri/ambiente"
 import type { SriAutorizacionResponse, SriRecepcionResponse } from "@/lib/sri/tipos"
 
-const ESPERA_MS = 25000
+const ESPERA_MS = 10000
 
 export const URLS_SRI = {
   "1": { recepcion: URL_RECEPCION_PRUEBAS, autorizacion: URL_AUTORIZACION_PRUEBAS },
   "2": { recepcion: URL_RECEPCION_PRODUCCION, autorizacion: URL_AUTORIZACION_PRODUCCION },
 } as const
 
-/** El WSDL Offline trae soapAction="". En HTTP ese valor va entre comillas, no el nombre validarComprobante. */
-export const SOAP_ACTION_WSDL = "\"\""
+/** WSDL Offline: soapAction vacío. No se envía el nombre validarComprobante. */
+export const SOAP_ACTION_WSDL = ""
 
 const parser = new XMLParser({
   ignoreAttributes: false,
@@ -24,7 +24,9 @@ export class SriRedError extends Error {
   conectado = false as const
   codigo: "Timeout" | "ENOTFOUND" | "ECONNREFUSED"
   constructor(codigo: "Timeout" | "ENOTFOUND" | "ECONNREFUSED") {
-    super(codigo === "Timeout" ? "Timeout" : codigo)
+    super(codigo === "Timeout"
+      ? "El SRI tardó demasiado en responder (Timeout)."
+      : "No se pudo establecer conexión física con los servidores del SRI. Revisa tu internet o el estado del SRI.")
     this.codigo = codigo
   }
 }
@@ -32,7 +34,7 @@ export class SriRedError extends Error {
 export type ResultadoConexion = {
   conectado: boolean
   error?: string
-  status: "RECEPCIONADO" | "DEVUELTA" | "AUTORIZADO" | "RECHAZADO" | "PENDIENTE" | "EN PROCESO"
+  status: "RECEPCIONADO" | "DEVUELTA" | "AUTORIZADO" | "RECHAZADO" | "PENDIENTE" | "EN PROCESO" | "ERROR_SRI"
   fechaAutorizacion: string
   numeroAutorizacion: string
   mensajes: string[]
@@ -204,6 +206,16 @@ export async function enviarAlSri(entrada: { xmlFirmado: string; claveAcceso: st
   try {
     const respuesta = await postSoap(urls.recepcion, sobreRecepcion(entrada.xmlFirmado))
     recepcionXml = respuesta.texto
+    if (respuesta.statusHttp < 200 || respuesta.statusHttp >= 300) {
+      const fallaHttp = fault(recepcionXml)
+      return {
+        ...vacio,
+        conectado: true,
+        status: "ERROR_SRI",
+        error: `Servidor SRI respondió con estado ${respuesta.statusHttp}`,
+        mensajes: [fallaHttp, `Servidor SRI respondió con estado ${respuesta.statusHttp}`].filter(Boolean),
+      }
+    }
   } catch (error) {
     if (error instanceof SriRedError) return { ...vacio, conectado: false, error: error.message }
     return { ...vacio, conectado: false, error: error instanceof Error ? error.message : "El servicio del SRI no respondió" }

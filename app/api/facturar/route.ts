@@ -30,7 +30,8 @@ export async function POST(req: Request) {
       : {}
     const ambientePrevio = codigoAmbiente(extraPrevio.ambiente || extraPrevio.ambienteCodigo || body?.configEmisor?.ambiente)
     if (body?.estadoSRI !== "BORRADOR") {
-      const serie = serieDeAmbiente(ambientePrevio)
+      const pedida = String(body?.establecimiento || "").trim()
+      const serie = /^\d{3}-\d{3}$/.test(pedida) ? pedida : serieDeAmbiente(ambientePrevio)
       const previas = await prisma.facturaEmitida.findMany({
         where: { empresaId: sesion.empresa.id },
         select: { payload: true },
@@ -156,6 +157,7 @@ export async function POST(req: Request) {
       mensajeAutorizacion: real.mensajes.join(" | "),
       enviado: real.conectado,
       conectado: real.conectado,
+      statusSri: real.status,
       errorRed: real.error || "",
       recepcionSri: real.recepcion,
       autorizacionSri: real.autorizacion,
@@ -201,19 +203,19 @@ export async function POST(req: Request) {
       enviado: resultado.enviado,
       conectado: resultado.conectado !== false,
       error: resultado.errorRed || "",
-      status: resultado.estado === "DEVUELTA" || resultado.estadoRecepcion === "DEVUELTA" ? "DEVUELTA" : estadoGuardado,
+      status: resultado.statusSri === "ERROR_SRI" || resultado.statusSri === "DEVUELTA" ? resultado.statusSri : (resultado.estado === "DEVUELTA" || resultado.estadoRecepcion === "DEVUELTA" ? "DEVUELTA" : estadoGuardado),
       sriRecepcion: resultado.recepcionSri || null,
       sriAutorizacion: resultado.autorizacionSri || null,
     })
   } catch (e: any) {
     const code = String(e?.cause?.code || e?.code || e?.codigo || "")
     if (e?.name === "TimeoutError" || code === "Timeout" || code === "ETIMEDOUT") {
-      return NextResponse.json({ conectado: false, error: "Timeout" })
+      return NextResponse.json({ conectado: false, error: "El SRI tardó demasiado en responder (Timeout)." }, { status: 504 })
     }
     if (code === "ENOTFOUND" || code === "ECONNREFUSED") {
-      return NextResponse.json({ conectado: false, error: code })
+      return NextResponse.json({ conectado: false, error: "No se pudo establecer conexión física con los servidores del SRI. Revisa tu internet o el estado del SRI." }, { status: 500 })
     }
-    return NextResponse.json({ conectado: false, error: e.message || "No se pudo guardar la factura" }, { status: 500 })
+    return NextResponse.json({ conectado: false, error: e.message || "No se pudo establecer conexión física con los servidores del SRI. Revisa tu internet o el estado del SRI." }, { status: 500 })
   }
 }
 

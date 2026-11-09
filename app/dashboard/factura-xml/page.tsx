@@ -111,11 +111,11 @@ const Chisme = ({texto, titulo}:{texto:string, titulo:string}) => (
 
 export default function FacturadorXMLReal(){
   const [fecha, setFecha] = useState("")
-  const [puntoEmision, setPuntoEmision] = useState({ ambiente: "1" as "1" | "2", nombre: "PRUEBAS", serie: "001-002", secuencial: "000000001", ultimo: "", indice: -1 })
-  const cargarPunto = () => {
+  const [puntoEmision, setPuntoEmision] = useState({ ambiente: "1" as "1" | "2", nombre: "PRUEBAS", estab: "", pto: "", serie: "", secuencial: "", ultimo: "", indice: -1 })
+  const cargarPunto = (estabElegido?: string) => {
     let cfg: any = {}
     try { cfg = JSON.parse(localStorage.getItem("meijsac_config_pro") || "{}") } catch { cfg = {} }
-    const leido = puntoActivoFactura(cfg.secuenciales, cfg.ambiente)
+    const leido = puntoActivoFactura(cfg.secuenciales, cfg.ambiente, estabElegido)
     const usados = new Set<string>()
     for (const clave of ["meijsac_comprobantes_sri", "meijsac_comprobantes_emitidos", "meijsac_enviados_sri"]) {
       try {
@@ -129,15 +129,37 @@ export default function FacturadorXMLReal(){
         }
       } catch {}
     }
+    let contadorLocal = ""
+    try { contadorLocal = JSON.parse(localStorage.getItem("meijsac_contador_secuencial") || "{}")[leido.punto.serie] || "" } catch { contadorLocal = "" }
+    const ultimoConocido = Number(String(contadorLocal).replace(/\D/g, "") || "0") > Number(String(leido.punto.ultimo).replace(/\D/g, "") || "0") ? contadorLocal : leido.punto.ultimo
     const codigo = String(cfg.ambiente || "").toUpperCase().includes("PROD") || String(cfg.ambiente) === "2" ? "2" : "1"
     setPuntoEmision({
       ambiente: codigo as "1" | "2",
       nombre: codigo === "2" ? "PRODUCCIÓN" : "PRUEBAS",
+      estab: leido.punto.estab,
+      pto: leido.punto.pto,
       serie: leido.punto.serie,
-      secuencial: elegirSecuencial("", leido.punto.ultimo, usados),
-      ultimo: leido.punto.ultimo,
+      secuencial: leido.punto.serie ? elegirSecuencial("", ultimoConocido, usados) : "",
+      ultimo: ultimoConocido,
       indice: leido.punto.indice,
     })
+  }
+  const guardarSecuencialUsado = (serie: string, usado: string) => {
+    if (!serie || !usado) return
+    try {
+      const mapa = JSON.parse(localStorage.getItem("meijsac_contador_secuencial") || "{}")
+      const previo = Number(String(mapa[serie] || "0").replace(/\D/g, ""))
+      if (Number(usado) >= previo) mapa[serie] = usado
+      localStorage.setItem("meijsac_contador_secuencial", JSON.stringify(mapa))
+      const cfg = JSON.parse(localStorage.getItem("meijsac_config_pro") || "{}")
+      const lista = Array.isArray(cfg.secuenciales) ? cfg.secuenciales : []
+      const [estab, pto] = serie.split("-")
+      const i = lista.findIndex((s: any) => String(s?.estab || "").replace(/\D/g, "").padStart(3, "0").slice(-3) === estab && String(s?.pto || "").replace(/\D/g, "").padStart(3, "0").slice(-3) === pto)
+      if (i < 0) lista.push({ estab, pto, codigo: "01", tipo: "01 FACTURA", ultimo: usado, estado: "ACTIVO" })
+      else lista[i] = { ...lista[i], ultimo: usado }
+      cfg.secuenciales = lista
+      localStorage.setItem("meijsac_config_pro", JSON.stringify(cfg))
+    } catch {}
   }
   useEffect(() => { cargarPunto() }, [])
   const [configEmisor, setConfigEmisor] = useState<any>({})
@@ -279,12 +301,13 @@ export default function FacturadorXMLReal(){
     provincia: "Pichincha",
     ciudad: "Quito",
     tipoEstablecimiento: "matriz",
-    codSucursal: "001",
+    codSucursal: "",
     limiteCredito: 200,
     diasCredito: 30,
     politicaCredito: "REQUISITO" as keyof typeof POLITICAS,
     requisitosEntregados: false
   })
+  useEffect(() => { cargarPunto(cliente.codSucursal) }, [cliente.codSucursal])
 
  const [catalogoRapido, setCatalogoRapido] = useState<any[]>([]);
 useEffect(()=>{
@@ -737,6 +760,7 @@ const total = subtotalSin + iva15 + ivaDiferenciado + valorICE + valorIRBPNR + p
   
   
   const emitirComprobante = async () => {
+    if (!puntoEmision.serie || !puntoEmision.secuencial) return alert("Configura el punto de emisión en Configuración. No hay un secuencial fijo.")
     if (bloqueoConsumidorFinal) return alert(avisoConsumidorFinal)
     if (!emisorListo) return alert("Faltan datos del emisor en Configuración")
     if (itemSinTarifa) return alert("Hay un producto sin tarifa IVA. No se puede emitir.")
@@ -888,6 +912,12 @@ const total = subtotalSin + iva15 + ivaDiferenciado + valorICE + valorIRBPNR + p
     localStorage.removeItem("meijsac_transito_factura")
     }
 
+    const serieAhora = puntoEmision.serie
+    const secAhora = puntoEmision.secuencial
+    facturaPendiente.establecimiento = serieAhora
+    facturaPendiente.secuencial = secAhora
+    guardarSecuencialUsado(serieAhora, secAhora)
+    cargarPunto(cliente.codSucursal)
     try {
       const guardado = await fetch("/api/facturar", { method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${localStorage.getItem("meijsac_token") || ""}` }, body: JSON.stringify({ ...facturaPendiente, estadoSRI: "PENDIENTE_DE_AUTORIZAR" }) })
       const guardada = await guardado.json().catch(() => ({}))
@@ -1042,10 +1072,10 @@ const total = subtotalSin + iva15 + ivaDiferenciado + valorICE + valorIRBPNR + p
             <div className="mt-2 bg-red-500/20 border-2 border-red-500 text-red-100 text-sm font-bold p-3 rounded-xl">Faltan datos del emisor en Configuración</div>
           )}
         </div>
-        <div className="text-right select-none">
-          <div className="text-[22px] font-black tracking-wide text-[#00f5d4]">{puntoEmision.nombre} - {puntoEmision.serie}</div>
-          <div className="font-mono text-sm font-bold">{puntoEmision.serie}-{puntoEmision.secuencial}</div>
-          <div className="text-[10px]">FECHA <b suppressHydrationWarning>{fecha || "---"}</b></div>
+        <div className="flex gap-4 text-[10px] text-right">
+          <div>PUNTO<br/><b>{puntoEmision.serie || "—"}</b></div>
+          <div>SEC<br/><b className="text-[#00f5d4]">{puntoEmision.secuencial || "—"}</b></div>
+          <div>FECHA<br/><b suppressHydrationWarning>{fecha || "---"}</b></div>
         </div>
       </div>
 
@@ -1084,7 +1114,7 @@ const total = subtotalSin + iva15 + ivaDiferenciado + valorICE + valorIRBPNR + p
 
             <select value={cliente.tipoEstablecimiento === "sucursal" ? "sucursal" : "matriz"} onChange={(e)=>{
               const tipo = e.target.value === "sucursal" ? "sucursal" : "matriz"
-              setCliente((f: any) => ({ ...f, tipoEstablecimiento: tipo, codSucursal: tipo === "matriz" ? "001" : (String(f.codSucursal || "") === "001" || !f.codSucursal ? "002" : f.codSucursal) }))
+              setCliente((f: any) => ({ ...f, tipoEstablecimiento: tipo, codSucursal: tipo === "matriz" ? (puntoEmision.estab || f.codSucursal || "") : f.codSucursal }))
             }} className="bg-black p-2 rounded-lg text-[10px] border border-white/10">
   <option value="matriz">MATRIZ</option>
   <option value="sucursal">SUCURSAL</option>
@@ -1109,7 +1139,7 @@ const total = subtotalSin + iva15 + ivaDiferenciado + valorICE + valorIRBPNR + p
   </select>
 </div>
            <div className="bg-black/50 p-2 rounded-lg text-[10px] text-zinc-400 flex items-center gap-2">
-  Estab: {cliente.tipoEstablecimiento === "sucursal" ? "sucursal" : "matriz"} - {cliente.codSucursal || sucursalSeleccionada?.codigo || "001"}
+  Estab: {cliente.tipoEstablecimiento === "sucursal" ? "sucursal" : "matriz"} - {cliente.codSucursal || sucursalSeleccionada?.codigo || puntoEmision.estab || "—"}
 </div>
 
             <select value={cliente.provincia} onChange={(e) => setCliente({...cliente, provincia: e.target.value, ciudad: PROVINCIAS[e.target.value as keyof typeof PROVINCIAS][0]})} className="bg-black text-white p-2 rounded-lg w-full">
