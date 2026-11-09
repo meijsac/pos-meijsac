@@ -230,9 +230,11 @@ CREATE TABLE IF NOT EXISTS "firma_electronica" (
   "nombre" TEXT NOT NULL,
   "p12Cifrado" TEXT NOT NULL,
   "titular" TEXT NOT NULL DEFAULT '',
+  "claveCifrada" TEXT NOT NULL DEFAULT '',
   "expira" TIMESTAMP(3) NOT NULL,
   "updatedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
   CONSTRAINT "firma_electronica_pkey" PRIMARY KEY ("empresaId")
 );
+ALTER TABLE "firma_electronica" ADD COLUMN IF NOT EXISTS "claveCifrada" TEXT NOT NULL DEFAULT '';
 ALTER TABLE "firma_electronica" ENABLE ROW LEVEL SECURITY;
 ALTER TABLE "seguridad_logs" ENABLE ROW LEVEL SECURITY;

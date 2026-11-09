@@ -7,7 +7,7 @@ import { FaltanDatosSri, armarXmlFactura } from "@/lib/sri/xml-factura"
 import { firmarFacturaXml } from "@/lib/sri/firmar"
 import { codigoAmbiente } from "@/lib/sri/ambiente"
 import { enviarComprobante } from "@/lib/sri/soap"
-import { desencriptarBytes } from "@/lib/seguridad"
+import { desencriptarBytes, desencriptar } from "@/lib/seguridad"
 
 export const maxDuration = 60
 
@@ -36,11 +36,16 @@ export async function POST(req: Request) {
     const ambiente = codigoAmbiente(extra.ambiente || extra.ambienteCodigo || body?.configEmisor?.ambiente)
     let xml = armado.xml
     let firmado = false
-    if (!claveFirma) return NextResponse.json({ error: "Escribe la contraseña del .p12. Se usa solo para firmar este envío y no se guarda." }, { status: 400 })
     const firma = await prisma.firmaElectronica.findUnique({ where: { empresaId: sesion.empresa.id } })
     if (!firma) return NextResponse.json({ error: "Falta el archivo .p12. Súbelo en Configuración, pestaña Firma." }, { status: 400 })
+    let claveGuardada = ""
+    if (firma.claveCifrada) {
+      try { claveGuardada = desencriptar(firma.claveCifrada) } catch { claveGuardada = "" }
+    }
+    const claveUsar = claveFirma || claveGuardada
+    if (!claveUsar) return NextResponse.json({ error: "Guarda la contraseña del .p12 en Configuración, pestaña Firma." }, { status: 400 })
     try {
-      xml = firmarFacturaXml(xml, desencriptarBytes(firma.p12Cifrado), claveFirma)
+      xml = firmarFacturaXml(xml, desencriptarBytes(firma.p12Cifrado), claveUsar)
       firmado = true
     } catch (e: any) {
       return NextResponse.json({ error: e.message || "No se pudo firmar el XML" }, { status: 400 })

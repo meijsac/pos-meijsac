@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import * as forge from 'node-forge';
 import { prisma } from '@/lib/prisma';
 import { usuarioConEmpresaDesdeRequest } from '@/lib/empresa-sesion';
-import { encriptarBytes } from '@/lib/seguridad';
+import { encriptarBytes, encriptar } from '@/lib/seguridad';
 
 export const dynamic = "force-dynamic"
 
@@ -69,12 +69,14 @@ if (!("error" in sesion)) {
       empresaId: sesion.empresa.id,
       nombre: file.name || "firma.p12",
       p12Cifrado: encriptarBytes(bytes),
+      claveCifrada: clave ? encriptar(clave) : "",
       titular: subject.slice(0, 300),
       expira: fechaExp,
     },
     update: {
       nombre: file.name || "firma.p12",
       p12Cifrado: encriptarBytes(bytes),
+      claveCifrada: clave ? encriptar(clave) : "",
       titular: subject.slice(0, 300),
       expira: fechaExp,
     },
@@ -87,7 +89,7 @@ if (!("error" in sesion)) {
 
 return NextResponse.json({
   guardada,
-  claveGuardada: false,
+  claveGuardada: true,
   ok: true,
   ruc: rucEmpresa,
   rucEnFirma: rucEnFirma,

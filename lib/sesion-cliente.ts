@@ -20,7 +20,7 @@ export function guardarEmpresaLocal(empresa: any, token?: string, usuario?: any)
 
 export async function cargarEmpresaSesion() {
   const ctrl = new AbortController()
-  const timer = setTimeout(() => ctrl.abort(), 8000)
+  const timer = setTimeout(() => ctrl.abort(), 3000)
   try {
     const res = await fetch("/api/empresa/mia", { signal: ctrl.signal })
     const data = await res.json().catch(() => ({}))

@@ -1,5 +1,5 @@
 "use client"
-import { useEffect, useState } from 'react'
+import { useEffect } from 'react'
 import { useRouter, usePathname } from 'next/navigation'
 import { EsisaAvatar } from '@/components/EsisaAvatar'
 
@@ -7,23 +7,27 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const router = useRouter()
   const pathname = usePathname()
   const isDashboard = pathname === '/dashboard'
-  const [ok, setOk] = useState(false)
 
   useEffect(() => {
-    localStorage.removeItem('meijsac_token')
-    fetch('/api/auth/sesion').then((res) => {
-      if (!res.ok) {
-        localStorage.removeItem('meijsac_user')
-        router.replace('/login')
-        return
-      }
-      setOk(true)
-    }).catch(() => router.replace('/login'))
+    const empresa = localStorage.getItem("meijsac_empresa")
+    const usuario = localStorage.getItem("meijsac_user")
+    if (!empresa && !usuario) {
+      router.replace("/login")
+      return
+    }
+    const ctrl = new AbortController()
+    const timer = setTimeout(() => ctrl.abort(), 3000)
+    fetch("/api/auth/sesion", { signal: ctrl.signal })
+      .then((res) => {
+        if (res.status === 401) router.replace("/login")
+      })
+      .catch(() => {})
+      .finally(() => clearTimeout(timer))
+    return () => {
+      clearTimeout(timer)
+      ctrl.abort()
+    }
   }, [router])
-
-  if (!ok) {
-    return <div className="min-h-screen bg-[#0a0a0a] text-white flex items-center justify-center">Verificando acceso en meijsac.com...</div>
-  }
 
   return (
     <div className="min-h-screen bg-[#0a0a0a] text-white">

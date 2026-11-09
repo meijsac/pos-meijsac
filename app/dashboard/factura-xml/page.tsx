@@ -115,6 +115,7 @@ export default function FacturadorXMLReal(){
     (clienteRef?.tipoEstablecimiento === "sucursal" ? String(clienteRef.codSucursal || "002") : "001").replace(/\D/g, "").padStart(3, "0").slice(-3) || "001"
   const [configEmisor, setConfigEmisor] = useState<any>({})
   const [emisorListo, setEmisorListo] = useState(false)
+  const [emisorCargando, setEmisorCargando] = useState(true)
     // --- AGREGADO TEMA Y CLIENTE ---
   const [isDark, setIsDark] = useState(true)
   const [showNuevoCliente, setShowNuevoCliente] = useState(false)
@@ -133,35 +134,46 @@ export default function FacturadorXMLReal(){
         return ""
       }
       let empresa: any = {}
+      try { empresa = JSON.parse(localStorage.getItem("meijsac_empresa") || "{}") } catch { empresa = {} }
+      let cfg: any = {}
+      try { cfg = JSON.parse(localStorage.getItem("meijsac_config_pro") || "{}") } catch { cfg = {} }
+      const armar = (emp: any, conf: any) => {
+        const sucursal = (conf.sucursales || emp.sucursales || []).find((s: any) => s?.dir || s?.direccion) || null
+        const ambienteRaw = conTexto(conf.ambiente, sucursal?.ambiente, emp.ambiente)
+        const ambiente = ambienteRaw === "2" || ambienteRaw.toUpperCase().includes("PROD") ? "PRODUCCIÓN" : "PRUEBAS"
+        return {
+          empresaId: emp.id || emp.empresaId || "",
+          razon: conTexto(conf.razonSocial, emp.razonSocial, emp.razon),
+          comercial: conTexto(conf.nombreComercial, emp.nombreComercial),
+          ruc: conTexto(conf.ruc, emp.ruc),
+          matriz: conTexto(conf.dirMatriz, emp.dirMatriz, emp.direccion),
+          sucursal: conTexto(sucursal?.dir, sucursal?.direccion, conf.dirEstablecimiento, emp.dirEstablecimiento),
+          obligado: conTexto(conf.obligadoConta, conf.obligadoContabilidad, emp.obligadoConta, emp.obligado),
+          regimen: conTexto(conf.regimen, emp.regimen),
+          ambiente,
+          logo: [conf.logo_url, conf.logoUrl, conf.marca?.logo, emp.logo_url, emp.logoUrl].map(v => String(v || "").trim()).find(v => v.startsWith("http") || v.startsWith("data:")) || "",
+          modo_negocio: conTexto(conf.modo_negocio, emp.modo_negocio),
+          datosTransferencia: conf.datosTransferencia || conf.transferencia || null,
+          datosTransferenciaActivo: Boolean(conf.datosTransferenciaActivo || conf.transferenciaActiva || conf.datosTransferencia?.activo || conf.transferencia?.activo),
+        }
+      }
+      const local = armar(empresa, cfg)
+      if (vivo && local.razon && local.ruc) {
+        setConfigEmisor(local)
+        setEmisorListo(true)
+        setEmisorCargando(false)
+      }
       try {
         const { cargarEmpresaSesion } = await import("@/lib/sesion-cliente")
         empresa = await cargarEmpresaSesion()
-      } catch {
-        try { empresa = JSON.parse(localStorage.getItem("meijsac_empresa") || "{}") } catch { empresa = {} }
-      }
-      let cfg: any = {}
+      } catch {}
+      cfg = {}
       try { cfg = JSON.parse(localStorage.getItem("meijsac_config_pro") || "{}") } catch { cfg = {} }
-      const sucursal = (cfg.sucursales || empresa.sucursales || []).find((s: any) => s?.dir || s?.direccion) || null
-      const ambienteRaw = conTexto(cfg.ambiente, sucursal?.ambiente, empresa.ambiente)
-      const ambiente = ambienteRaw === "2" || ambienteRaw.toUpperCase().includes("PROD") ? "PRODUCCIÓN" : "PRUEBAS"
-      const emisor = {
-        empresaId: empresa.id || empresa.empresaId || "",
-        razon: conTexto(cfg.razonSocial, empresa.razonSocial, empresa.razon),
-        comercial: conTexto(cfg.nombreComercial, empresa.nombreComercial),
-        ruc: conTexto(cfg.ruc, empresa.ruc),
-        matriz: conTexto(cfg.dirMatriz, empresa.dirMatriz, empresa.direccion),
-        sucursal: conTexto(sucursal?.dir, sucursal?.direccion, cfg.dirEstablecimiento, empresa.dirEstablecimiento),
-        obligado: conTexto(cfg.obligadoConta, cfg.obligadoContabilidad, empresa.obligadoConta, empresa.obligado),
-        regimen: conTexto(cfg.regimen, empresa.regimen),
-        ambiente,
-        logo: [cfg.logo_url, cfg.logoUrl, cfg.marca?.logo, empresa.logo_url, empresa.logoUrl].map(v => String(v || "").trim()).find(v => v.startsWith("http") || v.startsWith("data:")) || "",
-        modo_negocio: conTexto(cfg.modo_negocio, empresa.modo_negocio),
-        datosTransferencia: cfg.datosTransferencia || cfg.transferencia || null,
-        datosTransferenciaActivo: Boolean(cfg.datosTransferenciaActivo || cfg.transferenciaActiva || cfg.datosTransferencia?.activo || cfg.transferencia?.activo),
-      }
+      const emisor = armar(empresa, cfg)
       if (!vivo) return
       setConfigEmisor(emisor)
       setEmisorListo(Boolean(emisor.razon && emisor.ruc && emisor.regimen))
+      setEmisorCargando(false)
       const claves = new Set(
         [emisor.empresaId, localStorage.getItem("empresaId"), localStorage.getItem("empresa_id"), "EMPRESA_001"].filter(Boolean) as string[]
       )
@@ -390,7 +402,6 @@ const toggleTurismoFeriado = (checked: boolean) => {
   const [tarjetaData, setTarjetaData] = useState({ tipoSRI:"19", forma:"CORRIENTE", plazo:0, franquicia:"Datafast - Visa / Mastercard" })
   const [conteoCaja, setConteoCaja] = useState({ "100":0,"50":0,"20":0,"10":0,"5":0,"1":0,"0.50":0,"0.25":0,"0.10":0,"0.05":0,"0.01":0 } as any)
   const [pagoRealizado, setPagoRealizado] = useState(false)
-  const [claveFirma, setClaveFirma] = useState("")
   const [cajaAbierta, setCajaAbierta] = useState(false)
   const [tipoCobro, setTipoCobro] = useState<'efectivo'|'tarjeta'|'transfer'|'pendiente'|'credito'>('efectivo')
   const [refTarjeta, setRefTarjeta] = useState("")
@@ -698,8 +709,6 @@ const total = subtotalSin + iva15 + ivaDiferenciado + valorICE + valorIRBPNR + p
   
   
   const emitirComprobante = async () => {
-    const esProduccion = configEmisor.ambiente === "PRODUCCIÓN"
-    if (!claveFirma.trim()) return alert("Escribe la contraseña del .p12 para firmar. No se guarda.")
     if (bloqueoConsumidorFinal) return alert(avisoConsumidorFinal)
     if (!emisorListo) return alert("Faltan datos del emisor en Configuración")
     if (itemSinTarifa) return alert("Hay un producto sin tarifa IVA. No se puede emitir.")
@@ -851,7 +860,7 @@ const total = subtotalSin + iva15 + ivaDiferenciado + valorICE + valorIRBPNR + p
     }
 
     try {
-      const guardado = await fetch("/api/facturas", { method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${localStorage.getItem("meijsac_token") || ""}` }, body: JSON.stringify({ ...facturaPendiente, estadoSRI: "PENDIENTE_DE_AUTORIZAR", claveFirma }) })
+      const guardado = await fetch("/api/facturas", { method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${localStorage.getItem("meijsac_token") || ""}` }, body: JSON.stringify({ ...facturaPendiente, estadoSRI: "PENDIENTE_DE_AUTORIZAR" }) })
       if (!guardado.ok) {
         const err = await guardado.json().catch(() => ({}))
         const faltan = Array.isArray(err.faltantes) ? `\n${err.faltantes.join("\n")}` : ""
@@ -869,7 +878,6 @@ const total = subtotalSin + iva15 + ivaDiferenciado + valorICE + valorIRBPNR + p
       facturaPendiente.fechaAutorizacion = guardada.fechaAutorizacion || ""
       facturaPendiente.mensajeSri = guardada.mensaje || ""
       facturaPendiente.mensajesSri = guardada.mensajes || []
-      setClaveFirma("")
       const listaDoc = {
         id: guardada.id || facturaPendiente.id,
         facturaId: guardada.id,
@@ -972,7 +980,9 @@ const total = subtotalSin + iva15 + ivaDiferenciado + valorICE + valorIRBPNR + p
       <div className="flex justify-between bg-[#1e293b] p-3 rounded-xl mb-3 border border-white/10">
         <div className="font-black">
           <div className="flex items-center gap-2">Emisión de Facturas Electrónicas {configEmisor.logo ? <img src={configEmisor.logo} alt="" className="h-8 w-8 object-contain rounded" /> : null}</div>
-          {emisorListo ? (
+          {emisorCargando ? (
+            <div className="mt-2 text-sm font-bold text-white/40">Cargando datos del emisor...</div>
+          ) : emisorListo ? (
             <div className="mt-1 text-[10px] font-bold text-white/80 leading-4">
               <div>{configEmisor.razon} · RUC {configEmisor.ruc}</div>
               <div>Matriz: {configEmisor.matriz || "—"} · Sucursal: {configEmisor.sucursal || "—"}</div>
@@ -1328,8 +1338,6 @@ const total = subtotalSin + iva15 + ivaDiferenciado + valorICE + valorIRBPNR + p
             <div className="flex justify-between text-lg border-t border-white/10 pt-2 mt-2"><span className="font-black">VALOR TOTAL A PAGAR:</span><b className="text-[#00f5d4] text-xl">${plata(total).toFixed(2)}</b></div>
             {items.length === 0 || total <= 0 ? <div className="text-right text-[11px] font-black text-white/40">Sin productos</div> : null}
           </div>
-
-<input type="password" autoComplete="new-password" value={claveFirma} onChange={(e) => setClaveFirma(e.target.value)} placeholder="Contraseña del .p12 (solo para firmar, no se guarda)" className="w-full mt-3 bg-black border border-white/10 rounded-xl p-3 text-xs text-white" />
 <div className="grid grid-cols-3 gap-2 mt-3">
   <button type="button" onClick={() => { if (bloqueoConsumidorFinal) return; setCajaAbierta(true) }} disabled={bloqueoConsumidorFinal} className={`font-black py-3 rounded-xl text-xs ${bloqueoConsumidorFinal ? "bg-white/10 text-white/30" : "bg-[#00f5d4] text-black"}`}>
     CAJA Y COBRO

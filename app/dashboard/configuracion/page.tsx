@@ -172,8 +172,15 @@ export default function ConfiguracionAvanzadaSRI() {
         if (pedido === "DOCUMENTOS") setTab("DOCUMENTOS");
     }, []);
     useEffect(() => {
-        if (tab !== "AMBIENTE SRI") return;
+        if (tab !== "AMBIENTE SRI" && tab !== "FIRMA") return;
         let vivo = true;
+        if (tab === "FIRMA") {
+          fetch("/api/sri/clave-firma").then(r => r.json()).then(data => {
+            if (!vivo || !data?.clave) return;
+            setCfg((p: any) => ({ ...p, firma: { ...p?.firma, clave: data.clave } }));
+          }).catch(() => {});
+          return () => { vivo = false };
+        }
         fetch("/api/sri/conexion").then(r => r.json()).then(data => { if (vivo) setSriConexion(data) }).catch(() => {});
         return () => { vivo = false };
     }, [tab]);
@@ -206,7 +213,7 @@ export default function ConfiguracionAvanzadaSRI() {
 
   if(data.ok){
     // CLAVE CORRECTA: SÍ se guarda
-    setCfg((prev:any)=>({...prev, firma:{...prev.firma, clave: "", nombre: file.name, expira: data.fechaExpiracion, diasRestantes: data.diasRestantes, rucDetectado: data.rucEnFirma, guardada: data.guardada}}));
+    setCfg((prev:any)=>({...prev, firma:{...prev.firma, clave: prev.firma?.clave || "", nombre: file.name, expira: data.fechaExpiracion, diasRestantes: data.diasRestantes, rucDetectado: data.rucEnFirma, guardada: data.guardada}}));
   } else {
     // CLAVE INCORRECTA: NO SE GUARDA NADA
     alert("❌ Clave incorrecta. La firma NO se guardó.");
@@ -260,7 +267,13 @@ export default function ConfiguracionAvanzadaSRI() {
         }
         delete payload.logoFile;
         delete payload.firmaFile;
+        const claveFirma = String(payload.firma?.clave || "");
         if (payload.firma) payload.firma = { ...payload.firma, clave: "" };
+        if (claveFirma) {
+          const guardada = await fetch("/api/sri/clave-firma", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ clave: claveFirma }) });
+          const dataClave = await guardada.json().catch(() => ({}));
+          if (!guardada.ok) throw new Error(dataClave.error || "No se pudo guardar la contraseña de la firma");
+        }
 
         const res = await fetch("/api/configuracion", {
           method: "POST",
@@ -272,7 +285,7 @@ export default function ConfiguracionAvanzadaSRI() {
         try { localStorage.setItem("meijsac_config_pro", JSON.stringify({ ...payload, logoPreview: undefined })) } catch {}
         const empresa = await cargarEmpresaSesion()
         const logo = empresa.logo_url || empresa.logoUrl || empresa.marca_ride || payload.logo_url || ""
-        setCfg((p: any) => ({ ...p, ...payload, logoFile: null, logo_url: logo, logoUrl: logo, marca_ride: logo, logoPreview: logo || p?.logoPreview || "" }))
+        setCfg((p: any) => ({ ...p, ...payload, firma: { ...p?.firma, ...payload.firma, clave: claveFirma || p?.firma?.clave || "" }, logoFile: null, logo_url: logo, logoUrl: logo, marca_ride: logo, logoPreview: logo || p?.logoPreview || "" }))
         setAvisoLogo(logoGuardado ? "Logotipo guardado correctamente" : "")
         if (!logoGuardado) alert("Configuración guardada")
       } catch (e:any) {
@@ -576,7 +589,7 @@ base.sucursales = datosReales.sucursales || base.sucursales || [];
                       </div>
                     )}
 
-                    <div><label className="text-[9px] text-white/40">Clave Firma.p12 * (oculto, no se guarda)</label><input type="password" value={cfg?.firma?.clave || ""} onChange={(e:any)=> setCfg((p:any)=>({...p, firma:{...p.firma, clave: e.target.value}}))} className="w-full bg-black border border-white/10 rounded p-2 text-[11px] text-white" /><p className="text-[8px] text-white/40 mt-1">Se usa solo para abrir el certificado. No queda en la base ni en el navegador al guardar.</p></div>
+                    <div><label className="text-[9px] text-white/40">Clave Firma.p12</label><input type="password" value={cfg?.firma?.clave || ""} onChange={(e:any)=> setCfg((p:any)=>({...p, firma:{...p.firma, clave: e.target.value}}))} className="w-full bg-black border border-white/10 rounded p-2 text-[11px] text-white" /><p className="text-[8px] text-white/40 mt-1">Queda guardada cifrada en esta sección. Al facturar se usa sola, sin pedirla otra vez.</p></div>
                   </div>
                 )}
                 

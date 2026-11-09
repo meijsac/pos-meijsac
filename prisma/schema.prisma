@@ -69,6 +69,7 @@ model FirmaElectronica {
   nombre     String
   p12Cifrado String   @db.Text
   titular    String   @default("")
+  claveCifrada String @default("")
   expira     DateTime
   updatedAt  DateTime @updatedAt
 
