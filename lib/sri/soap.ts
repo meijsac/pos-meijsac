@@ -1,4 +1,6 @@
 import { ambienteSri, type CodigoAmbiente } from "@/lib/sri/ambiente"
+import { enviarAlSri } from "@/lib/sri/cliente-sri"
+import type { SriAutorizacionResponse, SriRecepcionResponse } from "@/lib/sri/tipos"
 
 const ESPERA_MS = 25000
 const REINTENTOS = 2
@@ -16,6 +18,10 @@ export type ResultadoSri = {
   fechaRecepcion?: string
   estadoAutorizacion?: string
   mensajeAutorizacion?: string
+  conectado?: boolean
+  errorRed?: string
+  recepcionSri?: SriRecepcionResponse | null
+  autorizacionSri?: SriAutorizacionResponse | null
 }
 
 function textoTag(xml: string, tag: string) {
@@ -44,13 +50,16 @@ function sobreAutorizacion(clave: string) {
   return `<?xml version="1.0" encoding="UTF-8"?><soapenv:Envelope xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/" xmlns:ec="http://ec.gob.sri.ws.autorizacion"><soapenv:Header/><soapenv:Body><ec:autorizacionComprobante><claveAccesoComprobante>${clave}</claveAccesoComprobante></ec:autorizacionComprobante></soapenv:Body></soapenv:Envelope>`
 }
 
-async function postSoap(url: string, cuerpo: string, soapAction: string) {
+async function postSoap(url: string, cuerpo: string) {
   let ultimo = "El servicio del SRI no respondió"
   for (let intento = 0; intento <= REINTENTOS; intento++) {
     try {
       const res = await fetch(url, {
         method: "POST",
-        headers: { "Content-Type": "text/xml; charset=utf-8", SOAPAction: soapAction },
+        headers: {
+          "Content-Type": "text/xml; charset=utf-8",
+          SOAPAction: "\"\"",
+        },
         body: cuerpo,
         signal: AbortSignal.timeout(ESPERA_MS),
         cache: "no-store",
@@ -81,114 +90,31 @@ function zona(xml: string, tag: string) {
 }
 
 export async function enviarComprobante(entrada: { xmlFirmado: string; claveAcceso: string; ambiente: CodigoAmbiente }): Promise<ResultadoSri> {
-  const urls = ambienteSri(entrada.ambiente)
-  let recepcion = ""
-  try {
-    recepcion = await postSoap(urls.recepcion, sobreRecepcion(entrada.xmlFirmado), "validarComprobante")
-  } catch (e: any) {
-    return { enviado: false, bloqueado: false, estado: "PENDIENTE_DE_AUTORIZAR", mensaje: e.message, mensajes: [] }
-  }
-  const cajaRecepcion = zona(recepcion, "RespuestaRecepcionComprobante") || recepcion
-  const estadoRecepcion = textoTag(cajaRecepcion, "estado")
-  const avisos = mensajesSri(cajaRecepcion)
-  const fechaRecepcion = new Date().toLocaleString("es-EC", { timeZone: "America/Guayaquil" })
-  if (estadoRecepcion === "DEVUELTA") {
-    return {
-      enviado: true, bloqueado: false, estado: "DEVUELTA",
-      mensaje: avisos.join(" | ") || "DEVUELTA", mensajes: avisos,
-      estadoRecepcion: "DEVUELTA", mensajeRecepcion: avisos.join(" | ") || "DEVUELTA", fechaRecepcion,
-    }
-  }
-  if (estadoRecepcion !== "RECIBIDA") {
-    const falla = textoTag(recepcion, "faultstring")
-    return {
-      enviado: true, bloqueado: false, estado: "PENDIENTE_DE_AUTORIZAR",
-      mensaje: falla || avisos.join(" | ") || "El SRI no respondió RECIBIDA ni DEVUELTA", mensajes: avisos,
-      estadoRecepcion, mensajeRecepcion: falla || avisos.join(" | "), fechaRecepcion,
-    }
-  }
-  let leido = { estado: "", numero: "", fecha: "", mensajes: [] as string[] }
-  for (let intento = 0; intento < 3; intento++) {
-    if (intento > 0) await esperar(3000)
-    let autorizacion = ""
-    try {
-      autorizacion = await postSoap(urls.autorizacion, sobreAutorizacion(entrada.claveAcceso), "autorizacionComprobante")
-    } catch (e: any) {
-      if (intento === 2) {
-        return {
-          enviado: true, bloqueado: false, estado: "PENDIENTE_DE_AUTORIZAR",
-          mensaje: `El SRI recibió el comprobante y todavía no autoriza: ${e.message}`, mensajes: avisos,
-          estadoRecepcion: "RECIBIDA", mensajeRecepcion: avisos.join(" | ") || "RECIBIDA", fechaRecepcion,
-        }
-      }
-      continue
-    }
-    const caja = zona(autorizacion, "autorizacion")
-    leido = {
-      estado: caja ? textoTag(caja, "estado") : "",
-      numero: caja ? textoTag(caja, "numeroAutorizacion") : "",
-      fecha: caja ? textoTag(caja, "fechaAutorizacion") : "",
-      mensajes: mensajesSri(caja || autorizacion),
-    }
-    if (leido.estado === "AUTORIZADO" || leido.estado === "NO AUTORIZADO") break
-  }
-  if (leido.estado === "AUTORIZADO" && leido.fecha) {
-    return {
-      enviado: true,
-      bloqueado: false,
-      estado: "AUTORIZADO",
-      mensaje: leido.mensajes.join(" | ") || "AUTORIZADO",
-      numeroAutorizacion: leido.numero || entrada.claveAcceso,
-      fechaAutorizacion: leido.fecha,
-      mensajes: leido.mensajes,
-      estadoRecepcion: "RECIBIDA",
-      mensajeRecepcion: avisos.join(" | ") || "RECIBIDA",
-      fechaRecepcion: new Date().toLocaleString("es-EC", { timeZone: "America/Guayaquil" }),
-      estadoAutorizacion: "AUTORIZADO",
-      mensajeAutorizacion: leido.mensajes.join(" | ") || "AUTORIZADO",
-    }
-  }
-  if (leido.estado === "AUTORIZADO" && !leido.fecha) {
-    return {
-      enviado: true,
-      bloqueado: false,
-      estado: "PENDIENTE_DE_AUTORIZAR",
-      mensaje: "El SRI respondió AUTORIZADO, pero no devolvió la fecha de autorización.",
-      numeroAutorizacion: leido.numero || "",
-      fechaAutorizacion: "",
-      mensajes: leido.mensajes,
-      estadoRecepcion: "RECIBIDA",
-      mensajeRecepcion: avisos.join(" | ") || "RECIBIDA",
-      fechaRecepcion: new Date().toLocaleString("es-EC", { timeZone: "America/Guayaquil" }),
-      estadoAutorizacion: "",
-      mensajeAutorizacion: "Sin fecha de autorización del SRI",
-    }
-  }
-  if (leido.estado === "NO AUTORIZADO") {
-    return {
-      enviado: true,
-      bloqueado: false,
-      estado: "NO AUTORIZADO",
-      mensaje: leido.mensajes.join(" | ") || "NO AUTORIZADO",
-      mensajes: leido.mensajes,
-      estadoRecepcion: "RECIBIDA",
-      mensajeRecepcion: avisos.join(" | ") || "RECIBIDA",
-      fechaRecepcion: new Date().toLocaleString("es-EC", { timeZone: "America/Guayaquil" }),
-      estadoAutorizacion: "NO AUTORIZADO",
-      mensajeAutorizacion: leido.mensajes.join(" | ") || "NO AUTORIZADO",
-    }
-  }
+  const real = await enviarAlSri(entrada)
+  const fecha = real.fechaAutorizacion || ""
+  const estado = real.status === "AUTORIZADO" && fecha
+    ? "AUTORIZADO"
+    : real.status === "DEVUELTA"
+      ? "DEVUELTA"
+      : real.status === "RECHAZADO"
+        ? "NO AUTORIZADO"
+        : "PENDIENTE_DE_AUTORIZAR"
   return {
-    enviado: true,
+    enviado: real.conectado,
     bloqueado: false,
-    estado: "PENDIENTE_DE_AUTORIZAR",
-    mensaje: leido.mensajes.join(" | ") || "El SRI recibió el comprobante y todavía no devuelve autorización",
-    mensajes: leido.mensajes,
-    estadoRecepcion: "RECIBIDA",
-    mensajeRecepcion: avisos.join(" | ") || "RECIBIDA",
-    fechaRecepcion: new Date().toLocaleString("es-EC", { timeZone: "America/Guayaquil" }),
-    estadoAutorizacion: "",
-    mensajeAutorizacion: "",
+    estado,
+    mensaje: real.mensajes.join(" | ") || real.error || real.status,
+    numeroAutorizacion: fecha ? real.numeroAutorizacion : "",
+    fechaAutorizacion: fecha,
+    mensajes: real.mensajes,
+    estadoRecepcion: real.recepcion?.RespuestaRecepcionComprobantes.estado || "",
+    mensajeRecepcion: real.mensajes.join(" | "),
+    estadoAutorizacion: estado === "AUTORIZADO" ? "AUTORIZADO" : real.status === "RECHAZADO" ? "RECHAZADO" : "",
+    mensajeAutorizacion: real.mensajes.join(" | "),
+    conectado: real.conectado,
+    errorRed: real.error,
+    recepcionSri: real.recepcion,
+    autorizacionSri: real.autorizacion,
   }
 }
 
@@ -196,7 +122,7 @@ export async function consultarAutorizacion(entrada: { claveAcceso: string; ambi
   const urls = ambienteSri(entrada.ambiente)
   let autorizacion = ""
   try {
-    autorizacion = await postSoap(urls.autorizacion, sobreAutorizacion(entrada.claveAcceso), "autorizacionComprobante")
+    autorizacion = await postSoap(urls.autorizacion, sobreAutorizacion(entrada.claveAcceso))
   } catch (e: any) {
     return {
       enviado: true,

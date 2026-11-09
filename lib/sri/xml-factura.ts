@@ -74,13 +74,21 @@ export function armarXmlFactura(empresa: {
   if (!compradorId || !comprador) faltantes.push("Faltan la identificación y la razón social del comprador")
   if (faltantes.length) throw new FaltanDatosSri(faltantes)
 
-  const serie = String(body?.establecimiento || "001-001")
-  const [estabRaw, ptoRaw] = serie.split("-")
-  const estab = (estabRaw || "001").replace(/\D/g, "").padStart(3, "0").slice(-3)
-  const pto = (ptoRaw || "001").replace(/\D/g, "").padStart(3, "0").slice(-3)
+  const serie = String(body?.establecimiento || (body?.estadoSRI === "BORRADOR" ? "001-001" : "")).trim()
+  if (!/^\d{3}-\d{3}$/.test(serie)) faltantes.push("Falta el punto de emisión activo de Configuración")
   const secuencial = String(body?.secuencial || "").replace(/\D/g, "").padStart(9, "0").slice(-9)
+  if (!secuencial || secuencial === "000000000") faltantes.push("Falta el secuencial del punto activo")
+  if (faltantes.length) throw new FaltanDatosSri(faltantes)
+  const [estabRaw, ptoRaw] = serie.split("-")
+  let estab = estabRaw
+  let pto = ptoRaw
   const fecha = fechaSri(body?.fechaEmisionFormato || body?.fechaEmision)
   const ambiente = codigoAmbiente(extra.ambiente || extra.ambienteCodigo || body?.configEmisor?.ambiente)
+  if (body?.estadoSRI !== "BORRADOR") {
+    const fija = ambiente === "2" ? "001-001" : "001-002"
+    estab = fija.slice(0, 3)
+    pto = fija.slice(4)
+  }
   const obligado = obligadoRaw === "SI" ? "SI" : "NO"
   const comercial = String(empresa.nombreComercial || "").trim()
   const dirEstablecimiento = String(

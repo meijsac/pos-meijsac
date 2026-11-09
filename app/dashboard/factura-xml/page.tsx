@@ -2,6 +2,7 @@
 import { useState, useEffect, useRef } from "react"
 import Link from "next/link"
 import ModalCajaMixto from "./components/ModalCajaMixto"
+import { elegirSecuencial, puntoActivoFactura } from "@/lib/sri/punto-emision"
 
 function codigosProducto(p: any) {
   return [p?.codigo, p?.codigoBarras, p?.codigo_barras, p?.codigoAuxiliar, p?.codigoInterno, p?.codigo_interno, p?.sku, p?.codigoAlterno, p?.codigo_alterno]
@@ -110,9 +111,35 @@ const Chisme = ({texto, titulo}:{texto:string, titulo:string}) => (
 
 export default function FacturadorXMLReal(){
   const [fecha, setFecha] = useState("")
-  const [secuencial] = useState("000000015")
-  const codigoEstab = (clienteRef: { tipoEstablecimiento?: string; codSucursal?: string }) =>
-    (clienteRef?.tipoEstablecimiento === "sucursal" ? String(clienteRef.codSucursal || "002") : "001").replace(/\D/g, "").padStart(3, "0").slice(-3) || "001"
+  const [puntoEmision, setPuntoEmision] = useState({ ambiente: "1" as "1" | "2", nombre: "PRUEBAS", serie: "001-002", secuencial: "000000001", ultimo: "", indice: -1 })
+  const cargarPunto = () => {
+    let cfg: any = {}
+    try { cfg = JSON.parse(localStorage.getItem("meijsac_config_pro") || "{}") } catch { cfg = {} }
+    const leido = puntoActivoFactura(cfg.secuenciales, cfg.ambiente)
+    const usados = new Set<string>()
+    for (const clave of ["meijsac_comprobantes_sri", "meijsac_comprobantes_emitidos", "meijsac_enviados_sri"]) {
+      try {
+        const lista = JSON.parse(localStorage.getItem(clave) || "[]")
+        for (const d of lista) {
+          const partes = String(d?.secuencial || "").split("-")
+          const est = partes.length >= 3 ? `${partes[0]}-${partes[1]}` : String(d?.establecimiento || "")
+          if (est !== leido.punto.serie) continue
+          const n = (partes.length >= 3 ? partes[2] : String(d?.secuencial || "")).replace(/\D/g, "").padStart(9, "0").slice(-9)
+          if (n && n !== "000000000") usados.add(n)
+        }
+      } catch {}
+    }
+    const codigo = String(cfg.ambiente || "").toUpperCase().includes("PROD") || String(cfg.ambiente) === "2" ? "2" : "1"
+    setPuntoEmision({
+      ambiente: codigo as "1" | "2",
+      nombre: codigo === "2" ? "PRODUCCIÓN" : "PRUEBAS",
+      serie: leido.punto.serie,
+      secuencial: elegirSecuencial("", leido.punto.ultimo, usados),
+      ultimo: leido.punto.ultimo,
+      indice: leido.punto.indice,
+    })
+  }
+  useEffect(() => { cargarPunto() }, [])
   const [configEmisor, setConfigEmisor] = useState<any>({})
   const [emisorListo, setEmisorListo] = useState(false)
   const [emisorCargando, setEmisorCargando] = useState(true)
@@ -672,9 +699,9 @@ const total = subtotalSin + iva15 + ivaDiferenciado + valorICE + valorIRBPNR + p
     const ddmmyyyy = new Date().toLocaleDateString('es-EC').replace(/\//g,"").padStart(8,"0")
     const tipoComp = "01"
     const ruc = configEmisor.ruc || ""
-    const amb = configEmisor.ambiente==="PRODUCCIÓN"?"2":"1"
-    const establecimiento = `${codigoEstab(cliente)}-001`
-    const serie = establecimiento.replace("-","")+secuencial.padStart(9,"0")
+    const amb = puntoEmision.ambiente
+    const establecimiento = puntoEmision.serie
+    const serie = establecimiento.replace("-","")+puntoEmision.secuencial.padStart(9,"0")
     const codigoNum = "12345678"
     const tipoEmision = "1"
     const clave48 = `${ddmmyyyy}${tipoComp}${ruc}${amb}${serie}${codigoNum}${tipoEmision}`
@@ -774,9 +801,10 @@ const total = subtotalSin + iva15 + ivaDiferenciado + valorICE + valorIRBPNR + p
       claveAcceso: clave,
       fechaEmision: new Date().toISOString(),
       fechaEmisionFormato: fecha,
-      establecimiento: `${codigoEstab(cliente)}-001`,
+      establecimiento: puntoEmision.serie,
       tipoEstablecimiento: cliente.tipoEstablecimiento === "sucursal" ? "sucursal" : "matriz",
-      secuencial: secuencial,
+      secuencial: puntoEmision.secuencial,
+      ultimoSecuencial: puntoEmision.ultimo,
       configEmisor: configEmisor,
       cliente: cliente,
       items: items,
@@ -861,19 +889,24 @@ const total = subtotalSin + iva15 + ivaDiferenciado + valorICE + valorIRBPNR + p
     }
 
     try {
-      const guardado = await fetch("/api/facturas", { method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${localStorage.getItem("meijsac_token") || ""}` }, body: JSON.stringify({ ...facturaPendiente, estadoSRI: "PENDIENTE_DE_AUTORIZAR" }) })
+      const guardado = await fetch("/api/facturar", { method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${localStorage.getItem("meijsac_token") || ""}` }, body: JSON.stringify({ ...facturaPendiente, estadoSRI: "PENDIENTE_DE_AUTORIZAR" }) })
+      const guardada = await guardado.json().catch(() => ({}))
       if (!guardado.ok) {
-        const err = await guardado.json().catch(() => ({}))
-        const faltan = Array.isArray(err.faltantes) ? `\n${err.faltantes.join("\n")}` : ""
-        alert((err.error || "No se pudo guardar la factura en la base.") + faltan)
+        const faltan = Array.isArray(guardada.faltantes) ? `\n${guardada.faltantes.join("\n")}` : ""
+        alert((guardada.error || "No se pudo guardar la factura en la base.") + faltan)
+        cargarPunto()
         return
       }
-      const guardada = await guardado.json().catch(() => ({}))
+      const serieUsada = guardada.establecimiento || puntoEmision.serie
+      const secUsado = guardada.secuencial || puntoEmision.secuencial
+      facturaPendiente.establecimiento = serieUsada
+      facturaPendiente.secuencial = secUsado
       facturaPendiente.facturaId = guardada.id
       if (guardada.claveAcceso) facturaPendiente.claveAcceso = guardada.claveAcceso
       if (guardada.xml) facturaPendiente.xmlContent = guardada.xml
-      facturaPendiente.estado = guardada.estado || "PENDIENTE_DE_AUTORIZAR"
-      facturaPendiente.estadoSRI = guardada.estado || "PENDIENTE_DE_AUTORIZAR"
+      const estadoVisible = guardada.fechaAutorizacion ? "AUTORIZADO" : (guardada.estado === "RECHAZADO" || String(guardada.estadoRecepcion || "").includes("DEVUELT") ? "RECHAZADO" : "PENDIENTE")
+      facturaPendiente.estado = estadoVisible
+      facturaPendiente.estadoSRI = estadoVisible
       facturaPendiente.firmado = Boolean(guardada.firmado)
       facturaPendiente.numeroAutorizacion = guardada.numeroAutorizacion || ""
       facturaPendiente.fechaAutorizacion = guardada.fechaAutorizacion || ""
@@ -883,13 +916,13 @@ const total = subtotalSin + iva15 + ivaDiferenciado + valorICE + valorIRBPNR + p
         id: guardada.id || facturaPendiente.id,
         facturaId: guardada.id,
         tipoComprobante: "01",
-        secuencial: `${facturaPendiente.establecimiento}-${facturaPendiente.secuencial}`,
+        secuencial: `${serieUsada}-${secUsado}`,
         claveAcceso: facturaPendiente.claveAcceso,
         fechaEmision: facturaPendiente.fechaEmisionFormato,
         receptorIdentificacion: facturaPendiente.cliente?.identificacion,
         receptorNombre: facturaPendiente.cliente?.razon,
         valorTotal: facturaPendiente.totales?.total,
-        estadoSRI: guardada.fechaAutorizacion ? "AUTORIZADO" : (guardada.estado || "PENDIENTE_DE_AUTORIZAR"),
+        estadoSRI: estadoVisible,
         fechaAutorizacion: guardada.fechaAutorizacion || "",
         numeroAutorizacion: guardada.numeroAutorizacion || "",
         mensajeSri: guardada.mensaje || "",
@@ -906,8 +939,20 @@ const total = subtotalSin + iva15 + ivaDiferenciado + valorICE + valorIRBPNR + p
         const previa = JSON.parse(localStorage.getItem(clave) || "[]")
         localStorage.setItem(clave, JSON.stringify([...previa, listaDoc]))
       })
+      try {
+        const cfg = JSON.parse(localStorage.getItem("meijsac_config_pro") || "{}")
+        const lista = Array.isArray(cfg.secuenciales) ? cfg.secuenciales : []
+        const [estab, pto] = String(serieUsada).split("-")
+        const i = lista.findIndex((s: any) => String(s?.estab || "").padStart(3, "0").slice(-3) === estab && String(s?.pto || "").padStart(3, "0").slice(-3) === pto)
+        if (i < 0) lista.push({ estab, pto, codigo: "01", tipo: "01 FACTURA", ultimo: secUsado, estado: "ACTIVO" })
+        else lista[i] = { ...lista[i], ultimo: secUsado, estado: lista[i].estado || "ACTIVO" }
+        cfg.secuenciales = lista
+        localStorage.setItem("meijsac_config_pro", JSON.stringify(cfg))
+      } catch {}
+      cargarPunto()
       localStorage.setItem("meijsac_ultima_factura_pendiente", JSON.stringify(facturaPendiente))
       setComprobanteEmitido({ ...listaDoc, xmlContent: facturaPendiente.xmlContent || guardada.xml || "" })
+      if (guardada.conectado === false) alert(guardada.error === "Timeout" ? "Timeout" : (guardada.error || guardada.mensaje || "No hubo conexión con el SRI."))
     } catch {
       alert("No se pudo guardar la factura en la base.")
       return
@@ -997,7 +1042,11 @@ const total = subtotalSin + iva15 + ivaDiferenciado + valorICE + valorIRBPNR + p
             <div className="mt-2 bg-red-500/20 border-2 border-red-500 text-red-100 text-sm font-bold p-3 rounded-xl">Faltan datos del emisor en Configuración</div>
           )}
         </div>
-        <div className="flex gap-4 text-[10px]"><div>FECHA<br/><b>{fecha}</b></div><div>PUNTO<br/><b>{codigoEstab(cliente)}-001</b></div><div>SEC<br/><b className="text-[#00f5d4]">{secuencial}</b></div><b suppressHydrationWarning>{fecha || "---"}</b></div>
+        <div className="text-right select-none">
+          <div className="text-[22px] font-black tracking-wide text-[#00f5d4]">{puntoEmision.nombre} - {puntoEmision.serie}</div>
+          <div className="font-mono text-sm font-bold">{puntoEmision.serie}-{puntoEmision.secuencial}</div>
+          <div className="text-[10px]">FECHA <b suppressHydrationWarning>{fecha || "---"}</b></div>
+        </div>
       </div>
 
       <div className="grid grid-cols-3 gap-3">

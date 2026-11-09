@@ -26,8 +26,19 @@ export function codigoAmbiente(valor: unknown): CodigoAmbiente {
   return "1"
 }
 
+export function urlOperacionSri(wsdl: string) {
+  return wsdl.replace(/\?wsdl$/i, "")
+}
+
 export function ambienteSri(valor: unknown) {
-  return SRI_AMBIENTES[codigoAmbiente(valor)]
+  const ambiente = SRI_AMBIENTES[codigoAmbiente(valor)]
+  return {
+    ...ambiente,
+    wsdlRecepcion: ambiente.recepcion,
+    wsdlAutorizacion: ambiente.autorizacion,
+    recepcion: urlOperacionSri(ambiente.recepcion),
+    autorizacion: urlOperacionSri(ambiente.autorizacion),
+  }
 }
 
 export function envioSriPermitido(_ambiente: CodigoAmbiente) {

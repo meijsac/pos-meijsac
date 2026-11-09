@@ -8,6 +8,7 @@ import { firmarFacturaXml } from "@/lib/sri/firmar"
 import { codigoAmbiente } from "@/lib/sri/ambiente"
 import { enviarComprobante } from "@/lib/sri/soap"
 import { clasificarEstadoSri } from "@/lib/sri/estado-visible"
+import { elegirSecuencial, serieDeAmbiente } from "@/lib/sri/punto-emision"
 import { desencriptarBytes, desencriptar } from "@/lib/seguridad"
 
 export const maxDuration = 60
@@ -24,6 +25,28 @@ export async function POST(req: Request) {
     const claveFirma = String(body?.claveFirma || "")
     delete body.claveFirma
     if (body?.firma) delete body.firma.clave
+    const extraPrevio = sesion.empresa.datosRegistro && typeof sesion.empresa.datosRegistro === "object" && !Array.isArray(sesion.empresa.datosRegistro)
+      ? sesion.empresa.datosRegistro as Record<string, unknown>
+      : {}
+    const ambientePrevio = codigoAmbiente(extraPrevio.ambiente || extraPrevio.ambienteCodigo || body?.configEmisor?.ambiente)
+    if (body?.estadoSRI !== "BORRADOR") {
+      const serie = serieDeAmbiente(ambientePrevio)
+      const previas = await prisma.facturaEmitida.findMany({
+        where: { empresaId: sesion.empresa.id },
+        select: { payload: true },
+        orderBy: { createdAt: "desc" },
+        take: 400,
+      })
+      const usados = new Set<string>()
+      for (const fila of previas) {
+        const p = (fila.payload || {}) as any
+        if (String(p.establecimiento || "") !== serie) continue
+        const n = String(p.secuencial || "").replace(/\D/g, "").padStart(9, "0").slice(-9)
+        if (n && n !== "000000000") usados.add(n)
+      }
+      body.establecimiento = serie
+      body.secuencial = elegirSecuencial(String(body.secuencial || ""), String(body.ultimoSecuencial || ""), usados)
+    }
     let armado: ReturnType<typeof armarXmlFactura>
     try {
       armado = armarXmlFactura(sesion.empresa, body)
@@ -50,6 +73,22 @@ export async function POST(req: Request) {
       firmado = true
     } catch (e: any) {
       return NextResponse.json({ error: e.message || "No se pudo firmar el XML" }, { status: 400 })
+    }
+    if (body?.estadoSRI !== "BORRADOR") {
+      const previas = await prisma.facturaEmitida.findMany({
+        where: { empresaId: sesion.empresa.id },
+        select: { payload: true },
+        orderBy: { createdAt: "desc" },
+        take: 400,
+      })
+      const serie = `${armado.estab}-${armado.pto}`
+      const repetida = previas.some((fila) => {
+        const p = (fila.payload || {}) as any
+        const est = String(p.establecimiento || "")
+        const sec = String(p.secuencial || "").replace(/\D/g, "").padStart(9, "0").slice(-9)
+        return est === serie && sec === armado.secuencial
+      })
+      if (repetida) return NextResponse.json({ error: `El secuencial ${serie}-${armado.secuencial} ya existe. No se puede emitir otra vez.` }, { status: 409 })
     }
     body.claveAcceso = armado.claveAcceso
     body.establecimiento = `${armado.estab}-${armado.pto}`
@@ -86,7 +125,8 @@ export async function POST(req: Request) {
     }
     const resultado = await enviarComprobante({ xmlFirmado: xml, claveAcceso: armado.claveAcceso, ambiente })
     const fechaSri = resultado.fechaAutorizacion || ""
-    const estadoGuardado = clasificarEstadoSri(resultado.estado, fechaSri) === "AUTORIZADO" ? "AUTORIZADO" : resultado.estado
+    const visible = clasificarEstadoSri(resultado.estado, fechaSri)
+    const estadoGuardado = visible === "AUTORIZADO" ? "AUTORIZADO" : visible
     body.estadoSRI = estadoGuardado
     body.mensajeSri = resultado.mensaje
     body.mensajesSri = resultado.mensajes
@@ -98,6 +138,9 @@ export async function POST(req: Request) {
     body.estadoAutorizacion = resultado.estadoAutorizacion || ""
     body.mensajeAutorizacion = resultado.mensajeAutorizacion || ""
     body.enviado = resultado.enviado
+    body.conectado = resultado.conectado !== false
+    body.sriRecepcion = resultado.recepcionSri || null
+    body.sriAutorizacion = resultado.autorizacionSri || null
     try {
       await prisma.facturaEmitida.update({
         where: { id: factura.id },
@@ -107,6 +150,8 @@ export async function POST(req: Request) {
     return NextResponse.json({
       id: factura.id,
       claveAcceso: armado.claveAcceso,
+      establecimiento: `${armado.estab}-${armado.pto}`,
+      secuencial: armado.secuencial,
       estado: estadoGuardado,
       mensaje: resultado.mensaje,
       mensajes: resultado.mensajes,
@@ -118,9 +163,21 @@ export async function POST(req: Request) {
       xml,
       firmado,
       enviado: resultado.enviado,
+      conectado: resultado.conectado !== false,
+      error: resultado.errorRed || "",
+      status: resultado.estado === "DEVUELTA" || resultado.estadoRecepcion === "DEVUELTA" ? "DEVUELTA" : estadoGuardado,
+      sriRecepcion: resultado.recepcionSri || null,
+      sriAutorizacion: resultado.autorizacionSri || null,
     })
   } catch (e: any) {
-    return NextResponse.json({ error: e.message || "No se pudo guardar la factura" }, { status: 500 })
+    const code = String(e?.cause?.code || e?.code || e?.codigo || "")
+    if (e?.name === "TimeoutError" || code === "Timeout" || code === "ETIMEDOUT") {
+      return NextResponse.json({ conectado: false, error: "Timeout" })
+    }
+    if (code === "ENOTFOUND" || code === "ECONNREFUSED") {
+      return NextResponse.json({ conectado: false, error: code })
+    }
+    return NextResponse.json({ conectado: false, error: e.message || "No se pudo guardar la factura" }, { status: 500 })
   }
 }
 
