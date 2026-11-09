@@ -34,14 +34,24 @@ function fechaSri(valor: unknown) {
   return new Date().toLocaleDateString("es-EC", { day: "2-digit", month: "2-digit", year: "numeric" })
 }
 
+export const ID_CONSUMIDOR_FINAL = "9999999999999"
+
+export function normalizarComprador(cliente: any) {
+  const razon = String(cliente?.razon || "").trim()
+  const digitos = String(cliente?.identificacion || "").replace(/\D/g, "")
+  const esFinal = razon.toUpperCase().includes("CONSUMIDOR FINAL") || digitos === ID_CONSUMIDOR_FINAL || /^9{13,}$/.test(digitos)
+  if (!esFinal) return cliente
+  return { ...cliente, tipoDoc: "07", tipoId: "07", identificacion: ID_CONSUMIDOR_FINAL, razon: razon || "CONSUMIDOR FINAL" }
+}
+
 function tipoIdentificacion(id: string, codigo?: unknown) {
+  const limpio = id.replace(/\s/g, "").replace(/\D/g, "")
+  if (limpio === ID_CONSUMIDOR_FINAL || /^9{13,}$/.test(limpio)) return "07"
   const digitos = String(codigo ?? "").replace(/\D/g, "")
   if (digitos) {
     const c = digitos.padStart(2, "0")
     if (c === "04" || c === "05" || c === "06" || c === "07" || c === "08") return c
   }
-  const limpio = id.replace(/\s/g, "")
-  if (limpio === "9999999999999") return "07"
   if (/^\d{13}$/.test(limpio)) return "04"
   if (/^\d{10}$/.test(limpio)) return "05"
   return "06"
@@ -68,9 +78,11 @@ export function armarXmlFactura(empresa: {
   if (obligadoRaw !== "SI" && obligadoRaw !== "NO") faltantes.push("Falta obligado a llevar contabilidad (SI o NO)")
   const items = Array.isArray(body?.items) ? body.items : []
   if (items.length === 0) faltantes.push("La factura no tiene ítems")
-  const compradorTipo = body?.cliente?.tipoDoc || body?.cliente?.tipoId
-  const compradorId = String(body?.cliente?.identificacion || "").trim()
-  const comprador = String(body?.cliente?.razon || "").trim()
+  const compradorNormal = normalizarComprador(body?.cliente)
+  if (body) body.cliente = compradorNormal
+  const compradorTipo = compradorNormal?.tipoDoc || compradorNormal?.tipoId
+  const compradorId = String(compradorNormal?.identificacion || "").trim()
+  const comprador = String(compradorNormal?.razon || "").trim()
   if (!compradorId || !comprador) faltantes.push("Faltan la identificación y la razón social del comprador")
   if (faltantes.length) throw new FaltanDatosSri(faltantes)
 

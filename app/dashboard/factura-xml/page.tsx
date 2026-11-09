@@ -3,6 +3,8 @@ import { useState, useEffect, useRef } from "react"
 import Link from "next/link"
 import ModalCajaMixto from "./components/ModalCajaMixto"
 import { elegirSecuencial, puntoActivoFactura } from "@/lib/sri/punto-emision"
+import { htmlRide } from "@/lib/sri/ride-html"
+import { normalizarComprador } from "@/lib/sri/xml-factura"
 
 function codigosProducto(p: any) {
   return [p?.codigo, p?.codigoBarras, p?.codigo_barras, p?.codigoAuxiliar, p?.codigoInterno, p?.codigo_interno, p?.sku, p?.codigoAlterno, p?.codigo_alterno]
@@ -271,8 +273,8 @@ export default function FacturadorXMLReal(){
         if (vivo && cf) {
           setCliente((prev: any) => ({
             ...prev,
-            tipoDoc: cf.tipoId || "07",
-            identificacion: cf.identificacion,
+            tipoDoc: "07",
+            identificacion: "9999999999999",
             razon: cf.razonSocial,
             direccion: cf.direccion || "QUITO",
             email: cf.email || "",
@@ -292,7 +294,7 @@ export default function FacturadorXMLReal(){
 
 
   const [cliente, setCliente] = useState<any>({
-    tipoDoc:"05", identificacion:"9999999999999", razon:"CONSUMIDOR FINAL",
+    tipoDoc:"07", identificacion:"9999999999999", razon:"CONSUMIDOR FINAL",
     tipold: "",
     direccion:"QUITO",
     email:"",
@@ -452,7 +454,6 @@ const toggleTurismoFeriado = (checked: boolean) => {
   const [tarjetaData, setTarjetaData] = useState({ tipoSRI:"19", forma:"CORRIENTE", plazo:0, franquicia:"Datafast - Visa / Mastercard" })
   const [conteoCaja, setConteoCaja] = useState({ "100":0,"50":0,"20":0,"10":0,"5":0,"1":0,"0.50":0,"0.25":0,"0.10":0,"0.05":0,"0.01":0 } as any)
   const [pagoRealizado, setPagoRealizado] = useState(false)
-  const [comprobanteEmitido, setComprobanteEmitido] = useState<any>(null)
   const [cajaAbierta, setCajaAbierta] = useState(false)
   const [tipoCobro, setTipoCobro] = useState<'efectivo'|'tarjeta'|'transfer'|'pendiente'|'credito'>('efectivo')
   const [refTarjeta, setRefTarjeta] = useState("")
@@ -766,10 +767,11 @@ const total = subtotalSin + iva15 + ivaDiferenciado + valorICE + valorIRBPNR + p
     if (itemSinTarifa) return alert("Hay un producto sin tarifa IVA. No se puede emitir.")
     if(!pagoRealizado) return alert("Primero cobra en CAJA")
     if (tipoCobro === "credito" && (!(plazoCredito > 0) || !(cuotasCredito >= 1))) return alert("Para crédito debes poner plazo y cuotas")
+    const venta = window.open("", "_blank")
     const { emisionBloqueada, rucLocal } = await import("@/lib/plan-cliente")
     const avisoPlan = await emisionBloqueada(configEmisor?.ruc || rucLocal())
-    if (avisoPlan) return alert(avisoPlan)
-    if (!Number.isFinite(total)) return alert("No se puede emitir: faltan valores de la factura que no se pueden calcular.")
+    if (avisoPlan) { venta?.close(); return alert(avisoPlan) }
+    if (!Number.isFinite(total)) { venta?.close(); return alert("No se puede emitir: faltan valores de la factura que no se pueden calcular.") }
     const sinCobro = tipoCobro === "pendiente" || tipoCobro === "credito"
     const netoEmit = sinCobro ? 0 : (Number.isFinite(Number(pagosReales.efectivo)) ? Number(pagosReales.efectivo) : 0)
     const entregadoCaja = Number(abonos.efectivo || 0) + Number(abonos.transfer || 0) + Number(abonos.tarjeta || 0)
@@ -820,6 +822,8 @@ const total = subtotalSin + iva15 + ivaDiferenciado + valorICE + valorIRBPNR + p
       const mesa = mesas.find((m: any) => m.id === transitoActual?.mesaOrigenId)
       mesaNombre = mesa?.nombre || transitoActual?.mesaNombre || ""
     } catch {}
+    const clienteFactura = normalizarComprador(cliente)
+    if (clienteFactura !== cliente) setCliente(clienteFactura)
     const facturaPendiente: any = {
       id: Date.now(),
       claveAcceso: clave,
@@ -830,7 +834,7 @@ const total = subtotalSin + iva15 + ivaDiferenciado + valorICE + valorIRBPNR + p
       secuencial: puntoEmision.secuencial,
       ultimoSecuencial: puntoEmision.ultimo,
       configEmisor: configEmisor,
-      cliente: cliente,
+      cliente: clienteFactura,
       items: items,
       totales: { bruto, descuento, subtotalSin, base15, base0, baseNoObjeto, baseExento, baseDiferenciado, valorICE, valorIRBPNR, iva15, ivaDiferenciado, propina, total },
       formaPago: formaPagoEmit,
@@ -923,6 +927,7 @@ const total = subtotalSin + iva15 + ivaDiferenciado + valorICE + valorIRBPNR + p
       const guardada = await guardado.json().catch(() => ({}))
       if (!guardado.ok) {
         const faltan = Array.isArray(guardada.faltantes) ? `\n${guardada.faltantes.join("\n")}` : ""
+        venta?.close()
         alert((guardada.error || "No se pudo guardar la factura en la base.") + faltan)
         cargarPunto()
         return
@@ -981,9 +986,48 @@ const total = subtotalSin + iva15 + ivaDiferenciado + valorICE + valorIRBPNR + p
       } catch {}
       cargarPunto()
       localStorage.setItem("meijsac_ultima_factura_pendiente", JSON.stringify(facturaPendiente))
-      setComprobanteEmitido({ ...listaDoc, xmlContent: facturaPendiente.xmlContent || guardada.xml || "" })
-      if (guardada.conectado === false) alert(guardada.error === "Timeout" ? "Timeout" : (guardada.error || guardada.mensaje || "No hubo conexión con el SRI."))
+      if (venta) {
+        const t = facturaPendiente.totales || {}
+        venta.document.open()
+        venta.document.write(htmlRide({
+          razonSocial: configEmisor.razon || "",
+          nombreComercial: configEmisor.comercial || "",
+          ruc: configEmisor.ruc || "",
+          dirMatriz: configEmisor.matriz || "",
+          dirSucursal: configEmisor.sucursal || "",
+          obligado: configEmisor.obligado || "",
+          regimen: configEmisor.regimen || "",
+          logoUrl: configEmisor.logo || "",
+          numeroFactura: `${serieUsada}-${secUsado}`,
+          claveAcceso: facturaPendiente.claveAcceso || "",
+          fechaAutorizacion: guardada.fechaAutorizacion || "—",
+          ambiente: configEmisor.ambiente || "PRUEBAS",
+          cliente: facturaPendiente.cliente?.razon || "",
+          identificacion: facturaPendiente.cliente?.identificacion || "9999999999999",
+          fechaEmision: facturaPendiente.fechaEmisionFormato || "",
+          email: facturaPendiente.cliente?.email || "",
+          direccionCliente: facturaPendiente.cliente?.direccion || "",
+          formaPago: facturaPendiente.formaPago || "",
+          items: facturaPendiente.items || [],
+          base15: t.base15,
+          base0: t.base0,
+          baseNoObjeto: t.baseNoObjeto,
+          baseExento: t.baseExento,
+          subtotalSin: t.subtotalSin,
+          descuento: t.descuento,
+          ice: t.valorICE,
+          iva: t.iva15,
+          propina: t.propina,
+          total: t.total,
+          mensajeSri: guardada.fechaAutorizacion ? "" : (guardada.mensaje || ""),
+        }))
+        venta.document.close()
+      } else {
+        alert("El navegador bloqueó la pestaña del comprobante. Permite ventanas emergentes para imprimir.")
+      }
+      if (guardada.conectado === false) alert(guardada.error || guardada.mensaje || "No hubo conexión con el SRI.")
     } catch {
+      venta?.close()
       alert("No se pudo guardar la factura en la base.")
       return
     }
@@ -1432,36 +1476,6 @@ const total = subtotalSin + iva15 + ivaDiferenciado + valorICE + valorIRBPNR + p
     {configEmisor.ambiente === "PRODUCCIÓN" ? "ENVIAR A SRI PRODUCCIÓN" : "ENVIAR A SRI PRUEBAS"}
   </button>
 </div>
-{comprobanteEmitido && (
-  <div className="mt-3 space-y-2">
-    <p className="text-[11px] font-bold">{comprobanteEmitido.fechaAutorizacion ? "El SRI autorizó esta factura." : "El SRI todavía no autorizó esta factura. Puedes imprimirla, pero no queda como AUTORIZADO."}</p>
-    <p className="text-[10px] break-all">Clave: {comprobanteEmitido.claveAcceso || "sin clave"}</p>
-    <p className="text-[10px]">Fecha de autorización: {comprobanteEmitido.fechaAutorizacion || "—"} · {comprobanteEmitido.mensajeSri || "Sin mensaje del SRI"}</p>
-    <div className="grid grid-cols-2 gap-2">
-      <button type="button" onClick={() => {
-        const d = comprobanteEmitido
-        const w = window.open("", "", "width=800,height=900")
-        if (!w) return
-        w.document.write(`<html><body style="font-family:Arial;padding:24px"><h1>Factura ${d.secuencial || ""}</h1><p>${d.receptorNombre || ""}</p><p>Total: $${Number(d.valorTotal || 0).toFixed(2)}</p><p>Clave: ${d.claveAcceso || ""}</p><p>Estado: ${d.estadoSRI || ""}</p><p>Autorización: ${d.numeroAutorizacion || "—"}</p><p>Fecha SRI: ${d.fechaAutorizacion || "—"}</p><p>${d.mensajeSri || ""}</p><script>window.print()</script></body></html>`)
-      }} className="bg-white text-black font-black py-3 rounded-xl text-xs">IMPRIMIR PDF</button>
-      <button type="button" onClick={() => {
-        const d = comprobanteEmitido
-        const w = window.open("", "", "width=320,height=640")
-        if (!w) return
-        w.document.write(`<html><body style="width:80mm;font-family:monospace;font-size:11px"><b>FACTURA</b><br/>${d.secuencial || ""}<br/>${d.receptorNombre || ""}<br/>TOTAL $${Number(d.valorTotal || 0).toFixed(2)}<br/>${d.claveAcceso || ""}<br/><script>window.print()</script></body></html>`)
-      }} className="bg-[#00f5d4] text-black font-black py-3 rounded-xl text-xs">IMPRIMIR TICKET</button>
-      <button type="button" onClick={() => {
-        const blob = new Blob([comprobanteEmitido.xmlContent || ""], { type: "text/xml" })
-        const a = document.createElement("a")
-        a.href = URL.createObjectURL(blob)
-        a.download = `${comprobanteEmitido.secuencial || "factura"}.xml`
-        a.click()
-      }} className="bg-[#3a86ff] text-white font-black py-3 rounded-xl text-xs">DESCARGAR XML</button>
-      <button type="button" onClick={() => { setComprobanteEmitido(null); setItems([]); setPagoRealizado(false) }} className="bg-white/10 font-black py-3 rounded-xl text-xs">VOLVER A FACTURAR</button>
-    </div>
-  </div>
-)}
-
           {cajaAbierta && (
   <div className="fixed inset-0 bg-black/90 z-[150] flex items-center justify-center p-4">
     <div className="bg-[#0f1b2e] w-full max-w-[500px] rounded-[20px] border border-cyan-500/30 p-5">
