@@ -294,6 +294,7 @@ export default function EstadoSRI(){
         <div>R.U.C.: <b>${d.configEmisor?.ruc || ""}</b></div>
         <div class="factura">FACTURA</div>
         <div>No. ${d.establecimiento || ""}-${d.secuencial || ""}</div>
+        <div>Establecimiento: ${d.tipoEstablecimiento === "sucursal" || d.cliente?.tipoEstablecimiento === "sucursal" ? "SUCURSAL" : "MATRIZ"}</div>
         <div class="lbl">NÚMERO DE AUTORIZACIÓN</div>
         <div class="clave">${autorizacion}</div>
         <div>Fecha y hora de autorización: ${d.fechaAutorizacion || ""}</div>

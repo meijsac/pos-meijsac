@@ -13,14 +13,14 @@ export function venceCobro(valor?: string) {
 }
 
 export function etiquetaCobro(d: CobroDoc) {
-  if (d.estado_pago === "PAGADO") return { clave: "pagado", texto: "PAGADO", clase: "bg-emerald-500/20 text-emerald-300" }
+  if (d.estado_pago === "PAGADO") return { clave: "pagado", texto: "", clase: "" }
   if (d.tipo_cobro === "CREDITO" || String(d.estado_pago || "").includes("CRÉDITO")) {
     return { clave: "credito", texto: `CRÉDITO - Vence ${venceCobro(d.fecha_vencimiento)}`, clase: "bg-violet-500/20 text-violet-200" }
   }
   if (d.tipo_cobro === "PENDIENTE_DE_PAGO" || d.estado_pago === "PENDIENTE DE PAGO") {
     return { clave: "pendiente", texto: "PENDIENTE DE PAGO", clase: "bg-amber-400/20 text-amber-200" }
   }
-  return { clave: "pagado", texto: "PAGADO", clase: "bg-emerald-500/20 text-emerald-300" }
+  return { clave: "pagado", texto: "", clase: "" }
 }
 
 export function pasaFiltroCobro(d: CobroDoc, filtro: string) {

@@ -168,6 +168,7 @@ model Producto {
   precio      Float
   stock       Float    @default(0)
   stockMinimo Float    @default(5)
+  ficha       Json?
   empresaId   String
   empresa     Empresa  @relation(fields: [empresaId], references: [id], onDelete: Cascade)
   movimientos MovimientoInventario[]

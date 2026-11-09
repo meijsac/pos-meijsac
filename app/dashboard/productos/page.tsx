@@ -111,6 +111,76 @@ export default function ProductosModule() {
   const [fechasKardex, setFechasKardex] = useState({ desde: "", hasta: "" });
   const [ajusteForm, setAjusteForm] = useState({ tipo: "EGRESO", cant: 1, costo: 0, motivo: "Mermas / Daños" });
   const [resumenImportacion, setResumenImportacion] = useState<{ importados: number; errores: string[] } | null>(null);
+  const [pendientes, setPendientes] = useState<Producto[]>([]);
+  const [aviso, setAviso] = useState("");
+  const [errorGuardado, setErrorGuardado] = useState("");
+  const [guardando, setGuardando] = useState(false);
+
+  const desdeApi = (row: any): Producto => {
+    const ficha = row?.ficha && typeof row.ficha === "object" ? row.ficha : {}
+    return {
+      ...formInicial,
+      ...ficha,
+      id: String(row.id),
+      empresa_id: String(row.empresaId || empresaId),
+      codigo: String(row.codigo || ficha.codigo || ""),
+      nombre: String(row.nombre || ficha.nombre || ""),
+      codigoAuxiliar: String(ficha.codigoAuxiliar || ""),
+      precioMinorista: Number(ficha.precioMinorista ?? row.precio ?? 0),
+      precioSinIVA: Number(ficha.precioSinIVA ?? row.precio ?? 0),
+      precioMayorista: Number(ficha.precioMayorista ?? 0),
+      precioDistribuidor: Number(ficha.precioDistribuidor ?? 0),
+      costoInicial: Number(ficha.costoInicial ?? row.costo ?? 0),
+      stock: Number(row.stock ?? 0),
+      stockMin: Number(row.stockMinimo ?? ficha.stockMin ?? 5),
+      categoria: String(row.categoria || ficha.categoria || "PRINCIPAL"),
+    }
+  }
+  const aPayload = (p: Producto) => {
+    const { id, ...ficha } = p
+    return {
+      codigo: p.codigo,
+      nombre: p.nombre,
+      categoria: p.categoria,
+      precio: Number(p.precioMinorista || p.precioSinIVA || 0),
+      costo: Number(p.costoInicial || 0),
+      stock: Number(p.stock || 0),
+      stockMinimo: Number(p.stockMin || 5),
+      ficha,
+      id: id.startsWith("PROD_") || id.startsWith("IMP_") ? undefined : id,
+    }
+  }
+  const recargar = async () => {
+    const res = await fetch("/api/productos")
+    const data = await res.json().catch(() => ({}))
+    if (!res.ok) throw new Error(data.error || "No se pudo leer el inventario")
+    const lista = Array.isArray(data) ? data.map(desdeApi) : []
+    setProductos(lista)
+    if (lista[0]?.empresa_id) setEmpresaId(lista[0].empresa_id)
+    return lista
+  }
+  const guardarEnBase = async (lista: Producto[]) => {
+    setGuardando(true)
+    setAviso("")
+    setErrorGuardado("")
+    try {
+      const res = await fetch("/api/productos", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ productos: lista.map(aPayload) }),
+      })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok) throw new Error(data.error || "No se pudo guardar")
+      await recargar()
+      setAviso(`Se guardaron ${data.guardados ?? lista.length} productos correctamente`)
+      return true
+    } catch (e: any) {
+      setErrorGuardado(e?.message || "No se pudo guardar")
+      return false
+    } finally {
+      setGuardando(false)
+    }
+  }
 
   const importarDesdeExcel = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -232,15 +302,9 @@ export default function ProductosModule() {
         })
       })
       
-      setProductos(prevProductos => {
-        const nuevosProductos = [...prevProductos]
-        mapeados.forEach(prodEntrante => {
-          const indexExistente = nuevosProductos.findIndex(p => p.codigo === prodEntrante.codigo)
-          if (indexExistente >= 0) nuevosProductos[indexExistente] = { ...prodEntrante, id: nuevosProductos[indexExistente].id }
-          else nuevosProductos.push(prodEntrante)
-        })
-        return nuevosProductos
-      })
+      setPendientes(mapeados)
+      setAviso("")
+      setErrorGuardado("")
       setResumenImportacion({ importados: mapeados.length, errores })
       
       e.target.value = '';
@@ -287,26 +351,7 @@ export default function ProductosModule() {
     const savedBodegas = localStorage.getItem(`bodegas_${eid}`);
     if (savedBodegas) setBodegas(JSON.parse(savedBodegas));
 
-    const saved = localStorage.getItem(`productos_${eid}`);
-    if(saved){
-      const parsed = JSON.parse(saved);
-      const migrados = parsed.filter((p: any) => !(String(p?.id) === "1" && String(p?.nombre || "").toUpperCase() === "COCA COLA 500ML" && Number(p?.precioMinorista) === 1.2 && Number(p?.costoInicial) === 0.85 && Number(p?.stock) === 100)).map((p:any)=>({
-       ...p,
-        codigo: p.codigo || "001", codigoAuxiliar: p.codigoAuxiliar || "",
-        descripcion: p.descripcion || p.nombre, detalle: p.detalle || "",
-        tipoIvaSRI: p.tipoIvaSRI || "15%", codigoPorcentaje: p.codigoPorcentaje || "", tarifaIva: p.tarifaIva ?? 0,
-        codigoImpuesto: 2, descuento: p.descuento || 0, valorIce: p.valorIce || 0, stockMax: p.stockMax || 100,
-        bodega: p.bodega || "PRINCIPAL", categoria: p.categoria || "PRINCIPAL",
-        unidad: p.unidad || "UND", ubicacion: p.ubicacion || "",
-        fechaVence: p.fechaVence || "", porcIce: p.porcIce || 0,
-        irbpnr: p.irbpnr || 0, subsidio: p.subsidio || 0,
-        manejaStock: p.manejaStock ?? true, visibleWeb: p.visibleWeb ?? true,
-        esCombo: p.esCombo || false, esFabricado: p.esFabricado || false,
-        lote: p.lote || "", precioSinIVA: p.precioMinorista ?? p.precioSinIVA ?? 0,
-        precioMayorista: p.precioMayorista ?? 0, precioDistribuidor: p.precioDistribuidor ?? 0,
-      }));
-      setProductos(migrados);
-    } else setProductos([]);
+    recargar().catch((e) => setErrorGuardado(e.message));
     const headers = { Authorization: `Bearer ${localStorage.getItem("meijsac_token") || ""}` };
     fetch("/api/inventario/config", { headers }).then((r) => r.ok ? r.json() : null).then((d) => { if (d?.metodoCosteo) setMetodo(d.metodoCosteo); }).catch(() => {});
     fetch("/api/inventario/kardex", { headers }).then((r) => r.ok ? r.json() : null).then((d) => { if (d?.movimientos) setMovimientos(d.movimientos); }).catch(() => {});
@@ -328,9 +373,8 @@ export default function ProductosModule() {
 
   useEffect(() => {
     if (!cargado) return;
-    localStorage.setItem(`productos_${empresaId}`, JSON.stringify(productos));
     localStorage.setItem(`bodegas_${empresaId}`, JSON.stringify(bodegas));
-  }, [productos, bodegas, empresaId, cargado]);
+  }, [bodegas, empresaId, cargado]);
 
   const productoSeleccionado = productoSel;
   const filasCosto = useMemo(() => productoSeleccionado ? calcularKardex(movimientos.filter((m) => m.productoId === productoSeleccionado.id), metodo, productoSeleccionado.bodega || "PRINCIPAL") : [], [movimientos, metodo, productoSeleccionado]);
@@ -398,17 +442,12 @@ export default function ProductosModule() {
     setMovimientos((prev) => [...prev, ...(data.movimientos || [])]);
   };
 
-  const handleGuardar = () => {
-    if (!form.nombre || !form.codigo) return alert("Nombre y Código obligatorios");
-    const esNuevo = !form.id;
-    const nuevo = {...form, id: form.id || `PROD_${Date.now()}`, empresa_id: empresaId, precioSinIVA: form.precioMinorista, stock: form.tipoItem === "SERVICIO" ? 0 : form.stock };
-    
-    if (esNuevo) {
-      setProductos(ps => [nuevo, ...ps]);
-      if (nuevo.stock > 0 && nuevo.tipoItem === "FISICO") crearMovimientoKardex(nuevo, "ENTRADA", nuevo.stock, Number(nuevo.costoInicial) || 0, "Inventario inicial");
-    } else {
-      setProductos(ps => ps.map(p => p.id === form.id ? nuevo : p));
-    }
+  const handleGuardar = async () => {
+    if (!form.nombre || !form.codigo) { setErrorGuardado("Nombre y Código obligatorios"); return }
+    const nuevo = {...form, empresa_id: empresaId, precioSinIVA: form.precioMinorista, stock: form.tipoItem === "SERVICIO" ? 0 : form.stock };
+    const ok = await guardarEnBase([nuevo])
+    if (!ok) return
+    if (!form.id && nuevo.stock > 0 && nuevo.tipoItem === "FISICO") crearMovimientoKardex({ ...nuevo, id: nuevo.codigo }, "ENTRADA", nuevo.stock, Number(nuevo.costoInicial) || 0, "Inventario inicial");
     setForm(formInicial);
     setProductoSel(null);
   };
@@ -477,10 +516,15 @@ export default function ProductosModule() {
 
   const handleEditar = (prod: Producto) => { setProductoSel(prod); setForm(prod); };
   const handleToggleEstado = (id: string) => { setProductos(ps => ps.map(p => p.id === id ? { ...p, visibleWeb: !p.visibleWeb } : p)); };
-  const handleEliminar = (id: string, nombre: string) => {
+  const handleEliminar = async (id: string, nombre: string) => {
     if(!confirm(`⚠️ ¿Eliminar "${nombre}" definitivamente?`)) return;
+    setErrorGuardado("")
+    const res = await fetch(`/api/productos?id=${encodeURIComponent(id)}`, { method: "DELETE" })
+    const data = await res.json().catch(() => ({}))
+    if (!res.ok) { setErrorGuardado(data.error || "No se pudo eliminar"); return }
     setProductos(ps => ps.filter(p => p.id !== id));
     if(form.id === id) setForm(formInicial);
+    setAviso(`Se eliminó ${nombre}`)
   };
 
   if (!cargado) return <div className="min-h-screen bg-black text-white p-10 text-[11px]">Cargando inventario del sistema...</div>;
@@ -554,9 +598,11 @@ export default function ProductosModule() {
           <div className={form.tipoItem==='SERVICIO'? 'opacity-30 pointer-events-none':''}><label className="text-[9px] text-white/60 block mb-1">Fecha Caducidad</label><input type="date" value={form.fechaVence} onChange={e=>setForm({...form, fechaVence:e.target.value})} disabled={form.tipoItem==='SERVICIO'} className="w-full bg-black border border-white/10 rounded-lg px-2.5 py-1.5 text-[10px] outline-none" /></div>
         </div>
         
-        <button onClick={handleGuardar} className="w-full bg-[#00f5d4] text-black font-black text-[12px] py-3 rounded-xl mt-4 hover:shadow-[0_0_20px_rgba(0,245,212,0.4)] transition-all flex justify-center items-center gap-2">
-            <span>{form.id ? '💾 GUARDAR CAMBIOS' : '✓ CREAR EN DISCO LOCAL'}</span>
+        <button onClick={handleGuardar} disabled={guardando} className="w-full bg-[#00f5d4] text-black font-black text-[12px] py-3 rounded-xl mt-4 hover:shadow-[0_0_20px_rgba(0,245,212,0.4)] transition-all flex justify-center items-center gap-2 disabled:opacity-50">
+            <span>{guardando ? "GUARDANDO..." : form.id ? "GUARDAR CAMBIOS" : "GUARDAR"}</span>
         </button>
+        {errorGuardado && <p className="text-sm font-bold text-red-400">{errorGuardado}</p>}
+        {aviso && <p className="text-sm font-bold text-green-400">{aviso}</p>}
       </div>
 
       {/* PANEL DERECHO - LISTADO / KARDEX */}
@@ -645,17 +691,19 @@ export default function ProductosModule() {
                 <button title="📥 Descargar plantilla Excel vacía para migrar productos desde otro sistema" onClick={descargarPlantilla} className="bg-white/10 hover:bg-[#00f5d4] hover:text-black text-white rounded-md p-1.5 text-[12px] transition-colors">📥</button>
                 <div className="relative overflow-hidden cursor-pointer bg-white/10 hover:bg-blue-500 hover:text-white rounded-md p-1.5 transition-colors" title="📂 Importar productos masivamente desde el Excel de migración llenado">
                    <span className="text-[12px]">📂</span>
-                   <input type="file" accept=".xlsx, .xls" onChange={importarDesdeExcel} className="absolute inset-0 opacity-0 cursor-pointer" />
+                   <input type="file" accept=".xlsx,.xls,.csv" onChange={importarDesdeExcel} className="absolute inset-0 opacity-0 cursor-pointer" />
                 </div>
                 <button title="📤 Exportar todo el listado actual a Excel con todos los parámetros completos" onClick={exportarAExcel} className="bg-white/10 hover:bg-yellow-400 hover:text-black text-white rounded-md p-1.5 text-[12px] transition-colors">📤</button>
               <button 
   title="🚨 Eliminar TODO el inventario" 
-  onClick={() => {
+  onClick={async () => {
     if(confirm("🚨 PELIGRO EXTREMO: ¿Estás seguro de eliminar TODO el inventario y el Kárdex de forma permanente?")) {
-      setProductos([]);
+      for (const prod of productos) {
+        await fetch(`/api/productos?id=${encodeURIComponent(prod.id)}`, { method: "DELETE" })
+      }
       setMovimientos([]);
-      localStorage.removeItem(`productos_${empresaId}`);
       localStorage.removeItem(`movimientos_${empresaId}`);
+      recargar().catch((e) => setErrorGuardado(e.message));
     }
   }} 
   className="bg-red-500/10 hover:bg-red-500 hover:text-white text-red-500 rounded-md p-1.5 text-[12px] transition-colors"
@@ -664,6 +712,17 @@ export default function ProductosModule() {
 </button>
               </div>
             </div>
+
+            {pendientes.length > 0 && (
+              <button type="button" disabled={guardando} onClick={async () => {
+                const ok = await guardarEnBase(pendientes)
+                if (ok) setPendientes([])
+              }} className="w-full mb-3 bg-green-500 text-black font-black text-sm py-4 rounded-xl disabled:opacity-50">
+                {guardando ? "GUARDANDO..." : `GUARDAR PRODUCTOS (${pendientes.length})`}
+              </button>
+            )}
+            {aviso && <p className="mb-2 text-sm font-bold text-green-400">{aviso}</p>}
+            {errorGuardado && <p className="mb-2 text-sm font-bold text-red-400">{errorGuardado}</p>}
 
             <div className="bg-[#00f5d4]/10 border border-[#00f5d4]/20 rounded-lg p-2 mb-3 flex items-start gap-2">
               <span className="text-[12px]">💡</span>

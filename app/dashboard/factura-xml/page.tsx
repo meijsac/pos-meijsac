@@ -3,6 +3,49 @@ import { useState, useEffect, useRef } from "react"
 import Link from "next/link"
 import ModalCajaMixto from "./components/ModalCajaMixto"
 
+function codigosProducto(p: any) {
+  return [p?.codigo, p?.codigoBarras, p?.codigo_barras, p?.codigoAuxiliar, p?.codigoInterno, p?.codigo_interno, p?.sku, p?.codigoAlterno, p?.codigo_alterno]
+    .map((v) => String(v || "").trim())
+    .filter(Boolean)
+}
+
+function coincideProducto(p: any, texto: string) {
+  const t = texto.trim().toLowerCase()
+  if (!t) return false
+  const nombre = String(p?.nombre || p?.descripcion || "").toLowerCase()
+  return nombre.includes(t) || codigosProducto(p).some((c) => c.toLowerCase().includes(t))
+}
+
+function productoDeApi(p: any) {
+  const ficha = p?.ficha && typeof p.ficha === "object" ? p.ficha : {}
+  return {
+    ...ficha,
+    ...p,
+    codigo: String(p?.codigo || ficha.codigo || "").trim(),
+    nombre: String(p?.nombre || ficha.nombre || p?.descripcion || "").trim(),
+    codigoAuxiliar: String(ficha.codigoAuxiliar || p?.codigoAuxiliar || p?.codigoBarras || "").trim(),
+    precio: Number(ficha.precioMinorista ?? p?.precio ?? 0),
+    precioMinorista: Number(ficha.precioMinorista ?? p?.precio ?? 0),
+    stock: Number(p?.stock ?? ficha.stock ?? 0),
+    tipoIvaSRI: ficha.tipoIvaSRI || p?.tipoIvaSRI,
+    codigoPorcentaje: ficha.codigoPorcentaje || p?.codigoPorcentaje,
+  }
+}
+
+async function buscarProductosEnBase(texto: string) {
+  const q = texto.trim()
+  if (!q) return []
+  const res = await fetch(`/api/productos?q=${encodeURIComponent(q)}`)
+  const data = await res.json().catch(() => [])
+  return Array.isArray(data) ? data.map(productoDeApi) : []
+}
+
+function productoExacto(productos: any[], texto: string) {
+  const t = texto.trim().toLowerCase()
+  if (!t) return null
+  return productos.find((p) => codigosProducto(p).some((c) => c.toLowerCase() === t)) || null
+}
+
 const PROVINCIAS = {
    "PICHINCHA": ["QUITO", "CAYAMBE", "MEJÍA", "PEDRO MONCAYO", "PEDRO VICENTE MALDONADO", "PUERTO QUITO", "RUMIÑAHUI", "SAN MIGUEL DE LOS BANCOS"],
   "GUAYAS": ["ALFREDO BAQUERIZO MORENO (JUJÁN)", "BALAO", "BALZAR", "COLIMES", "CORONEL MARCELINO MARIDUEÑA", "DAULE", "DURÁN", "EL EMPALME", "EL TRIUNFO", "GENERAL ANTONIO ELIZALDE (BUCAY) ", "GENERAL VILLAMIL PLAYAS", "GUAYAQUIL", "ISIDRO AYORA", "LOMAS DE SARGENTILLO", "MILAGRO", "NARANJAL", "NARANJITO", "NOBOL", "PALESTINA", "PEDRO CARBO", "SALITRE", "SAMBORONDÓN", "SAN JACINTO DE YAGUACHI", "SANTA LUCÍA", "SIMÓN BOLÍVAR"],
@@ -68,7 +111,8 @@ const Chisme = ({texto, titulo}:{texto:string, titulo:string}) => (
 export default function FacturadorXMLReal(){
   const [fecha, setFecha] = useState("")
   const [secuencial] = useState("000000015")
-  const [establecimiento] = useState("001-001")
+  const codigoEstab = (clienteRef: { tipoEstablecimiento?: string; codSucursal?: string }) =>
+    (clienteRef?.tipoEstablecimiento === "sucursal" ? String(clienteRef.codSucursal || "002") : "001").replace(/\D/g, "").padStart(3, "0").slice(-3) || "001"
   const [configEmisor, setConfigEmisor] = useState<any>({})
   const [emisorListo, setEmisorListo] = useState(false)
     // --- AGREGADO TEMA Y CLIENTE ---
@@ -118,26 +162,47 @@ export default function FacturadorXMLReal(){
       if (!vivo) return
       setConfigEmisor(emisor)
       setEmisorListo(Boolean(emisor.razon && emisor.ruc && emisor.regimen))
-      const claves = [emisor.empresaId, localStorage.getItem("empresaId"), localStorage.getItem("empresa_id")].filter(Boolean)
+      const claves = new Set(
+        [emisor.empresaId, localStorage.getItem("empresaId"), localStorage.getItem("empresa_id"), "EMPRESA_001"].filter(Boolean) as string[]
+      )
+      for (let i = 0; i < localStorage.length; i++) {
+        const llave = localStorage.key(i) || ""
+        if (llave.startsWith("productos_")) claves.add(llave.slice("productos_".length))
+      }
       const locales: any[] = []
       claves.forEach((id) => {
         try { locales.push(...JSON.parse(localStorage.getItem(`productos_${id}`) || "[]")) } catch {}
       })
       let remotos: any[] = []
-      if (emisor.empresaId) {
-        try {
-          const res = await fetch(`/api/productos?empresaId=${emisor.empresaId}`)
-          const data = await res.json()
-          if (Array.isArray(data)) remotos = data
-        } catch {}
+      try {
+        const res = await fetch("/api/productos")
+        const data = await res.json()
+        if (Array.isArray(data)) remotos = data
+      } catch {}
+      const normal = (p: any) => {
+        const ficha = p?.ficha && typeof p.ficha === "object" ? p.ficha : {}
+        return {
+          ...ficha,
+          ...p,
+          codigo: String(p.codigo || ficha.codigo || p.codigoInterno || p.codigo_interno || "").trim(),
+          nombre: String(p.nombre || ficha.nombre || p.descripcion || "").trim(),
+          codigoAuxiliar: String(ficha.codigoAuxiliar || p.codigoAuxiliar || p.codigoBarras || p.codigo_barras || p.sku || "").trim(),
+          codigoBarras: String(p.codigoBarras || p.codigo_barras || ficha.codigoAuxiliar || p.codigoAuxiliar || "").trim(),
+          sku: String(p.sku || ficha.sku || ficha.codigoAuxiliar || "").trim(),
+          precio: Number(ficha.precioMinorista ?? p.precioMinorista ?? p.precioSinIVA ?? p.precio ?? 0),
+          precioMinorista: Number(ficha.precioMinorista ?? p.precioMinorista ?? p.precio ?? 0),
+          tipoIvaSRI: ficha.tipoIvaSRI || p.tipoIvaSRI,
+          codigoPorcentaje: ficha.codigoPorcentaje || p.codigoPorcentaje,
+        }
       }
       const vistos = new Set<string>()
-      const lista = [...locales, ...remotos].filter((p) => {
-        const clave = String(p.codigo || p.id || "")
+      const lista = [...locales, ...remotos].map(normal).filter((p) => {
+        const clave = String(p.codigo || p.id || p.nombre || "").toLowerCase()
         if (!clave || vistos.has(clave)) return false
         vistos.add(clave)
         return true
       })
+      console.log("PRODUCTOS CARGADOS:", lista.length, lista[0])
       if (vivo) setProductos(lista)
       try {
         const clientes = await fetch("/api/clientes").then((r) => r.json())
@@ -272,6 +337,11 @@ const [sugerencias, setSugerencias] = useState<any[]>([]);
   const [productos, setProductos] = useState<any[]>([])
     const codigoRef = useRef<HTMLInputElement>(null)
   const [codigoRapido, setCodigoRapido] = useState("")
+  const [errorLector, setErrorLector] = useState("")
+  const [indiceLector, setIndiceLector] = useState(-1)
+  const lectorRef = useRef<HTMLInputElement>(null)
+  const textoLector = useRef("")
+  const busquedaId = useRef(0)
   // --- DETECTOR AUTOMÁTICO DE FERIADOS ECUADOR - SRI CÓDIGO 8 ---
 const FERIADOS_ECUADOR = [
   "2025-01-01", "2025-03-03", "2025-03-04", "2025-04-18", "2025-05-01", "2025-05-24",
@@ -332,33 +402,28 @@ const toggleTurismoFeriado = (checked: boolean) => {
   const [valorCredito, setValorCredito] = useState(0)
   const [avisoCredito, setAvisoCredito] = useState("")
   const bufferLector = useRef("")
+  const buscarRef = useRef<(texto: string) => void>(() => {})
 
   useEffect(()=>{ setPlazoElegido(cliente.diasCredito) }, [cliente.diasCredito])
 
-  // LECTOR POR ARTE DE MAGIA - INVISIBLE EN TODA LA PÁGINA
-  useEffect(()=>{
-    const handleKeyDown = (e:KeyboardEvent) => {
-      const target = e.target as HTMLElement
-      if(target.tagName === "INPUT" || target.tagName === "SELECT" || target.tagName === "TEXTAREA") return
-      if(e.key==="Enter"){
+  useEffect(() => { lectorRef.current?.focus() }, [])
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      const tag = (e.target as HTMLElement | null)?.tagName
+      if (tag === "INPUT" || tag === "SELECT" || tag === "TEXTAREA") return
+      if (e.key === "Enter") {
         const code = bufferLector.current.trim()
-        if(code.length >= 3){
-          const prod = productos.find((p:any)=>p.codigo===code || p.codigoBarras===code || p.codigoBarras===code.replace(/\D/g,''))
-          if(prod){
-            e.preventDefault()
-            addProducto(prod)
-            if(navigator.vibrate) navigator.vibrate(50)
-          }
-        }
         bufferLector.current = ""
-      } else if(e.key.length===1){
-        bufferLector.current += e.key
-        setTimeout(()=>{ if(bufferLector.current.length>0 && bufferLector.current.length<3) bufferLector.current="" }, 800)
+        if (!code) return
+        e.preventDefault()
+        buscarRef.current(code)
+        return
       }
+      if (e.key.length === 1 && !e.ctrlKey && !e.metaKey && !e.altKey) bufferLector.current += e.key
     }
-    window.addEventListener("keydown", handleKeyDown)
-    return ()=>window.removeEventListener("keydown", handleKeyDown)
-      }, [productos, items])
+    window.addEventListener("keydown", onKey)
+    return () => window.removeEventListener("keydown", onKey)
+  }, [])
       // LIMPIEZA AUTOMATICA CADA VEZ QUE ABRES CAJA
 useEffect(()=>{
   if(cajaAbierta){
@@ -470,41 +535,33 @@ const manejarConsultaSRIExpress = async () => {
     return [p, ...sinDup].slice(0,12);
   });
 }
-    const buscarYAgregarPorCodigoTexto = (texto:string) => {
-  if(!texto) return;
-  const t = texto.trim().toLowerCase();
-  if(!t) return;
-
-  // 1. Intenta por código exacto (como ya hace tu pistola)
-  let prod = (productos || []).find((p:any)=> 
-    p.codigo?.toLowerCase() === t || 
-    p.codigoBarras?.toLowerCase() === t
-  );
-
-  // 2. Si no encuentra, busca por NOMBRE
-  if(!prod){
-    const porNombre = (productos || []).filter((p:any)=>
-      p.nombre?.toLowerCase().includes(t)
-    );
-    if(porNombre.length === 1){
-      prod = porNombre[0];
-    } else if(porNombre.length > 1){
-      // Si hay varios con ese nombre, muestra la lista
-      setSugerencias(porNombre.slice(0,6));
-      return;
+    const enfocarLector = () => {
+      requestAnimationFrame(() => lectorRef.current?.focus())
     }
-  }
-
-  // 3. Si encontró, agrega
-  if(prod){
-    addProducto(prod);
-    setCodigoRapido("");
-    setSugerencias([]);
-  } else {
-    // si no hay nada, limpia
-    setSugerencias([]);
-  }
-}
+    const agregarDesdeLector = (p: any) => {
+      addProducto(p)
+      textoLector.current = ""
+      setCodigoRapido("")
+      setSugerencias([])
+      setIndiceLector(-1)
+      setErrorLector("")
+      if (navigator.vibrate) navigator.vibrate(50)
+      enfocarLector()
+    }
+    const buscarYAgregarPorCodigoTexto = async (texto: string, desdeBoton = false) => {
+      const escrito = texto.trim()
+      if (!escrito) { enfocarLector(); return }
+      const lista = await buscarProductosEnBase(escrito)
+      const exacto = productoExacto(lista, escrito)
+      const elegido = indiceLector >= 0 ? sugerencias.find((p: any) => lista.some((x) => x.codigo === p.codigo)) : null
+      if (exacto) { agregarDesdeLector(exacto); return }
+      if (elegido && (desdeBoton || true)) { agregarDesdeLector(elegido); return }
+      if (lista.length === 1) { agregarDesdeLector(lista[0]); return }
+      setSugerencias(lista.slice(0, 8))
+      setErrorLector(lista.length ? "" : "No encontrado")
+      enfocarLector()
+    }
+    buscarRef.current = (texto: string) => { void buscarYAgregarPorCodigoTexto(texto, false) }
   
   const addVacio = () => setItems([...items, {codigo:"", descripcion:"", detalle:"", detalleAdicional:"", cant:1, pUnit:0, descPorc:0, descDolar:0, codigoPorcentaje:"4", tarifa:15, iva:15, ice:0, esPlastico:false }])
   // CATÁLOGO TABLA 17 SRI - TARIFAS IVA OFFLINE
@@ -585,6 +642,7 @@ const total = subtotalSin + iva15 + ivaDiferenciado + valorICE + valorIRBPNR + p
     const tipoComp = "01"
     const ruc = configEmisor.ruc || ""
     const amb = configEmisor.ambiente==="PRODUCCIÓN"?"2":"1"
+    const establecimiento = `${codigoEstab(cliente)}-001`
     const serie = establecimiento.replace("-","")+secuencial.padStart(9,"0")
     const codigoNum = "12345678"
     const tipoEmision = "1"
@@ -685,7 +743,8 @@ const total = subtotalSin + iva15 + ivaDiferenciado + valorICE + valorIRBPNR + p
       claveAcceso: clave,
       fechaEmision: new Date().toISOString(),
       fechaEmisionFormato: fecha,
-      establecimiento: establecimiento,
+      establecimiento: `${codigoEstab(cliente)}-001`,
+      tipoEstablecimiento: cliente.tipoEstablecimiento === "sucursal" ? "sucursal" : "matriz",
       secuencial: secuencial,
       configEmisor: configEmisor,
       cliente: cliente,
@@ -881,7 +940,7 @@ const total = subtotalSin + iva15 + ivaDiferenciado + valorICE + valorIRBPNR + p
             <div className="mt-2 bg-red-500/20 border-2 border-red-500 text-red-100 text-sm font-bold p-3 rounded-xl">Faltan datos del emisor en Configuración</div>
           )}
         </div>
-        <div className="flex gap-4 text-[10px]"><div>FECHA<br/><b>{fecha}</b></div><div>PUNTO<br/><b>{establecimiento}</b></div><div>SEC<br/><b className="text-[#00f5d4]">{secuencial}</b></div><b suppressHydrationWarning>{fecha || "---"}</b></div>
+        <div className="flex gap-4 text-[10px]"><div>FECHA<br/><b>{fecha}</b></div><div>PUNTO<br/><b>{codigoEstab(cliente)}-001</b></div><div>SEC<br/><b className="text-[#00f5d4]">{secuencial}</b></div><b suppressHydrationWarning>{fecha || "---"}</b></div>
       </div>
 
       <div className="grid grid-cols-3 gap-3">
@@ -917,7 +976,10 @@ const total = subtotalSin + iva15 + ivaDiferenciado + valorICE + valorIRBPNR + p
             <input value={cliente.telefono || ''} onChange={e=>setCliente({...cliente,telefono:e.target.value})} placeholder="Teléfono" className="bg-black p-2 rounded-lg text-white text-[11px]" />
             <input value={cliente.celular || ''} onChange={e=>setCliente({...cliente,celular:e.target.value})} placeholder="Celular" className="bg-black p-2 rounded-lg text-white text-[11px]" />
 
-            <select value={sucursalSeleccionada?.codigo === '001' ? 'matriz' : 'sucursal'} onChange={(e)=>setCliente({...cliente,tipoEstablecimiento:e.target.value})} className="bg-black p-2 rounded-lg text-[10px] border border-white/10">
+            <select value={cliente.tipoEstablecimiento === "sucursal" ? "sucursal" : "matriz"} onChange={(e)=>{
+              const tipo = e.target.value === "sucursal" ? "sucursal" : "matriz"
+              setCliente((f: any) => ({ ...f, tipoEstablecimiento: tipo, codSucursal: tipo === "matriz" ? "001" : (String(f.codSucursal || "") === "001" || !f.codSucursal ? "002" : f.codSucursal) }))
+            }} className="bg-black p-2 rounded-lg text-[10px] border border-white/10">
   <option value="matriz">MATRIZ</option>
   <option value="sucursal">SUCURSAL</option>
 </select>
@@ -934,15 +996,14 @@ const total = subtotalSin + iva15 + ivaDiferenciado + valorICE + valorIRBPNR + p
       direccion: s.direccion, 
       provincia: s.provincia, 
       ciudad: s.ciudad, 
-      codSucursal: s.codigo,
-      tipoEstablecimiento: 'matriz'
+      codSucursal: s.codigo
     }));
   }} className="w-full mt-1 bg-black border border-[#00f5d4] rounded-lg px-3 py-2 text-[11px] font-bold">
     {sucursalesFactura.map((s:any)=><option key={s.id} value={s.id}>{s.codigo} - {s.nombre} - {s.provincia}/{s.ciudad} - {s.direccion}</option>)}
   </select>
 </div>
            <div className="bg-black/50 p-2 rounded-lg text-[10px] text-zinc-400 flex items-center gap-2">
-  Estab: {sucursalSeleccionada?.codigo === '001' ? 'matriz' : 'sucursal'} - {sucursalSeleccionada?.codigo || '001'}
+  Estab: {cliente.tipoEstablecimiento === "sucursal" ? "sucursal" : "matriz"} - {cliente.codSucursal || sucursalSeleccionada?.codigo || "001"}
 </div>
 
             <select value={cliente.provincia} onChange={(e) => setCliente({...cliente, provincia: e.target.value, ciudad: PROVINCIAS[e.target.value as keyof typeof PROVINCIAS][0]})} className="bg-black text-white p-2 rounded-lg w-full">
@@ -1040,50 +1101,59 @@ const total = subtotalSin + iva15 + ivaDiferenciado + valorICE + valorIRBPNR + p
   <span className="text-[10px] bg-[#00f5d4] text-black px-2 py-1 rounded-full font-black">LECTOR</span>
   <input
     id="codigo-maestro"
+    ref={lectorRef}
     value={codigoRapido}
-    onChange={(e)=>{
-      const val = e.target.value;
-      setCodigoRapido(val);
-      if(val.length >= 2){
-        const t = val.toLowerCase();
-        // aqui busca por codigo Y por nombre
-        const res = (productos || []).filter((p:any)=>
-          p.nombre?.toLowerCase().includes(t) || 
-          p.codigo?.toLowerCase().includes(t) ||
-          p.codigoBarras?.toLowerCase().includes(t)
-        ).slice(0,6);
-        setSugerencias(res);
-      } else {
-        setSugerencias([]);
-      }
+    onChange={async (e)=>{
+      const val = e.target.value
+      textoLector.current = val
+      setCodigoRapido(val)
+      setErrorLector("")
+      const escrito = val.trim()
+      const id = ++busquedaId.current
+      if (!escrito) { setSugerencias([]); setIndiceLector(-1); return }
+      const res = await buscarProductosEnBase(escrito)
+      if (id !== busquedaId.current) return
+      setSugerencias(res.slice(0, 8))
+      setIndiceLector(res.length ? 0 : -1)
+      if (!res.length) setErrorLector("No encontrado")
     }}
     onKeyDown={(e)=>{
+      if (e.key === "ArrowDown" && sugerencias.length) {
+        e.preventDefault()
+        setIndiceLector((n) => (n + 1) % sugerencias.length)
+      }
+      if (e.key === "ArrowUp" && sugerencias.length) {
+        e.preventDefault()
+        setIndiceLector((n) => (n <= 0 ? sugerencias.length - 1 : n - 1))
+      }
       if(e.key==='Enter'){
         e.preventDefault();
-        buscarYAgregarPorCodigoTexto(codigoRapido);
+        buscarYAgregarPorCodigoTexto(textoLector.current || (e.target as HTMLInputElement).value);
       }
     }}
-    placeholder="ESCANEA PISTOLA, CÓDIGO O NOMBRE → Ej: P001 / 786... / llanta"
-    className="flex-1 bg-[#0f172a] border border-[#00f5d4]/30 p-3 rounded-lg text-[#00f5d4] font-black font-mono text-sm uppercase outline-none focus:ring-2 focus:ring-[#00f5d4]"
+    placeholder="ESCANEA PISTOLA, CÓDIGO O NOMBRE → Ej: CLA001 / 786... / llanta"
+    className="flex-1 bg-[#0f172a] border border-[#00f5d4]/30 p-3 rounded-lg text-[#00f5d4] font-black font-mono text-sm outline-none focus:ring-2 focus:ring-[#00f5d4]"
     autoFocus
   />
-  <button onClick={()=> buscarYAgregarPorCodigoTexto(codigoRapido)} className="bg-[#00f5d4] text-black px-4 py-3 rounded-lg font-black text-xs">+ ADD</button>
+  <button type="button" onMouseDown={(e)=>e.preventDefault()} onClick={()=> buscarYAgregarPorCodigoTexto(textoLector.current || codigoRapido, true)} className="bg-[#00f5d4] text-black px-4 py-3 rounded-lg font-black text-xs">+ ADD</button>
 
   {sugerencias.length>0 && (
     <div className="absolute top-full left-0 mt-2 w-[85%] bg-[#0f172a] border border-[#00f5d4]/40 rounded-xl z-[100] overflow-hidden shadow-2xl">
-      {sugerencias.map((p:any)=>(
-        <div key={p.codigo} onClick={()=>{addProducto(p); setCodigoRapido(""); setSugerencias([])}} 
-          className="p-3 hover:bg-white/10 cursor-pointer flex justify-between items-center border-b border-white/5">
+      {sugerencias.map((p:any, idx:number)=>(
+        <div key={`${p.codigo}-${idx}`} onMouseDown={(e)=>e.preventDefault()} onMouseEnter={()=>setIndiceLector(idx)} onClick={()=>agregarDesdeLector(p)}
+          className={`p-3 cursor-pointer flex justify-between items-center border-b border-white/5 ${idx===indiceLector ? "bg-[#00f5d4]/20" : "hover:bg-white/10"}`}>
           <div>
             <p className="text-[11px] font-bold text-white">{p.nombre}</p>
-            <p className="text-[9px] text-white/40">{p.codigo} • Stock {p.stock}</p>
+            <p className="text-[9px] text-white/40">{p.codigo}{p.codigoAuxiliar ? ` • ${p.codigoAuxiliar}` : ""} • Stock {Number(p.stock || 0)}</p>
           </div>
-          <p className="text-[11px] font-black text-[#00f5d4]">${p.precio}</p>
+          <p className="text-[11px] font-black text-[#00f5d4]">${Number(p.precioMinorista ?? p.precio ?? 0).toFixed(2)}</p>
         </div>
       ))}
     </div>
   )}
 </div>
+{errorLector && <p className="mt-2 text-sm font-bold text-red-400">{errorLector}</p>}
+{productos.length === 0 && <p className="mt-2 text-sm font-bold text-red-400">No hay productos cargados - revisar API</p>}
 
         {items.map((it,i)=>(
           <div key={i} className="grid grid-cols-12 gap-1 mt-1 p-2 bg-black rounded-xl border border-white/5 items-center">
@@ -1133,13 +1203,6 @@ const total = subtotalSin + iva15 + ivaDiferenciado + valorICE + valorIRBPNR + p
         <div className="bg-[#1e293b] p-3 rounded-xl border border-white/10">
           <div className="flex justify-between items-center mb-2">
   <b className="text-[#00f5d4] text-[11px]">PAGOS (SRI TABLA 24) - FICHA TÉCNICA</b>
-  {(() => {
-    const tp = abonos.efectivo + abonos.transfer + abonos.tarjeta + abonos.credito
-    const diff = total - tp
-    const color = diff > 0.01? 'text-yellow-400' : diff < -0.01? 'text-[#00f5d4] animate-pulse' : 'text-green-400'
-    const texto = diff > 0.01? `Falta: $${diff.toFixed(2)}` : diff < -0.01? `CAMBIO: $${Math.abs(diff).toFixed(2)} - Dar vuelto` : 'Pagado ✓'
-    return <span className={`text-[10px] font-bold ${color}`}>{texto}</span>
-  })()}
 </div>
 
           <div className="grid grid-cols-3 gap-2">
@@ -1220,6 +1283,7 @@ const total = subtotalSin + iva15 + ivaDiferenciado + valorICE + valorIRBPNR + p
             <div className="flex justify-between"><span>IVA Oficial:</span><b className="text-[#00f5d4]">${iva15.toFixed(2)}</b></div>
             <div className="flex justify-between items-center border-t border-white/10 pt-1"><label className="flex items-center gap-2"><input type="checkbox" checked={propinaCheck} onChange={e=>setPropinaCheck(e.target.checked)} /> Propina 10%:</label><b>${propina.toFixed(2)}</b></div>
             <div className="flex justify-between text-lg border-t border-white/10 pt-2 mt-2"><span className="font-black">VALOR TOTAL A PAGAR:</span><b className="text-[#00f5d4] text-xl">${total.toFixed(2)}</b></div>
+            {items.length === 0 || total <= 0 ? <div className="text-right text-[11px] font-black text-white/40">Sin productos</div> : null}
           </div>
 
 <div className="grid grid-cols-3 gap-2 mt-3">
@@ -1248,10 +1312,8 @@ const total = subtotalSin + iva15 + ivaDiferenciado + valorICE + valorIRBPNR + p
         return (
           <div className="bg-black p-3 rounded-xl mt-3 flex justify-between items-center text-[11px] border border-white/10">
             <span>Total: <b>${total.toFixed(2)}</b></span>
-            <span>Pagado: <b className="text-[#00f5d4]">${pagado.toFixed(2)}</b></span>
-            {falta && <span className="text-orange-400 font-black">Falta: ${Math.abs(diff).toFixed(2)}</span>}
-            {!falta && !vuelto && <span className="text-green-400 font-black">EXACTO</span>}
-            {vuelto && <span className="bg-[#00f5d4] text-black px-3 py-1 rounded-full font-black">Vuelto: ${diff.toFixed(2)}</span>}
+            <span>Recibido: <b className="text-[#00f5d4]">${pagado.toFixed(2)}</b></span>
+            {items.length === 0 || total <= 0 ? <span className="text-white/40 font-black">Sin productos</span> : falta ? <span className="text-orange-400 font-black">Falta: ${Math.abs(diff).toFixed(2)}</span> : vuelto ? <span className="bg-[#00f5d4] text-black px-3 py-1 rounded-full font-black">Vuelto: ${diff.toFixed(2)}</span> : null}
           </div>
         )
       })()}
@@ -1366,7 +1428,7 @@ const total = subtotalSin + iva15 + ivaDiferenciado + valorICE + valorIRBPNR + p
         {tipoCobro==='pendiente' && (
           <div className="space-y-2 text-sm">
             <div className="flex justify-between"><span>Total</span><b>${total.toFixed(2)}</b></div>
-            <div className="flex justify-between"><span>Pagado</span><b>$0.00</b></div>
+            <div className="flex justify-between"><span>Recibido</span><b>$0.00</b></div>
             <div className="flex justify-between text-amber-300 font-black"><span>Saldo Pendiente</span><b>${total.toFixed(2)}</b></div>
             <select value={formaPendiente} onChange={(e) => setFormaPendiente(e.target.value)} className="w-full bg-[#1a2a44] p-3 rounded-xl text-xs">
               <option value="01 - SIN UTILIZACION DEL SISTEMA FINANCIERO">01 - Sin utilización del sistema financiero</option>

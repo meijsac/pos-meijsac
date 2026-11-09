@@ -96,7 +96,7 @@ export default function CXCPage(){
         <div className="flex gap-2">
           <Link href="/dashboard" className="bg-white/10 px-4 py-2 rounded-xl text-xs">← Dashboard</Link>
           <button onClick={()=>setTab("PENDIENTES")} className={`px-4 py-2 rounded-xl text-xs font-black ${tab==="PENDIENTES"?"bg-white text-black":"bg-white/10"}`}>PENDIENTES ({pendientes.length})</button>
-          <button onClick={()=>setTab("PAGADOS")} className={`px-4 py-2 rounded-xl text-xs font-black ${tab==="PAGADOS"?"bg-[#00f5d4] text-black":"bg-white/10"}`}>PAGADOS ({pagados.length})</button>
+          <button onClick={()=>setTab("PAGADOS")} className={`px-4 py-2 rounded-xl text-xs font-black ${tab==="PAGADOS"?"bg-[#00f5d4] text-black":"bg-white/10"}`}>COBRADOS ({pagados.length})</button>
         </div>
       </div>
 

@@ -81,7 +81,7 @@ const [conteo, setConteo] = useState<any>({})       // ➔ Cambiado de {"20":1} 
         <div className="p-5 pb-3">
           <h2 className="font-black text-[#00f5d4] text-sm tracking-wide">CAJA ABIERTA - MULTIMEDIOS MIXTO</h2>
           <div className="flex justify-between bg-black/50 p-3 rounded-xl mt-3 text-[11px] border border-white/10 items-center">
-            <div>Total: <b>${total.toFixed(2)}</b> | Pagado: <b className="text-[#00f5d4]">${totalPagado.toFixed(2)}</b></div>
+            <div>Total: <b>${total.toFixed(2)}</b> | Recibido: <b className="text-[#00f5d4]">${totalPagado.toFixed(2)}</b></div>
             <div>
               {estado === "FALTANTE" && <span className="text-orange-400 font-black">Faltante: ${faltante.toFixed(2)}</span>}
               {estado === "EXACTO" && <span className="text-green-400 font-black">Saldo: $0.00</span>}

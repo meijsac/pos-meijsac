@@ -22,6 +22,7 @@ interface ComprobanteHistorialSRI {
   id: string;
   tipoComprobante: '01' | '04' | '05' | '06' | '07';
   secuencial: string;
+  establecimiento?: string;
   claveAcceso: string;
   fechaEmision: string;
   receptorIdentificacion: string;
@@ -106,7 +107,10 @@ export default function EmitidosPage(){
 
   // 2. BOTONERA DE DESPACHO
   const descargarXML = (doc:ComprobanteHistorialSRI)=>{
-    const xml = doc.xmlContent || `<?xml version="1.0"?><comprobante><infoTributaria><claveAcceso>${doc.claveAcceso}</claveAcceso><codDoc>${doc.tipoComprobante}</codDoc><estab>001</estab><ptoEmi>001</ptoEmi><secuencial>${doc.secuencial.split('-').pop()}</secuencial></infoTributaria><infoAdicional><numeroAutorizacion>${doc.claveAcceso}</numeroAutorizacion><fechaAutorizacion>${doc.fechaEmision}</fechaAutorizacion></infoAdicional></comprobante>`
+    const partes = String(doc.establecimiento || doc.secuencial || "001-001").split("-")
+    const estab = (partes[0] || "001").replace(/\D/g, "").padStart(3, "0").slice(-3)
+    const pto = (partes[1] || "001").replace(/\D/g, "").padStart(3, "0").slice(-3)
+    const xml = doc.xmlContent || `<?xml version="1.0"?><comprobante><infoTributaria><claveAcceso>${doc.claveAcceso}</claveAcceso><codDoc>${doc.tipoComprobante}</codDoc><estab>${estab}</estab><ptoEmi>${pto}</ptoEmi><secuencial>${doc.secuencial.split('-').pop()}</secuencial></infoTributaria><infoAdicional><numeroAutorizacion>${doc.claveAcceso}</numeroAutorizacion><fechaAutorizacion>${doc.fechaEmision}</fechaAutorizacion></infoAdicional></comprobante>`
     const blob = new Blob([xml],{type:'text/xml'}); const url=URL.createObjectURL(blob)
     const a=document.createElement('a'); a.href=url; a.download=`${doc.tipoComprobante}-${doc.secuencial}.xml`; a.click()
   }
@@ -167,7 +171,7 @@ export default function EmitidosPage(){
         <Chismoso texto="Filtra por secuencial 001-001-000000007 o por cliente CHUBB, UNIK, ARCACONTINENTAL"><input value={filtro} onChange={e=>setFiltro(e.target.value)} placeholder="Buscar secuencial / cliente" className="bg-black border border-white/10 rounded-xl px-4 py-2 text-xs w-[240px]" /></Chismoso>
       </div>
       <div className="flex gap-2 mb-4 flex-wrap">
-        {[["todos","Todos"],["pagado","Pagados"],["pendiente","Pendientes de Pago"],["credito","Crédito"]].map(([id,label]) => (
+        {[["todos","Todos"],["pagado","Contado"],["pendiente","Pendientes de Pago"],["credito","Crédito"]].map(([id,label]) => (
           <button key={id} onClick={()=>setFiltroCobro(id)} className={`px-3 py-1 rounded-full text-[10px] font-black ${filtroCobro===id?"bg-[#00f5d4] text-black":"bg-white/10"}`}>{label}</button>
         ))}
       </div>
@@ -191,7 +195,7 @@ export default function EmitidosPage(){
             <div className="col-span-1"><Chismoso texto={d.estadoSRI==='ANULADO'?'Ya no suma en reportes ni ATS. Queda en $0.00':'Valor exacto que declaras al SRI y a tu contador'}><span className="font-black">${d.estadoSRI==='ANULADO'?'0.00':d.valorTotal.toFixed(2)}</span></Chismoso></div>
             <div className="col-span-1"><Chismoso texto={d.estadoSRI==='AUTORIZADO'?'✓ Autorizado por SRI con numeroAutorizacion':'🚫 Ya anulado en SRI en Línea - conservado por secuencia'}><span className={`px-2 py-1 rounded-full text-[9px] font-black ${d.estadoSRI==='AUTORIZADO'?'bg-emerald-500/20 text-emerald-400': d.estadoSRI==='ANULADO'?'bg-zinc-700 text-zinc-400':'bg-yellow-500/20 text-yellow-400'}`}>{d.estadoSRI==='ANULADO'?'🚫 ANULADO':`✓ ${d.estadoSRI}`}</span></Chismoso></div>
             <div className="col-span-2"><span className="text-[10px]">{d.tipo_cobro || "EFECTIVO"}</span></div>
-            <div className="col-span-2">{(() => { const e = etiquetaCobro(d); return <button onClick={() => { if (e.clave !== "pagado") setPagoDoc(d) }} className={`px-2 py-1 rounded-full text-[9px] font-black ${e.clase}`}>{e.texto}</button> })()}</div>
+            <div className="col-span-2">{(() => { const e = etiquetaCobro(d); if (!e.texto) return null; return <button onClick={() => { if (e.clave !== "pagado") setPagoDoc(d) }} className={`px-2 py-1 rounded-full text-[9px] font-black ${e.clase}`}>{e.texto}</button> })()}</div>
             <div className="col-span-1 flex justify-end gap-1 flex-wrap">
               <Chismoso texto="RIDE A4 oficial con código de barras, bloques SRI, válido para cliente y contabilidad"><button onClick={()=>descargarPDF(d)} className="bg-white text-black px-2 py-1 rounded-lg text-[10px] font-bold hover:scale-105">📄 PDF</button></Chismoso>
               <Chismoso texto={d.tipoComprobante==='07'?'Retención 07 y Guía 06 SIEMPRE en A4 corporativo, SRI no permite ticket':'Ticket 80mm térmico para impresora del chifa - solo facturas 01'}><button onClick={()=>descargarTicket(d)} className={`px-2 py-1 rounded-lg text-[10px] font-bold ${d.tipoComprobante==='01'?'bg-[#00f5d4] text-black hover:scale-105':'bg-white/10 text-white/20 cursor-not-allowed'}`}>🧾 TICK</button></Chismoso>
@@ -210,7 +214,7 @@ export default function EmitidosPage(){
             <p className="text-xs opacity-70 mb-4">{pagoDoc.receptorNombre} · {pagoDoc.secuencial} · ${pagoDoc.valorTotal.toFixed(2)}</p>
             <div className="flex gap-2">
               <button onClick={() => setPagoDoc(null)} className="flex-1 bg-white/10 py-3 rounded-xl text-xs">Cancelar</button>
-              <button onClick={() => registrarPago(pagoDoc)} className="flex-1 bg-emerald-400 text-black py-3 rounded-xl text-xs font-black">Pasar a PAGADO</button>
+              <button onClick={() => registrarPago(pagoDoc)} className="flex-1 bg-emerald-400 text-black py-3 rounded-xl text-xs font-black">Registrar cobro</button>
             </div>
           </div>
         </div>
