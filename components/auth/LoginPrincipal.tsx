@@ -1,6 +1,7 @@
 "use client"
 import { useState } from "react"
 import { useRouter } from "next/navigation"
+import { guardarEmpresaLocal } from "@/lib/sesion-cliente"
 
 export function LoginPrincipal({ dark = true }: { dark?: boolean }){
   const router = useRouter()
@@ -28,10 +29,10 @@ export function LoginPrincipal({ dark = true }: { dark?: boolean }){
   if (!res.ok) throw new Error(data.error || 'Error al ingresar');
 
   // Ahora SÍ guardamos el token REAL de la base de datos
-  localStorage.setItem('meijsac_token', data.token);
-  localStorage.setItem('meijsac_user', JSON.stringify(data.usuario));
+  if (data.empresa) guardarEmpresaLocal(data.empresa, data.token, data.usuario)
+  else localStorage.setItem('meijsac_token', data.token);
   localStorage.setItem('esisa_modo', 'real');
-  localStorage.setItem('esisa_usuario_actual', data.usuario.nombre);
+  localStorage.setItem('esisa_usuario_actual', data.usuario?.nombre || '');
 
   router.push('/dashboard');
 } catch (e: any) {

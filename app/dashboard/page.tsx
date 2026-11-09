@@ -2,6 +2,7 @@
 import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { useEffect, useState } from "react"
+import { cargarEmpresaSesion } from "@/lib/sesion-cliente"
 
 const CORPORATE = "#23AAB3"
 
@@ -123,33 +124,41 @@ export default function DashboardMeijsac(){
     setVentas({ hoy: v.filter((x:any)=> new Date(x.fecha).toDateString() === new Date().toDateString()).reduce((s:any,c:any)=>s+c.total,0), mes: v.reduce((s:any,c:any)=>s+c.total,0) })
     const savedBg = localStorage.getItem('meijsac_bg')
     if(savedBg){ try{ setBg(JSON.parse(savedBg)) }catch{} }
-    // Leer empresa + estado del admin
-    const guardado = localStorage.getItem('meijsac_empresa')
-    if (guardado) {
-      const e = JSON.parse(guardado)
-      setUserMock({ razon: e.razon || e.nombreComercial, ruc: e.ruc, logo: "" })
-      const cfgProFirma = JSON.parse(localStorage.getItem('meijsac_config_pro') || 'null')
-      if (cfgProFirma?.firma?.expira) setFirmaMock({ vence: cfgProFirma.firma.expira, titular: e.razon })
-      const clientes = JSON.parse(localStorage.getItem('meijsac_clientes') || "[]")
-      const yo = clientes.find((c:any)=> c.ruc === e.ruc)
-      if(yo) setMiSuscripcion(yo)
-      if (e.ruc) {
-        fetch(`/api/empresa/estado?ruc=${encodeURIComponent(e.ruc)}`)
-          .then(r => r.ok ? r.json() : null)
-          .then(data => {
-            if (!data) return
+    const firmaGuardada = localStorage.getItem('meijsac_firma') || localStorage.getItem('meijsac_config_pro')
+    const cfgPro = firmaGuardada ? JSON.parse(firmaGuardada) : null
+    if(localStorage.getItem('meijsac_firma') || cfgPro?.firma?.nombre){
+      setFirmaSubida(true)
+    }
+
+    let cancel = false
+    ;(async () => {
+      try {
+        const e = await cargarEmpresaSesion()
+        if (cancel) return
+        setUserMock({ razon: e.razon || e.razonSocial || e.nombreComercial || "Sin nombre", ruc: e.ruc || "", logo: "" })
+        if (cfgPro?.firma?.expira) setFirmaMock({ vence: cfgPro.firma.expira, titular: e.razon })
+        const ctrl = new AbortController()
+        const timer = setTimeout(() => ctrl.abort(), 8000)
+        try {
+          const res = await fetch(`/api/empresa/estado?ruc=${encodeURIComponent(e.ruc)}`, { signal: ctrl.signal })
+          const data = res.ok ? await res.json() : null
+          if (!cancel && data) {
             setAccesoPlan(data)
             if (data.firmaExpira) setFirmaMock({ vence: data.firmaExpira, titular: e.razon })
-            if (data.vence) setPlanMock({ vence: data.vence, nombre: data.planNombre || "PLAN DE PRUEBA" })
-          })
-          .catch(() => {})
+            if (data.vence) setPlanMock({ vence: String(data.vence).slice(0, 10), nombre: data.planNombre || "PLAN DE PRUEBA" })
+          }
+        } catch (err: any) {
+          if (!cancel && err?.name === "AbortError") {
+            setUserMock((u) => ({ ...u, razon: u.ruc ? u.razon : "Tiempo agotado al cargar la empresa" }))
+          }
+        } finally {
+          clearTimeout(timer)
+        }
+      } catch (err: any) {
+        if (!cancel) setUserMock({ razon: err?.message || "No se pudo cargar la empresa", ruc: "", logo: "" })
       }
-    }
-  const firmaGuardada = localStorage.getItem('meijsac_firma') || localStorage.getItem('meijsac_config_pro')
-const cfgPro = firmaGuardada ? JSON.parse(firmaGuardada) : null
-if(localStorage.getItem('meijsac_firma') || cfgPro?.firma?.nombre){
-  setFirmaSubida(true)
-}
+    })()
+    return () => { cancel = true }
   },[])
 
   const saveBg = (newBg:any)=>{

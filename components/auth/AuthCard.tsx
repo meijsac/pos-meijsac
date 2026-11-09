@@ -2,6 +2,7 @@
 import { FormEvent, useState } from "react"
 import { useRouter } from "next/navigation"
 import { motion } from "framer-motion"
+import { guardarEmpresaLocal } from "@/lib/sesion-cliente"
 
 export function AuthCard({ dark, setDark, onOpenRegister }: { dark: boolean; setDark: (v: boolean) => void; onOpenRegister: () => void }) {
   const router = useRouter()
@@ -30,8 +31,8 @@ export function AuthCard({ dark, setDark, onOpenRegister }: { dark: boolean; set
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'RUC o clave incorrectos');
 
-      localStorage.setItem("meijsac_token", data.token)
-      localStorage.setItem("meijsac_user", JSON.stringify(data.usuario))
+      if (data.empresa) guardarEmpresaLocal(data.empresa, data.token, data.usuario)
+      else localStorage.setItem("meijsac_token", data.token)
 
       const dest = tab === "ADMIN" ? "/dashboard" : "/dashboard/pos-ticket"
       router.replace(dest)

@@ -1,6 +1,7 @@
 "use client";
 import { useState, useEffect } from "react";
 import { feriadosIvaReducido } from '@/lib/iva-feriados.config';
+import { cargarEmpresaSesion } from "@/lib/sesion-cliente";
 
 const SRI_URLS = {
     "1": { nombre: "PRUEBAS", url: "https://celcer.sri.gob.ec/comprobantes-electronicos-ws/RecepcionComprobantesOffline?wsdl", auth: "https://celcer.sri.gob.ec/comprobantes-electronicos-ws/AutorizacionComprobantesOffline?wsdl" },
@@ -133,11 +134,21 @@ export default function ConfiguracionAvanzadaSRI() {
     };
 
     useEffect(() => {
+      let vivo = true
+      ;(async () => {
         const reg = JSON.parse(localStorage.getItem("meijsac_registro") || "{}");
         const emp = JSON.parse(localStorage.getItem("meijsac_empresa") || "{}");
-const clientes = JSON.parse(localStorage.getItem("meijsac_clientes") || "[]");
-const clienteActual = emp?.ruc ? (clientes.find((c:any)=> c.ruc === emp.ruc) || {}) : {};
-const datosReales: any = { ...reg, ...emp, ...clienteActual };
+        const clientes = JSON.parse(localStorage.getItem("meijsac_clientes") || "[]");
+        const clienteActual = emp?.ruc ? (clientes.find((c:any)=> c.ruc === emp.ruc) || {}) : {};
+        let datosReales: any = { ...reg, ...emp, ...clienteActual };
+        try {
+          const empresa = await cargarEmpresaSesion()
+          const conValor = Object.fromEntries(Object.entries(empresa).filter(([, v]) => v !== "" && v != null))
+          datosReales = { ...datosReales, ...conValor }
+        } catch (e: any) {
+          if (!datosReales.ruc) alert(e?.message || "No se pudo cargar la empresa")
+        }
+        if (!vivo) return
 if(datosReales.razon && !datosReales.razonSocial) datosReales.razonSocial = datosReales.razon;
 if(datosReales.direccion && !datosReales.dirMatriz) datosReales.dirMatriz = datosReales.direccion;
         const saved = JSON.parse(localStorage.getItem("meijsac_config_pro") || "null");
@@ -210,6 +221,8 @@ base.ciudad = datosReales.ciudad || base.ciudad || "";
 base.sucursales = datosReales.sucursales || base.sucursales || [];
         setCfg(base);
         setLogs(JSON.parse(localStorage.getItem("meijsac_logs") || "[]"));
+      })()
+      return () => { vivo = false }
     }, []);
 
     useEffect(()=>{

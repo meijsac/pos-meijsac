@@ -1,6 +1,7 @@
 "use client"
 import { useState } from "react"
 import { useRouter } from "next/navigation"
+import { guardarEmpresaLocal } from "@/lib/sesion-cliente"
 
 const PROVINCIAS: any = {
   "Pichincha": ["Quito","Cayambe","Mejía","Rumiñahui"],
@@ -111,15 +112,12 @@ export function RegisterEmpresa({ dark, setTipo }: any) {
       return
     }
 
-    localStorage.setItem('meijsac_empresa', JSON.stringify(datosEmpresa))
-    // CORREGIDO 6: faltaba esto, para que configuración lea lo mismo
-    localStorage.setItem('meijsac_registro', JSON.stringify(datosEmpresa))
+    const { adminPass: _clave, ...publico } = datosEmpresa
+    guardarEmpresaLocal({ ...publico, ...(data.empresa || {}) }, data.token)
     localStorage.setItem('meijsac_caja_user', JSON.stringify({
       usuario: form.adminUser,
-      clave: btoa(form.adminPass),
       ruc: form.ruc
     }))
-    localStorage.setItem('meijsac_token', 'ok-'+Date.now())
 
     alert('✅ Empresa y usuario creados: ' + form.ruc)
     router.push('/dashboard')

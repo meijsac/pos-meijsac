@@ -1,6 +1,7 @@
 "use client"
 import { useState } from "react"
 import { useRouter } from "next/navigation"
+import { guardarEmpresaLocal } from "@/lib/sesion-cliente"
 
 export function LoginCaja({ dark }: { dark: boolean }) {
   const router = useRouter()
@@ -21,8 +22,8 @@ export function LoginCaja({ dark }: { dark: boolean }) {
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Usuario o clave incorrectos');
 
-      localStorage.setItem('meijsac_token', data.token);
-      localStorage.setItem('meijsac_user', JSON.stringify(data.usuario));
+      if (data.empresa) guardarEmpresaLocal(data.empresa, data.token, data.usuario)
+      else localStorage.setItem('meijsac_token', data.token);
       router.push('/dashboard/pos-ticket')
     } catch (e: any) {
       alert(e.message);

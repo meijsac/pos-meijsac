@@ -30,6 +30,7 @@ model Empresa {
   direccion       String?
   telefono        String?
   email           String?
+  datosRegistro   Json?
   firmaExpira     DateTime?
   planEstado      String   @default("PRUEBA")
   planId          String?

@@ -1,6 +1,7 @@
 import bcrypt from "bcryptjs"
 import { NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
+import { empresaParaCliente, firmarSesion } from "@/lib/empresa-sesion"
 
 export async function POST(req: Request) {
   try {
@@ -14,8 +15,38 @@ export async function POST(req: Request) {
     if (!razonSocial) return NextResponse.json({ error: "Razón social obligatoria" }, { status: 400 })
     if (!adminUser || adminPass.length < 6) return NextResponse.json({ error: "Usuario y contraseña del administrador son obligatorios" }, { status: 400 })
 
-    const existe = await prisma.empresa.findUnique({ where: { ruc } })
-    if (existe) return NextResponse.json({ ok: true, id: existe.id, yaExistia: true })
+    const datosRegistro = {
+      provincia: body?.provincia || null,
+      ciudad: body?.canton || body?.ciudad || null,
+      canton: body?.canton || body?.ciudad || null,
+      regimen: body?.regimen || null,
+      actividad: body?.actividad || null,
+      obligado: body?.obligado || body?.obligadoConta || null,
+      obligadoConta: body?.obligadoConta || body?.obligado || null,
+      contribuyenteEspecial: body?.contribuyenteEspecial || null,
+      tipoContribuyente: body?.tipoContribuyente || null,
+      sector: body?.sector || null,
+      celular: body?.celular || null,
+      respNombre: body?.respNombre || null,
+      respCelular: body?.respCelular || null,
+    }
+
+    const existe = await prisma.empresa.findUnique({ where: { ruc }, include: { usuarios: true } })
+    if (existe) {
+      let usuario = existe.usuarios[0]
+      if (!usuario) {
+        usuario = await prisma.usuario.create({
+          data: {
+            nombre: adminUser,
+            email: body?.correo || body?.email || null,
+            password: await bcrypt.hash(adminPass, 10),
+            rol: "ADMIN",
+            empresaId: existe.id,
+          },
+        })
+      }
+      return NextResponse.json({ ok: true, id: existe.id, yaExistia: true, empresaId: usuario.empresaId })
+    }
 
     const empresa = await prisma.empresa.create({
       data: {
@@ -26,6 +57,7 @@ export async function POST(req: Request) {
         direccion: body?.direccion || null,
         telefono: body?.telefono || body?.celular || null,
         email: body?.email || body?.correo || null,
+        datosRegistro,
         planEstado: "PRUEBA",
         pruebaInicio: new Date(),
         comprobantesUsados: 0,
@@ -38,9 +70,20 @@ export async function POST(req: Request) {
           },
         },
       },
+      include: { usuarios: true },
     })
 
-    return NextResponse.json({ ok: true, id: empresa.id, estado: "PRUEBA" })
+    const usuario = empresa.usuarios[0]
+    if (!usuario?.empresaId) return NextResponse.json({ error: "No se vinculó el usuario con la empresa" }, { status: 500 })
+    const token = firmarSesion({ id: usuario.id, empresaId: usuario.empresaId })
+
+    return NextResponse.json({
+      ok: true,
+      id: empresa.id,
+      estado: "PRUEBA",
+      token,
+      empresa: empresaParaCliente(empresa, usuario),
+    })
   } catch (e: any) {
     return NextResponse.json({ error: e.message || "No se pudo registrar la empresa" }, { status: 500 })
   }
