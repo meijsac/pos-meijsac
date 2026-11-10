@@ -292,8 +292,6 @@ export default function FacturadorXMLReal(){
   },[])
 
 
-  const [incluyeTransporte, setIncluyeTransporte] = useState(false)
-  const [datosTransporte, setDatosTransporte] = useState({ rucTransportista: "", razonSocial: "", placa: "", puntoPartida: "", puntoLlegada: "", fechaInicio: "", fechaFin: "" })
   const [cliente, setCliente] = useState<any>({
     tipoDoc:"07", identificacion:"9999999999999", razon:"CONSUMIDOR FINAL",
     tipold: "",
@@ -846,7 +844,6 @@ const total = subtotalSin + iva15 + ivaDiferenciado + valorICE + valorIRBPNR + p
       ultimoSecuencial: puntoEmision.ultimo,
       configEmisor: configEmisor,
       cliente: clienteFactura,
-      transporte: incluyeTransporte ? datosTransporte : null,
       items: items,
       totales: { bruto, descuento, subtotalSin, base15, base0, baseNoObjeto, baseExento, baseDiferenciado, valorICE, valorIRBPNR, iva15, ivaDiferenciado, propina, total },
       formaPago: formaPagoEmit,
@@ -1104,30 +1101,6 @@ const total = subtotalSin + iva15 + ivaDiferenciado + valorICE + valorIRBPNR + p
           <div>SEC<br/><b className="text-[#00f5d4]">{puntoEmision.secuencial || "—"}</b></div>
           <div>FECHA<br/><b suppressHydrationWarning>{fecha || "---"}</b></div>
         </div>
-      </div>
-
-      <div className="bg-[#1e293b] border border-white/10 rounded-xl p-4 mb-3">
-        <div className="flex items-center justify-between gap-3">
-          <div>
-            <h3 className="text-sm font-bold text-white uppercase tracking-wide">Información de envío y traslado</h3>
-            <p className="text-[11px] text-white/50 mt-0.5">Sustenta el traslado de mercancías en la factura. Déjalo apagado si solo vendes servicios.</p>
-          </div>
-          <label className="relative inline-flex items-center cursor-pointer">
-            <input type="checkbox" checked={incluyeTransporte} onChange={(e) => setIncluyeTransporte(e.target.checked)} className="sr-only peer" />
-            <div className="w-11 h-6 bg-slate-700 rounded-full peer-checked:bg-sky-600 after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:after:translate-x-full"></div>
-          </label>
-        </div>
-        {incluyeTransporte && (
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-xs mt-4">
-            <label className="block text-white/50">RUC transportista<input maxLength={13} value={datosTransporte.rucTransportista} placeholder="1792444555001" onChange={(e) => setDatosTransporte({ ...datosTransporte, rucTransportista: e.target.value.replace(/\D/g, "").slice(0, 13) })} className="mt-1 w-full bg-black border border-white/10 rounded-lg p-2 text-white font-mono" /></label>
-            <label className="block text-white/50">Razón social transportista<input value={datosTransporte.razonSocial} placeholder="Nombre de la empresa o chofer" onChange={(e) => setDatosTransporte({ ...datosTransporte, razonSocial: e.target.value.toUpperCase() })} className="mt-1 w-full bg-black border border-white/10 rounded-lg p-2 text-white uppercase" /></label>
-            <label className="block text-white/50">Placa del vehículo<input value={datosTransporte.placa} placeholder="PBA-1234" onChange={(e) => setDatosTransporte({ ...datosTransporte, placa: e.target.value.toUpperCase() })} className="mt-1 w-full bg-black border border-white/10 rounded-lg p-2 text-white uppercase font-mono" /></label>
-            <label className="block text-white/50">Punto de partida<input value={datosTransporte.puntoPartida} placeholder="Lugar de carga" onChange={(e) => setDatosTransporte({ ...datosTransporte, puntoPartida: e.target.value })} className="mt-1 w-full bg-black border border-white/10 rounded-lg p-2 text-white" /></label>
-            <label className="block text-white/50 md:col-span-2">Punto de llegada<input value={datosTransporte.puntoLlegada} placeholder="Dirección de entrega del cliente" onChange={(e) => setDatosTransporte({ ...datosTransporte, puntoLlegada: e.target.value })} className="mt-1 w-full bg-black border border-white/10 rounded-lg p-2 text-white" /></label>
-            <label className="block text-white/50">Fecha inicio traslado<input type="date" value={datosTransporte.fechaInicio} onChange={(e) => setDatosTransporte({ ...datosTransporte, fechaInicio: e.target.value })} className="mt-1 w-full bg-black border border-white/10 rounded-lg p-2 text-white font-mono" /></label>
-            <label className="block text-white/50">Fecha fin traslado<input type="date" value={datosTransporte.fechaFin} onChange={(e) => setDatosTransporte({ ...datosTransporte, fechaFin: e.target.value })} className="mt-1 w-full bg-black border border-white/10 rounded-lg p-2 text-white font-mono" /></label>
-          </div>
-        )}
       </div>
 
       <div className="grid grid-cols-3 gap-3">
