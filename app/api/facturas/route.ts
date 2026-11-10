@@ -10,6 +10,7 @@ import { enviarComprobante } from "@/lib/sri/soap"
 import { clasificarEstadoSri } from "@/lib/sri/estado-visible"
 import { elegirSecuencial, serieDeAmbiente } from "@/lib/sri/punto-emision"
 import { desencriptarBytes, desencriptar } from "@/lib/seguridad"
+import { validarEntradaFactura } from "@/lib/factura-entrada"
 
 export const maxDuration = 60
 
@@ -19,6 +20,11 @@ export async function POST(req: Request) {
     if ("error" in sesion) return NextResponse.json({ error: sesion.error }, { status: sesion.status })
     if (!puede(sesion.usuario.rol, "facturar")) return NextResponse.json({ error: "Tu rol no puede facturar" }, { status: 403 })
     const body = await req.json()
+    const rechazo = validarEntradaFactura(body)
+    if (rechazo) {
+      prisma.seguridadLog.create({ data: { empresaId: sesion.empresa.id, usuario: sesion.usuario.nombre, ip: ipDe(req), accion: "FACTURA_RECHAZADA", dispositivo: navegadorDe(req), detalle: rechazo } }).catch(() => {})
+      return NextResponse.json({ error: rechazo }, { status: 400 })
+    }
     const caja = String(body?.caja || sesion.usuario.id)
     if (anotarFacturaCaja(caja, Date.now()) > 30) return NextResponse.json({ error: "Demasiadas facturas por minuto" }, { status: 429 })
     if (body?.cliente) body.cliente.razon = sanitizarTexto(body.cliente.razon)

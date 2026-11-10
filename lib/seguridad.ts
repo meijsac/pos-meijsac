@@ -29,9 +29,11 @@ export function evaluarBloqueo(intentos: IntentoLogin[], correo: string, ip: str
   const quince = ahora - 15 * 60 * 1000
   const hora = ahora - 60 * 60 * 1000
   const delCorreo = intentos.filter((i) => i.correo === correo && i.canal === canal && !i.exitoso && i.fecha >= quince)
+  const fallosIp = intentos.filter((i) => i.ip === ip && i.canal === "LOGIN" && !i.exitoso && i.fecha >= quince)
   const deIp = intentos.filter((i) => i.ip === ip && i.fecha >= hora)
   const captchaIp = intentos.filter((i) => i.ip === ip && i.correo === "captcha" && !i.exitoso && i.fecha >= quince)
   if (captchaIp.length >= 3) return { bloqueado: true, mensaje: "IP bloqueada 15 minutos por captcha fallido", esperaMs: 0 }
+  if (fallosIp.length >= 5) return { bloqueado: true, mensaje: "Demasiados intentos. Intenta en 15 minutos.", esperaMs: 0 }
   if (deIp.length >= 20) return { bloqueado: true, mensaje: "IP bloqueada por demasiados intentos", esperaMs: 0 }
   if (canal === "POS" && delCorreo.length >= 5) return { bloqueado: true, mensaje: "POS bloqueado 15 minutos", esperaMs: 0 }
   if (canal === "LOGIN" && delCorreo.length >= 5) return { bloqueado: true, mensaje: "Demasiados intentos. Intenta en 15 minutos.", esperaMs: 0 }

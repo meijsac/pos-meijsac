@@ -12,9 +12,8 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   useEffect(() => {
     let vivo = true
     const tieneLocal = () => !!(localStorage.getItem("meijsac_empresa") || localStorage.getItem("meijsac_user"))
-    if (sessionStorage.getItem("meijsac_acceso_ok") === "1" && tieneLocal()) return
     const ctrl = new AbortController()
-    const timer = setTimeout(() => ctrl.abort(), 3000)
+    const timer = setTimeout(() => ctrl.abort(), 8000)
     fetch("/api/auth/sesion", { signal: ctrl.signal, credentials: "same-origin" })
       .then(async (res) => {
         if (!vivo) return

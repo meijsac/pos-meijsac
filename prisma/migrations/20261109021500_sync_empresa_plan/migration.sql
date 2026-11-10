@@ -240,3 +240,94 @@ ALTER TABLE "firma_electronica" ADD COLUMN IF NOT EXISTS "claveCifrada" TEXT NOT
 ALTER TABLE "firma_electronica" ENABLE ROW LEVEL SECURITY;
 ALTER TABLE "FacturaEmitida" ADD COLUMN IF NOT EXISTS "sri_status" TEXT;
 ALTER TABLE "seguridad_logs" ENABLE ROW LEVEL SECURITY;
+
+-- Cierra el API público de Supabase. El backend (postgres / service_role) ignora RLS.
+-- No usa USING (true). Un usuario del API solo ve la empresa de su token.
+DO $$
+DECLARE
+  t text;
+  pol record;
+  con_empresa text[] := ARRAY[
+    'FacturaEmitida','Producto','Cliente','Usuario','Proveedor',
+    'kardex_movimientos','transferencias_inventario','MovimientoInventario',
+    'inventario_config','firma_electronica','seguridad_logs'
+  ];
+  cerradas text[] := ARRAY[
+    'PlanComercial','login_intentos','password_reset','usuario_seguridad','CajaTurno','CajaMovimiento'
+  ];
+  todas text[] := con_empresa || cerradas || ARRAY['Empresa','documentos_legales','Sucursal','sesiones_usuario'];
+BEGIN
+  FOR pol IN
+    SELECT tablename, policyname
+    FROM pg_policies
+    WHERE schemaname = 'public' AND (qual = 'true' OR with_check = 'true')
+  LOOP
+    EXECUTE format('DROP POLICY IF EXISTS %I ON %I', pol.policyname, pol.tablename);
+  END LOOP;
+
+  FOREACH t IN ARRAY todas LOOP
+    IF to_regclass(format('public.%I', t)) IS NULL THEN CONTINUE; END IF;
+    EXECUTE format('ALTER TABLE %I ENABLE ROW LEVEL SECURITY', t);
+    EXECUTE format('REVOKE ALL ON TABLE %I FROM anon', t);
+    EXECUTE format('DROP POLICY IF EXISTS meijsac_tenant ON %I', t);
+    EXECUTE format('DROP POLICY IF EXISTS meijsac_cerrada ON %I', t);
+  END LOOP;
+
+  IF to_regprocedure('auth.jwt()') IS NULL THEN RETURN; END IF;
+
+  FOREACH t IN ARRAY con_empresa LOOP
+    IF to_regclass(format('public.%I', t)) IS NULL THEN CONTINUE; END IF;
+    EXECUTE format(
+      'CREATE POLICY meijsac_tenant ON %I FOR ALL TO authenticated USING ("empresaId" = coalesce(auth.jwt() ->> ''empresaId'', '''')) WITH CHECK ("empresaId" = coalesce(auth.jwt() ->> ''empresaId'', ''''))',
+      t
+    );
+  END LOOP;
+
+  IF to_regclass('public."Empresa"') IS NOT NULL THEN
+    CREATE POLICY meijsac_tenant ON "Empresa" FOR ALL TO authenticated
+      USING ("id" = coalesce(auth.jwt() ->> 'empresaId', ''))
+      WITH CHECK ("id" = coalesce(auth.jwt() ->> 'empresaId', ''));
+  END IF;
+
+  IF to_regclass('public.documentos_legales') IS NOT NULL THEN
+    CREATE POLICY meijsac_tenant ON documentos_legales FOR ALL TO authenticated
+      USING (empresa_id = coalesce(auth.jwt() ->> 'empresaId', ''))
+      WITH CHECK (empresa_id = coalesce(auth.jwt() ->> 'empresaId', ''));
+  END IF;
+
+  IF to_regclass('public."Sucursal"') IS NOT NULL THEN
+    CREATE POLICY meijsac_tenant ON "Sucursal" FOR ALL TO authenticated
+      USING (EXISTS (
+        SELECT 1 FROM "Cliente" c
+        WHERE c.id = "Sucursal"."clienteId"
+          AND c."empresaId" = coalesce(auth.jwt() ->> 'empresaId', '')
+      ))
+      WITH CHECK (EXISTS (
+        SELECT 1 FROM "Cliente" c
+        WHERE c.id = "Sucursal"."clienteId"
+          AND c."empresaId" = coalesce(auth.jwt() ->> 'empresaId', '')
+      ));
+  END IF;
+
+  IF to_regclass('public.sesiones_usuario') IS NOT NULL THEN
+    CREATE POLICY meijsac_tenant ON sesiones_usuario FOR ALL TO authenticated
+      USING (EXISTS (
+        SELECT 1 FROM "Usuario" u
+        WHERE u.id = sesiones_usuario."usuarioId"
+          AND u."empresaId" = coalesce(auth.jwt() ->> 'empresaId', '')
+      ))
+      WITH CHECK (EXISTS (
+        SELECT 1 FROM "Usuario" u
+        WHERE u.id = sesiones_usuario."usuarioId"
+          AND u."empresaId" = coalesce(auth.jwt() ->> 'empresaId', '')
+      ));
+  END IF;
+
+  FOREACH t IN ARRAY cerradas LOOP
+    IF to_regclass(format('public.%I', t)) IS NULL THEN CONTINUE; END IF;
+    EXECUTE format(
+      'CREATE POLICY meijsac_cerrada ON %I FOR ALL TO authenticated USING (false) WITH CHECK (false)',
+      t
+    );
+  END LOOP;
+END $$;

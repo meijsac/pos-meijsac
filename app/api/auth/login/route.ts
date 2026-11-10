@@ -22,7 +22,13 @@ export async function POST(req: Request) {
     const ua = navegadorDe(req)
     const ahora = Date.now()
     const bloqueo = evaluarBloqueo(leerIntentos(), ruc, ip, ahora, canal)
-    if (bloqueo.bloqueado) return responder({ error: bloqueo.mensaje }, 429)
+    const fallosGuardados = canal === "LOGIN"
+      ? await prisma.loginIntento.count({ where: { ip, exitoso: false, canal: "LOGIN", fecha: { gte: new Date(ahora - 15 * 60 * 1000) } } }).catch(() => 0)
+      : 0
+    if (bloqueo.bloqueado || fallosGuardados >= 5) {
+      prisma.seguridadLog.create({ data: { ip, usuario: ruc.slice(0, 80), accion: "LOGIN_BLOQUEADO", dispositivo: ua, detalle: "5 fallos en 15 minutos" } }).catch(() => {})
+      return responder({ error: bloqueo.mensaje || "Demasiados intentos. Intenta en 15 minutos." }, 429)
+    }
     if (!ruc || !password) return responder({ error: "Falta RUC o clave" }, 400)
 
     const usuarios = await prisma.usuario.findMany({ where: { empresa: { ruc } }, include: { empresa: true } })
