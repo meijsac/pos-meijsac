@@ -2,6 +2,7 @@
 import { useState, useEffect, useRef } from "react"
 import Link from "next/link"
 import ModalCajaMixto from "./components/ModalCajaMixto"
+import ModuloTransporteReducido from "@/components/ModuloTransporteReducido"
 import { elegirSecuencial, puntoActivoFactura } from "@/lib/sri/punto-emision"
 import { normalizarComprador } from "@/lib/sri/xml-factura"
 
@@ -96,6 +97,7 @@ type Item = {
   esPlastico:boolean;
   valorIva?:number;
   detalleAdicional?: string;
+  codigoAuxiliar?: string;
   descDolar?: number;
   tarifas?: {min:number, may:number, dist:number}
 }
@@ -292,6 +294,8 @@ export default function FacturadorXMLReal(){
   },[])
 
 
+  const [esOperadora, setEsOperadora] = useState(false)
+  const [placaVehiculo, setPlacaVehiculo] = useState("")
   const [cliente, setCliente] = useState<any>({
     tipoDoc:"07", identificacion:"9999999999999", razon:"CONSUMIDOR FINAL",
     tipold: "",
@@ -578,7 +582,9 @@ const manejarConsultaSRIExpress = async () => {
     return null
   }
   const addProducto = (p:any) => {
-  const tarifa = tarifaProducto(p)
+  const auxiliar = String(p?.codigoAuxiliar || "").trim()
+  const esTransporte = auxiliar === "H492001" || auxiliar === "H492002"
+  const tarifa = esTransporte ? { codigoPorcentaje: "0", tarifa: 0 } : tarifaProducto(p)
   if (!tarifa) return alert(`"${p?.nombre || p?.codigo || "Producto"}" no tiene tarifa IVA en Inventario. No se agrega a la factura.`)
   const precio = Number(p.precioMinorista ?? p.precio ?? p.precioSinIVA)
   if (!Number.isFinite(precio)) return alert(`"${p?.nombre || p?.codigo}" no tiene precio.`)
@@ -587,7 +593,7 @@ const manejarConsultaSRIExpress = async () => {
     const n=[...items]; n[idx].cant+=1; setItems(n)
   } else {
     setItems([...items, {
-      codigo:p.codigo, descripcion:p.nombre || p.descripcion, detalle:"", detalleAdicional:p.detalle || "", cant:1, pUnit:precio, descPorc:Number(p.descuento)||0, descDolar:0,
+      codigo:p.codigo, codigoAuxiliar: auxiliar, descripcion:p.nombre || p.descripcion, detalle:"", detalleAdicional:p.detalle || "", cant:1, pUnit:precio, descPorc:Number(p.descuento)||0, descDolar:0,
       codigoPorcentaje:tarifa.codigoPorcentaje, tarifa:tarifa.tarifa, iva:tarifa.tarifa, ice:Number(p.porcIce)||0, esPlastico:false,
       tarifas:{min:precio, may:Number(p.precioMayorista ?? p.precioMay ?? precio), dist:Number(p.precioDistribuidor ?? p.precioDist ?? precio)}
     }])
@@ -760,6 +766,7 @@ const total = subtotalSin + iva15 + ivaDiferenciado + valorICE + valorIRBPNR + p
   
   
   const emitirComprobante = async () => {
+    if (esOperadora && !placaVehiculo.trim()) return alert("Falta la placa del vehículo")
     if (!puntoEmision.serie || !puntoEmision.secuencial) return alert("Configura el punto de emisión en Configuración. No hay un secuencial fijo.")
     if (bloqueoConsumidorFinal) return alert(avisoConsumidorFinal)
     if (!emisorListo) return alert("Faltan datos del emisor en Configuración")
@@ -844,6 +851,7 @@ const total = subtotalSin + iva15 + ivaDiferenciado + valorICE + valorIRBPNR + p
       ultimoSecuencial: puntoEmision.ultimo,
       configEmisor: configEmisor,
       cliente: clienteFactura,
+      placaVehiculo: esOperadora ? placaVehiculo : "",
       items: items,
       totales: { bruto, descuento, subtotalSin, base15, base0, baseNoObjeto, baseExento, baseDiferenciado, valorICE, valorIRBPNR, iva15, ivaDiferenciado, propina, total },
       formaPago: formaPagoEmit,
@@ -1102,6 +1110,8 @@ const total = subtotalSin + iva15 + ivaDiferenciado + valorICE + valorIRBPNR + p
           <div>FECHA<br/><b suppressHydrationWarning>{fecha || "---"}</b></div>
         </div>
       </div>
+
+      <ModuloTransporteReducido onPlacaChange={setPlacaVehiculo} onOperadoraChange={setEsOperadora} />
 
       <div className="grid grid-cols-3 gap-3">
         <div className="col-span-2 bg-[#1e293b] p-3 rounded-xl border border-white/10">

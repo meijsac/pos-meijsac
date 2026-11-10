@@ -160,14 +160,16 @@ export function armarXmlFactura(empresa: {
     const precio = Number(item.pUnit ?? item.precioUnitario ?? 0)
     const desc = cant * precio * (Number(item.descPorc || 0) / 100)
     const base = cant * precio - desc
-    const cod = String(item.codigoPorcentaje ?? "4")
-    const tarifa = TARIFAS[cod] ?? 0
-    const iva = cod === "6" || cod === "7" ? 0 : base * (tarifa / 100)
+    const auxiliar = String(item.codigoAuxiliar || "").trim()
+    const esTransporte = auxiliar === "H492001" || auxiliar === "H492002"
+    const cod = esTransporte ? "0" : String(item.codigoPorcentaje ?? "4")
+    const tarifa = esTransporte ? 0 : (TARIFAS[cod] ?? 0)
+    const iva = cod === "6" || cod === "7" || esTransporte ? 0 : base * (tarifa / 100)
     totalDescuento += desc
     if (!grupos[cod]) grupos[cod] = { base: 0, valor: 0, tarifa }
     grupos[cod].base += base
     grupos[cod].valor += iva
-    return `<detalle><codigoPrincipal>${xml(item.codigo || "001")}</codigoPrincipal><descripcion>${xml(item.descripcion)}</descripcion><cantidad>${dinero(cant)}</cantidad><precioUnitario>${dinero(precio)}</precioUnitario><descuento>${dinero(desc)}</descuento><precioTotalSinImpuesto>${dinero(base)}</precioTotalSinImpuesto><impuestos><impuesto><codigo>2</codigo><codigoPorcentaje>${xml(cod)}</codigoPorcentaje><tarifa>${dinero(tarifa)}</tarifa><baseImponible>${dinero(base)}</baseImponible><valor>${dinero(iva)}</valor></impuesto></impuestos></detalle>`
+    return `<detalle><codigoPrincipal>${xml(item.codigo || item.codigoPrincipal || "001")}</codigoPrincipal>${auxiliar ? `<codigoAuxiliar>${xml(auxiliar)}</codigoAuxiliar>` : ""}<descripcion>${xml(item.descripcion)}</descripcion><cantidad>${dinero(cant)}</cantidad><precioUnitario>${dinero(precio)}</precioUnitario><descuento>${dinero(desc)}</descuento><precioTotalSinImpuesto>${dinero(base)}</precioTotalSinImpuesto><impuestos><impuesto><codigo>2</codigo><codigoPorcentaje>${xml(cod)}</codigoPorcentaje><tarifa>${dinero(tarifa)}</tarifa><baseImponible>${dinero(base)}</baseImponible><valor>${dinero(iva)}</valor></impuesto></impuestos></detalle>`
   }).join("")
 
   const totalSin = Object.values(grupos).reduce((s, g) => s + g.base, 0)
@@ -183,8 +185,9 @@ export function armarXmlFactura(empresa: {
     .map(([codigo, monto]) => `<pago><formaPago>${codigo}</formaPago><total>${dinero(monto)}</total></pago>`)
     .join("")
   const email = String(body?.cliente?.email || "").trim()
+  const placa = String(body?.placaVehiculo || "").trim()
 
-  const documento = `<?xml version="1.0" encoding="UTF-8"?><factura id="comprobante" version="1.1.0"><infoTributaria><ambiente>${ambiente}</ambiente><tipoEmision>1</tipoEmision><razonSocial>${xml(razon)}</razonSocial>${comercial ? `<nombreComercial>${xml(comercial)}</nombreComercial>` : ""}<ruc>${ruc}</ruc><claveAcceso>${clave}</claveAcceso><codDoc>01</codDoc><estab>${estab}</estab><ptoEmi>${pto}</ptoEmi><secuencial>${secuencial}</secuencial><dirMatriz>${xml(direccion)}</dirMatriz></infoTributaria><infoFactura><fechaEmision>${fecha}</fechaEmision><dirEstablecimiento>${xml(dirEstablecimiento)}</dirEstablecimiento><obligadoContabilidad>${obligado}</obligadoContabilidad><tipoIdentificacionComprador>${tipoIdentificacion(compradorId, compradorTipo)}</tipoIdentificacionComprador><razonSocialComprador>${xml(comprador)}</razonSocialComprador><identificacionComprador>${xml(compradorId)}</identificacionComprador><totalSinImpuestos>${dinero(totalSin)}</totalSinImpuestos><totalDescuento>${dinero(totalDescuento)}</totalDescuento><totalConImpuestos>${totalesXml}</totalConImpuestos><propina>${dinero(propina)}</propina><importeTotal>${dinero(importe)}</importeTotal><moneda>DOLAR</moneda><pagos>${pagos}</pagos></infoFactura><detalles>${detalles}</detalles>${email ? `<infoAdicional><campoAdicional nombre="Email">${xml(email)}</campoAdicional></infoAdicional>` : ""}</factura>`
+  const documento = `<?xml version="1.0" encoding="UTF-8"?><factura id="comprobante" version="1.1.0"><infoTributaria><ambiente>${ambiente}</ambiente><tipoEmision>1</tipoEmision><razonSocial>${xml(razon)}</razonSocial>${comercial ? `<nombreComercial>${xml(comercial)}</nombreComercial>` : ""}<ruc>${ruc}</ruc><claveAcceso>${clave}</claveAcceso><codDoc>01</codDoc><estab>${estab}</estab><ptoEmi>${pto}</ptoEmi><secuencial>${secuencial}</secuencial><dirMatriz>${xml(direccion)}</dirMatriz></infoTributaria><infoFactura><fechaEmision>${fecha}</fechaEmision><dirEstablecimiento>${xml(dirEstablecimiento)}</dirEstablecimiento><obligadoContabilidad>${obligado}</obligadoContabilidad><tipoIdentificacionComprador>${tipoIdentificacion(compradorId, compradorTipo)}</tipoIdentificacionComprador><razonSocialComprador>${xml(comprador)}</razonSocialComprador><identificacionComprador>${xml(compradorId)}</identificacionComprador><totalSinImpuestos>${dinero(totalSin)}</totalSinImpuestos><totalDescuento>${dinero(totalDescuento)}</totalDescuento><totalConImpuestos>${totalesXml}</totalConImpuestos><propina>${dinero(propina)}</propina><importeTotal>${dinero(importe)}</importeTotal><moneda>DOLAR</moneda>${placa ? `<placa>${xml(placa)}</placa>` : ""}<pagos>${pagos}</pagos></infoFactura><detalles>${detalles}</detalles>${email ? `<infoAdicional><campoAdicional nombre="Email">${xml(email)}</campoAdicional></infoAdicional>` : ""}</factura>`
 
   return { xml: documento, claveAcceso: clave, ambiente, estab, pto, secuencial, fecha }
 }
