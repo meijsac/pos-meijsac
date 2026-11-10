@@ -80,7 +80,17 @@ export function htmlRide(data: {
   xmlUrl?: string
   vuelto?: number
   recibido?: number
+  transporte?: { rucTransportista?: string; razonSocial?: string; placa?: string; puntoPartida?: string; puntoLlegada?: string; fechaInicio?: string; fechaFin?: string } | null
 }) {
+  const transporte = data.transporte && [data.transporte.rucTransportista, data.transporte.razonSocial, data.transporte.placa, data.transporte.puntoPartida, data.transporte.puntoLlegada, data.transporte.fechaInicio, data.transporte.fechaFin].some((v) => String(v || "").trim()) ? data.transporte : null
+  const bloqueTransporte = transporte ? `<div style="border:1px solid #fcd34d;background:#fffbeb;border-radius:8px;padding:12px;font-size:12px;margin-bottom:24px">
+    <p style="margin:0 0 8px;font-weight:700;color:#78350f;text-transform:uppercase">Información de envío y traslado</p>
+    <p style="margin:0 0 4px"><b>Transportista:</b> ${esc(transporte.razonSocial)}</p>
+    <p style="margin:0 0 4px"><b>R.U.C.:</b> ${esc(transporte.rucTransportista)}</p>
+    <p style="margin:0 0 4px"><b>Placa:</b> ${esc(transporte.placa)}</p>
+    <p style="margin:0 0 4px"><b>Ruta:</b> ${esc(transporte.puntoPartida)} → ${esc(transporte.puntoLlegada)}</p>
+    <p style="margin:0"><b>Fechas:</b> ${esc(transporte.fechaInicio)} al ${esc(transporte.fechaFin)}</p>
+  </div>` : ""
   const leyendaRegimen = (() => {
     const texto = String(data.regimen || "").toUpperCase()
     if (texto.includes("POPULAR")) return "CONTRIBUYENTE RÉGIMEN RIMPE: NEGOCIO POPULAR"
@@ -158,6 +168,7 @@ export function htmlRide(data: {
     <p style="margin:0"><b>Dirección:</b> ${esc(data.direccionCliente || "—")}</p>
     <p style="margin:0"><b>Email:</b> ${esc(data.email || "—")}</p>
   </div>
+  ${bloqueTransporte}
   <div style="border:1px solid #e2e8f0;border-radius:8px;overflow:hidden;margin-bottom:24px">
     <table>
       <thead>
@@ -222,6 +233,7 @@ export function htmlTicket(data: Parameters<typeof htmlRide>[0]) {
   const clave = String(data.claveAcceso || "").replace(/\D/g, "")
   const recibido = Number(data.recibido || 0)
   const vuelto = Number(data.vuelto || 0)
+  const transporte = data.transporte && [data.transporte.rucTransportista, data.transporte.razonSocial, data.transporte.placa, data.transporte.puntoPartida, data.transporte.puntoLlegada, data.transporte.fechaInicio, data.transporte.fechaFin].some((v) => String(v || "").trim()) ? data.transporte : null
   return `<!DOCTYPE html>
 <html lang="es">
 <head>
@@ -248,6 +260,11 @@ export function htmlTicket(data: Parameters<typeof htmlRide>[0]) {
   <p style="margin:2px 0"><b>FECHA EMISIÓN:</b> ${esc(data.fechaEmision)}</p>
   <p style="margin:2px 0;text-transform:uppercase"><b>CLIENTE:</b> ${esc(data.cliente)}</p>
   <p style="margin:2px 0"><b>RUC/CÍ:</b> ${esc(data.identificacion)}</p>
+  ${transporte ? `<hr>
+  <p style="margin:2px 0;font-weight:bold;text-align:center">DATOS DE TRASLADO</p>
+  <p style="margin:2px 0"><b>TRANSP:</b> ${esc(String(transporte.razonSocial || "").slice(0, 20))}</p>
+  <p style="margin:2px 0"><b>RUC/PLACA:</b> ${esc(transporte.rucTransportista)} / ${esc(transporte.placa)}</p>
+  <p style="margin:2px 0"><b>FECHAS:</b> ${esc(transporte.fechaInicio)} al ${esc(transporte.fechaFin)}</p>` : ""}
   <hr>
   <table>
     <thead>
