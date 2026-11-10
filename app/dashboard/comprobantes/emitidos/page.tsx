@@ -72,6 +72,7 @@ export default function EmitidosPage(){
   const [showAnular,setShowAnular]=useState<ComprobanteHistorialSRI|null>(null)
   const [borradores,setBorradores]=useState<any[]>([])
   const [pendientes,setPendientes]=useState<ComprobanteHistorialSRI[]>([])
+  let refrescando = false
 
   // 1. INYECCION UNIFICADA - Lee todas las llaves
   const cargar = async ()=>{
@@ -136,89 +137,81 @@ export default function EmitidosPage(){
     setDocs(todos)
     setPendientes(todos.filter(d=> d.estadoSRI==='PENDIENTE_DE_AUTORIZAR' || d.estadoSRI==='PENDIENTE'))
     setBorradores(get("meijsac_borradores_facturas"))
+    const autorizo = await reenviarPendientes(todos)
+    if (autorizo && !refrescando) {
+      refrescando = true
+      await cargar()
+      refrescando = false
+    }
   }
 
-  useEffect(()=>{ cargar() },[])
-
-  const reenviarPruebas = async (p: ComprobanteHistorialSRI) => {
-    const res = await fetch("/api/sri/enviar", { method: "POST", body: JSON.stringify({ xml: p.xmlContent, clave: p.claveAcceso, confirmar: true }), headers: { "Content-Type": "application/json" } })
-    const data = await res.json().catch(() => ({}))
-    if (data.estado === "AUTORIZADO" && data.numeroAutorizacion && data.fechaAutorizacion) {
-      const keys = ["meijsac_comprobantes_pendientes_sri", "meijsac_comprobantes_sri", "meijsac_comprobantes_emitidos", "meijsac_ventas_pos", "meijsac_facturas"]
-      keys.forEach((k) => {
-        const lista = JSON.parse(localStorage.getItem(k) || "[]")
-        const nueva = lista.map((d: any) => d.claveAcceso === p.claveAcceso || d.secuencial === p.secuencial ? { ...d, estadoSRI: "AUTORIZADO", numeroAutorizacion: data.numeroAutorizacion, fechaAutorizacion: data.fechaAutorizacion } : d)
-        localStorage.setItem(k, JSON.stringify(nueva))
+  const reenviarPendientes = async (lista: ComprobanteHistorialSRI[], avisar = false) => {
+    if (typeof navigator !== "undefined" && !navigator.onLine) return
+    const marcas = JSON.parse(sessionStorage.getItem("meijsac_sri_reintento") || "{}")
+    const ahora = Date.now()
+    let autorizo = false
+    const candidatos = lista.filter((d) => {
+      const clave = String(d.claveAcceso || "").replace(/\D/g, "")
+      if (clave.length !== 49 || String((d as { fechaAutorizacion?: string }).fechaAutorizacion || "").trim()) return false
+      if (d.estadoSRI === "ANULADO" || d.estadoSRI === "AUTORIZADO") return false
+      if (avisar) return true
+      return !marcas[clave] || ahora - Number(marcas[clave]) > 60000
+    }).slice(0, 5)
+    for (const d of candidatos) {
+      const clave = String(d.claveAcceso).replace(/\D/g, "")
+      marcas[clave] = Date.now()
+      sessionStorage.setItem("meijsac_sri_reintento", JSON.stringify(marcas))
+      const res = await fetch("/api/facturar/sri", {
+        method: "POST",
+        credentials: "same-origin",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${localStorage.getItem("meijsac_token") || ""}` },
+        body: JSON.stringify({ claveAcceso: clave }),
+      }).catch(() => null)
+      const data = await res?.json().catch(() => ({}))
+      const fecha = String(data?.fechaAutorizacion || "").trim()
+      if (avisar) alert(fecha ? `Autorizado ${fecha}` : (data?.mensaje || data?.error || "Sin respuesta del SRI"))
+      if (!fecha) continue
+      autorizo = true
+      const copia = { claveAcceso: clave, estadoSRI: "AUTORIZADO", fechaAutorizacion: fecha, numeroAutorizacion: data.numeroAutorizacion || "", mensajeSri: data.mensaje || "" }
+      ;["meijsac_comprobantes_emitidos", "meijsac_documentos_emitidos", "meijsac_facturas", "meijsac_enviados_sri", "meijsac_autorizados", "meijsac_comprobantes_sri", "meijsac_comprobantes_pendientes_sri"].forEach((nombre) => {
+        const previa = JSON.parse(localStorage.getItem(nombre) || "[]")
+        const items = Array.isArray(previa) ? previa : []
+        const i = items.findIndex((x: any) => String(x?.claveAcceso || x?.clave || "").replace(/\D/g, "") === clave)
+        if (i >= 0) items[i] = { ...items[i], ...copia }
+        else items.push({ ...d, ...copia })
+        localStorage.setItem(nombre, JSON.stringify(items))
       })
     }
-    alert(data.mensaje || data.estado || "Sin respuesta del SRI")
+    return autorizo
+  }
+
+  useEffect(()=>{
+    cargar()
+    window.addEventListener("online", cargar)
+    return () => window.removeEventListener("online", cargar)
+  },[])
+
+  const reenviarPruebas = async (p: ComprobanteHistorialSRI) => {
+    await reenviarPendientes([p], true)
     cargar()
   }
 
   // 3. BOTONERA DE DESPACHO - GENERICA
-  const descargarXML = (doc:ComprobanteHistorialSRI)=>{
-    const xmlReal = doc.xmlContent || `<?xml version="1.0" encoding="UTF-8"?>
-<comprobante id="comprobante" version="1.0.0">
-  <infoTributaria>
-    <ambiente>1</ambiente>
-    <tipoEmision>1</tipoEmision>
-    <razonSocial>${empresa.razonSocial}</razonSocial>
-    <claveAcceso>${doc.claveAcceso}</claveAcceso>
-    <codDoc>${doc.tipoComprobante}</codDoc>
-    <estab>${doc.secuencial.split('-')[0]||'001'}</estab>
-    <ptoEmi>${doc.secuencial.split('-')[1]||'001'}</ptoEmi>
-    <secuencial>${doc.secuencial.split('-').pop()}</secuencial>
-    <dirMatriz>${empresa.direccionMatriz}</dirMatriz>
-  </infoTributaria>
-  <infoAdicional>
-    <campoAdicional nombre="RECEPTOR">${doc.receptorNombre}</campoAdicional>
-    <campoAdicional nombre="RUC">${doc.receptorIdentificacion}</campoAdicional>
-    <numeroAutorizacion>${doc.claveAcceso}</numeroAutorizacion>
-    <fechaAutorizacion>${doc.fechaEmision}</fechaAutorizacion>
-    <estado>${doc.estadoSRI}</estado>
-  </infoAdicional>
-  <detalles><total>${doc.valorTotal}</total></detalles>
-</comprobante>`
-    const blob = new Blob([xmlReal],{type:'application/xml;charset=utf-8'});
-    const url = URL.createObjectURL(blob)
-    const a = document.createElement('a'); a.href=url; 
-    a.download=`${doc.tipoComprobante}-${doc.secuencial}-${doc.receptorNombre.substring(0,15).replace(/\s/g,'_')}.xml`;
-    document.body.appendChild(a); a.click(); a.remove();
-    setTimeout(()=>URL.revokeObjectURL(url),1000)
+  const abrirDocumentoReal = (doc: ComprobanteHistorialSRI, modo: "ride" | "ticket" | "xml") => {
+    const clave = String(doc.claveAcceso || "").replace(/\D/g, "")
+    if (clave.length !== 49) { alert("Este comprobante no tiene el documento real emitido."); return }
+    const url = modo === "ticket" ? `/dashboard/factura-xml/pdf/${clave}?ticket=1` : modo === "xml" ? `/dashboard/factura-xml/pdf/${clave}?xml=1` : `/dashboard/factura-xml/pdf/${clave}`
+    if (modo === "xml") { const a = document.createElement("a"); a.href = url; a.click(); return }
+    if (!window.open(url, "_blank")) alert("Activa las ventanas emergentes para ver el comprobante.")
   }
 
-  const descargarPDF = (doc:ComprobanteHistorialSRI)=>{
-    const html = `
-      <html><head><title>RIDE ${doc.secuencial}</title>
-      <style>
-        body{font-family:Arial,sans-serif;font-size:12px;padding:20px;color:#000;background:#fff}
-        .header{display:flex;justify-content:space-between;border:2px solid #000;padding:12px}
-        .barcode{margin-top:20px;font-family:monospace;letter-spacing:1px;text-align:center;border:1px dashed #000;padding:10px;word-break:break-all;font-size:10px}
-        .anulado{color:red;border:4px solid red;text-align:center;font-weight:900;font-size:34px;transform:rotate(-18deg);opacity:0.25;position:absolute;top:38%;left:22%;padding:10px 40px;z-index:10}
-        .pendiente{color:#ffbe0a;border:4px solid #ffbe0a;text-align:center;font-weight:900;font-size:28px;transform:rotate(-18deg);opacity:0.3;position:absolute;top:38%;left:18%;padding:10px 30px;z-index:10}
-        table{width:100%;border-collapse:collapse;margin-top:12px} th,td{border:1px solid #000;padding:6px;text-align:left}
-      </style></head><body>
-      ${doc.estadoSRI==='ANULADO'?'<div class="anulado">ANULADO EN SRI</div>':''}
-      ${doc.estadoSRI==='PENDIENTE_DE_AUTORIZAR' || doc.estadoSRI==='PENDIENTE'?'<div class="pendiente">PENDIENTE DE AUTORIZAR</div>':''}
-      <div class="header">
-        <div><b style="font-size:14px">${empresa.razonSocial}</b><br/>RUC: ${empresa.ruc}<br/>Dir Matriz: ${empresa.direccionMatriz}<br/>Obligado: ${empresa.obligadoContabilidad}<br/><br/>Cliente: ${doc.receptorNombre}</div>
-        <div style="text-align:right"><b>RIDE - ${doc.tipoComprobante==='07'?'RETENCION':'FACTURA'} ${doc.tipoComprobante}</b><br/>No. ${doc.secuencial}<br/>Clave Acceso:<br/><span style="font-size:9px">${doc.claveAcceso}</span><br/>Fecha: ${doc.fechaEmision}<br/>Estado: ${doc.estadoSRI}</div>
-      </div>
-      <p><b>Receptor:</b> ${doc.receptorNombre}<br/><b>RUC/CI:</b> ${doc.receptorIdentificacion}<br/><b>Fecha:</b> ${doc.fechaEmision} (Fecha actual forzada por norma SRI)</p>
-      <table><tr><th>Detalle</th><th>Valor</th></tr><tr><td>Valor Total Documento</td><td style="font-weight:900">$${doc.estadoSRI==='ANULADO'?'0.00':doc.valorTotal.toFixed(2)}</td></tr></table>
-      <div class="barcode">CLAVE ACCESO<br/>${doc.claveAcceso}<br/><br/>NUM AUTORIZACION: ${doc.claveAcceso}</div>
-      <p style="font-size:8px;opacity:0.5;margin-top:20px">Documento desde COMPROBANTES EMITIDOS - ${empresa.nombreComercial} - ${new Date().toLocaleString()}</p>
-      <script>setTimeout(()=>{window.print()},400)</script>
-      </body></html>`
-    const w=window.open('','','width=900,height=950'); 
-    if(!w){ alert("Activa popups del navegador para descargar PDF en EMITIDOS"); return }
-    w.document.open(); w.document.write(html); w.document.close()
-  }
+  const descargarXML = (doc: ComprobanteHistorialSRI) => abrirDocumentoReal(doc, "xml")
 
-  const descargarTicket = (doc:ComprobanteHistorialSRI)=>{
-    if(doc.tipoComprobante==='07' || doc.tipoComprobante==='06'){ alert(`Documentos tipo ${doc.tipoComprobante} por normativa SRI solo se permiten en formato RIDE A4`); return }
-    const w=window.open('','','width=320,height=650'); if(!w) return
-    w.document.write(`<html><body style="width:80mm;font-family:monospace;font-size:11px;text-align:center;padding:10px"><b>${empresa.nombreComercial}</b><br/>${empresa.razonSocial}<br/>RUC: ${empresa.ruc}<br/>${doc.secuencial}<br/>${doc.fechaEmision}<br/>${doc.receptorNombre}<br/>--------------------------<br/>TOTAL: $${doc.valorTotal.toFixed(2)}<br/>--------------------------<br/><span style="font-size:8px">${doc.claveAcceso.slice(0,25)}...</span><br/><script>setTimeout(()=>window.print(),400)</script></body></html>`)
+  const descargarPDF = (doc: ComprobanteHistorialSRI) => abrirDocumentoReal(doc, "ride")
+
+  const descargarTicket = (doc: ComprobanteHistorialSRI) => {
+    if (doc.tipoComprobante === "07" || doc.tipoComprobante === "06") { alert(`Documentos tipo ${doc.tipoComprobante} por normativa SRI solo se permiten en formato RIDE A4`); return }
+    abrirDocumentoReal(doc, "ticket")
   }
 
   const anularLogico = ()=>{
