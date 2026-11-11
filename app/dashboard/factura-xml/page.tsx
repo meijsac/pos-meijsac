@@ -172,6 +172,7 @@ export default function FacturadorXMLReal(){
   const [isDark, setIsDark] = useState(true)
   const [showNuevoCliente, setShowNuevoCliente] = useState(false)
   const [buscandoSRI, setBuscandoSRI] = useState(false)
+  const [masDatosCliente, setMasDatosCliente] = useState(false)
   const [nuevoCliForm, setNuevoCliForm] = useState({ razon:"", identificacion:"", direccion:"", email:"", telefono:"" })
   
 
@@ -1115,43 +1116,47 @@ const total = subtotalSin + iva15 + ivaDiferenciado + valorICE + valorIRBPNR + p
 
       <div className="grid grid-cols-3 gap-3">
         <div className="col-span-2 bg-[#1e293b] p-3 rounded-xl border border-white/10">
-          <div className="flex justify-between mb-2"><b className="text-[#00f5d4]">1. + CLIENTE (SRI)</b><button onClick={()=>setShowNuevoCliente(true)} className="bg-[#00f5d4]/20 text-[#00f5d4] px-2 py-1 rounded text-[10px]">+ Nuevo</button></div>
+          <div className="flex justify-between mb-2"><b className="text-teal-300">Datos del Cliente</b><button onClick={()=>setShowNuevoCliente(true)} className="bg-white/10 text-teal-200 px-2 py-1 rounded text-[10px]">+ Nuevo</button></div>
           <div className="grid grid-cols-3 gap-2">
             <select value={cliente.tipoDoc} onChange={e=>{
               const tipoDoc = e.target.value
               if (tipoDoc === "07") setCliente({ ...cliente, tipoDoc, identificacion: "9999999999999", razon: "CONSUMIDOR FINAL" })
               else setCliente({ ...cliente, tipoDoc, identificacion: cliente.identificacion === "9999999999999" ? "" : cliente.identificacion, razon: cliente.razon === "CONSUMIDOR FINAL" ? "" : cliente.razon })
-            }} className="bg-black p-2 rounded-lg text-white text-[11px]">
-              <option value="05">05 - Cédula</option>
-              <option value="04">04 - RUC</option>
-              <option value="07">07 - Consumidor Final</option>
+            }} className="bg-black p-2 rounded-lg text-white text-[11px] border border-white/10">
+              <option value="05">Cédula</option>
+              <option value="04">RUC</option>
+              <option value="07">Consumidor final</option>
             </select>
-            <div className="flex gap-1">
+            <div className="col-span-2 flex items-center gap-1 bg-black rounded-lg border border-white/10 px-2">
   <input value={cliente.identificacion} onChange={e=>{
     const identificacion = e.target.value
     const digitos = identificacion.replace(/\D/g, "")
     const tipoDoc = digitos === "9999999999999" || /^9{13,}$/.test(digitos) ? "07" : digitos.length === 13 ? "04" : digitos.length === 10 ? "05" : cliente.tipoDoc
     setCliente({ ...cliente, identificacion, tipoDoc, razon: tipoDoc === "07" ? "CONSUMIDOR FINAL" : cliente.razon })
-  }} className="flex-1 ..." />
+  }} placeholder="RUC o cédula" className="flex-1 min-w-0 bg-transparent py-2 text-white text-[11px] outline-none" />
   <button
     type="button"
     disabled={buscandoSRI}
     onClick={manejarConsultaSRIExpress}
-    className={`px-4 py-2.5 rounded-xl text-xs font-black ${buscandoSRI ? "bg-cyan-500/20 animate-pulse" : "bg-cyan-400 text-black"}`}
+    className="px-2 py-1 rounded-md text-[10px] text-teal-200/80 border border-white/10 disabled:opacity-40"
   >
-    {buscandoSRI ? "⌛ ..." : "🔍 SRI"}
+    {buscandoSRI ? "..." : "SRI"}
   </button>
   <button
     type="button"
     onClick={buscarEnClientesDB}
-    className="px-4 py-2.5 rounded-xl text-xs font-black bg-yellow-400 text-black hover:bg-yellow-300"
+    className="px-2 py-1 rounded-md text-[10px] text-slate-300 border border-white/10"
   >
-    📂 DB
+    Guardados
   </button>
 </div>
-            <input value={cliente.razon} onChange={e=>setCliente({...cliente,razon:e.target.value})} placeholder="Nombre / Razón Social" className="col-span-2 bg-black p-2 rounded-lg text-white text-[11px]" />
-            <input value={cliente.direccion} onChange={e=>setCliente({...cliente,direccion:e.target.value})} placeholder="Dirección / Ubicación" className="col-span-3 bg-black p-2 rounded-lg text-white text-[11px]" />
-            <input value={cliente.email} onChange={e=>setCliente({...cliente,email:e.target.value})} placeholder="Email" className="bg-black p-2 rounded-lg text-white text-[11px]" />
+            <input value={cliente.razon} onChange={e=>setCliente({...cliente,razon:e.target.value})} placeholder="Nombre / Razón Social" className="col-span-3 bg-black p-2 rounded-lg text-white text-[11px] border border-white/10" />
+            <input value={cliente.email} onChange={e=>setCliente({...cliente,email:e.target.value})} placeholder="Correo electrónico" className="col-span-3 bg-black p-2 rounded-lg text-white text-[11px] border border-white/10" />
+            <input value={cliente.direccion} onChange={e=>setCliente({...cliente,direccion:e.target.value})} placeholder="Dirección" className="col-span-3 bg-black p-2 rounded-lg text-white text-[11px] border border-white/10" />
+          </div>
+          <button type="button" onClick={()=>setMasDatosCliente(v=>!v)} className="mt-2 text-[11px] text-white/45 hover:text-white/70">{masDatosCliente ? "Ocultar datos del cliente" : "Mostrar más datos del cliente"}</button>
+          {masDatosCliente && (
+          <div className="grid grid-cols-3 gap-2 mt-2">
             <input value={cliente.telefono || ''} onChange={e=>setCliente({...cliente,telefono:e.target.value})} placeholder="Teléfono" className="bg-black p-2 rounded-lg text-white text-[11px]" />
             <input value={cliente.celular || ''} onChange={e=>setCliente({...cliente,celular:e.target.value})} placeholder="Celular" className="bg-black p-2 rounded-lg text-white text-[11px]" />
 
@@ -1208,6 +1213,7 @@ const total = subtotalSin + iva15 + ivaDiferenciado + valorICE + valorIRBPNR + p
             </div>
             {/* FIN BLOQUE NUEVO */}
           </div>
+          )}
         </div>
 
         <div className="bg-[#0f172a] border border-white/10 rounded-xl p-3">
@@ -1244,7 +1250,7 @@ const total = subtotalSin + iva15 + ivaDiferenciado + valorICE + valorIRBPNR + p
 
             <div className="bg-[#1e293b] p-3 rounded-xl mt-3 border border-white/10">
         <div className="flex justify-between">
-          <b className="text-[#00f5d4]">ITEMS Y DETALLES - LECTOR POR ARTE DE MAGIA ACTIVO</b>
+          <b className="text-teal-300">Detalle de Productos y Servicios</b>
           <span>Bruto: ${bruto.toFixed(2)}</span>
         </div>
 {/* SOLO APARECE SI HOY ES FERIADO - CÓDIGO 8 SRI */}
@@ -1276,8 +1282,8 @@ const total = subtotalSin + iva15 + ivaDiferenciado + valorICE + valorIRBPNR + p
   </div>
 )}
         {/* INPUT MAESTRO - PISTOLA + TECLADO + NOMBRE */}
-<div className="mt-3 bg-black border border-[#00f5d4] rounded-xl p-2 flex gap-2 items-center relative">
-  <span className="text-[10px] bg-[#00f5d4] text-black px-2 py-1 rounded-full font-black">LECTOR</span>
+<div className="mt-3 bg-black border border-white/10 rounded-xl p-2 flex gap-2 items-center relative focus-within:border-teal-400/60 focus-within:shadow-[0_0_0_1px_rgba(45,212,191,0.25)]">
+  <span className="text-[10px] bg-white/10 text-slate-300 px-2 py-1 rounded-full">Lector</span>
   <input
     id="codigo-maestro"
     ref={lectorRef}
@@ -1311,10 +1317,10 @@ const total = subtotalSin + iva15 + ivaDiferenciado + valorICE + valorIRBPNR + p
       }
     }}
     placeholder="ESCANEA PISTOLA, CÓDIGO O NOMBRE → Ej: CLA001 / 786... / llanta"
-    className="flex-1 bg-[#0f172a] border border-[#00f5d4]/30 p-3 rounded-lg text-[#00f5d4] font-black font-mono text-sm outline-none focus:ring-2 focus:ring-[#00f5d4]"
+    className="flex-1 bg-[#0f172a] border border-transparent p-3 rounded-lg text-white font-mono text-sm outline-none"
     autoFocus
   />
-  <button type="button" onMouseDown={(e)=>e.preventDefault()} onClick={()=> buscarYAgregarPorCodigoTexto(textoLector.current || codigoRapido, true)} className="bg-[#00f5d4] text-black px-4 py-3 rounded-lg font-black text-xs">+ ADD</button>
+  <button type="button" onMouseDown={(e)=>e.preventDefault()} onClick={()=> buscarYAgregarPorCodigoTexto(textoLector.current || codigoRapido, true)} className="bg-teal-400 text-slate-950 px-4 py-3 rounded-lg font-semibold text-xs">+ Agregar</button>
 
   {sugerencias.length>0 && (
     <div className="absolute top-full left-0 mt-2 w-[85%] bg-[#0f172a] border border-[#00f5d4]/40 rounded-xl z-[100] overflow-hidden shadow-2xl">
@@ -1381,7 +1387,7 @@ const total = subtotalSin + iva15 + ivaDiferenciado + valorICE + valorIRBPNR + p
       <div className="grid grid-cols-2 gap-3 mt-3">
         <div className="bg-[#1e293b] p-3 rounded-xl border border-white/10">
           <div className="flex justify-between items-center mb-2">
-  <b className="text-[#00f5d4] text-[11px]">PAGOS (SRI TABLA 24) - FICHA TÉCNICA</b>
+  <b className="text-teal-300 text-[11px]">Formas de Pago</b>
 </div>
 
           <div className="grid grid-cols-3 gap-2">
@@ -1447,31 +1453,31 @@ const total = subtotalSin + iva15 + ivaDiferenciado + valorICE + valorIRBPNR + p
             {avisoConsumidorFinal}
           </div>
         )}
-        <div className="bg-[#1e293b] p-3 rounded-xl border-t-4 border-t-[#7c3aed] border border-white/10">
-          <b>RESUMEN CONTABLE FACTURA (SRI)</b>
+        <div className="bg-[#1e293b] p-3 rounded-xl border border-white/10 border-t-2 border-t-teal-500/50">
+          <b>Resumen</b>
           <div className="space-y-1 mt-2">
-            <div className="flex justify-between"><span>Subtotal sin Impuestos:</span><b>${plata(subtotalSin).toFixed(2)}</b></div>
-            <div className="flex justify-between"><span>Subtotal IVA 15% (o vig.):</span><b>${plata(base15).toFixed(2)}</b></div>
-            <div className="flex justify-between"><span>Subtotal IVA 0%:</span><b>${plata(base0).toFixed(2)}</b></div>
-            <div className="flex justify-between"><span>Subtotal No objeto de IVA:</span><b>${plata(baseNoObjeto).toFixed(2)}</b></div>
-            <div className="flex justify-between"><span>Subtotal Exento de IVA:</span><b>${plata(baseExento).toFixed(2)}</b></div>
-            <div className="flex justify-between"><span>Subtotal IVA Diferenciado:</span><b>${plata(baseDiferenciado).toFixed(2)}</b></div>
-            <div className="flex justify-between"><span>Total Descuentos:</span><b className="text-red-400">-${plata(descuento).toFixed(2)}</b></div>
-            <div className="flex justify-between"><span>Valor ICE:</span><b>${plata(valorICE).toFixed(2)}</b></div>
-            <div className="flex justify-between"><span>Valor IRBPNR (Plásticos):</span><b>${plata(valorIRBPNR).toFixed(2)}</b></div>
-            <div className="flex justify-between"><span>IVA Oficial:</span><b className="text-[#00f5d4]">${plata(iva15).toFixed(2)}</b></div>
-            <div className="flex justify-between items-center border-t border-white/10 pt-1"><label className="flex items-center gap-2"><input type="checkbox" checked={propinaCheck} onChange={e=>setPropinaCheck(e.target.checked)} /> Propina 10%:</label><b>${plata(propina).toFixed(2)}</b></div>
-            <div className="flex justify-between text-lg border-t border-white/10 pt-2 mt-2"><span className="font-black">VALOR TOTAL A PAGAR:</span><b className="text-[#00f5d4] text-xl">${plata(total).toFixed(2)}</b></div>
+            <div className="flex justify-between"><span>Subtotal 15%:</span><b>${plata(base15).toFixed(2)}</b></div>
+            <div className="flex justify-between"><span>Subtotal 0%:</span><b>${plata(base0).toFixed(2)}</b></div>
+            {plata(baseNoObjeto) > 0 && <div className="flex justify-between"><span>Subtotal no objeto de IVA:</span><b>${plata(baseNoObjeto).toFixed(2)}</b></div>}
+            {plata(baseExento) > 0 && <div className="flex justify-between"><span>Subtotal exento de IVA:</span><b>${plata(baseExento).toFixed(2)}</b></div>}
+            {plata(baseDiferenciado) > 0 && <div className="flex justify-between"><span>Subtotal IVA diferenciado:</span><b>${plata(baseDiferenciado).toFixed(2)}</b></div>}
+            <div className="flex justify-between"><span>Descuento:</span><b className="text-red-300">-${plata(descuento).toFixed(2)}</b></div>
+            {plata(valorICE) > 0 && <div className="flex justify-between"><span>ICE:</span><b>${plata(valorICE).toFixed(2)}</b></div>}
+            {plata(valorIRBPNR) > 0 && <div className="flex justify-between"><span>Plásticos (IRBPNR):</span><b>${plata(valorIRBPNR).toFixed(2)}</b></div>}
+            <div className="flex justify-between"><span>IVA 15%:</span><b className="text-teal-300">${plata(iva15).toFixed(2)}</b></div>
+            {plata(ivaDiferenciado) > 0 && <div className="flex justify-between"><span>IVA diferenciado:</span><b className="text-teal-300">${plata(ivaDiferenciado).toFixed(2)}</b></div>}
+            {propinaCheck ? <div className="flex justify-between items-center"><label className="flex items-center gap-2"><input type="checkbox" checked={propinaCheck} onChange={e=>setPropinaCheck(e.target.checked)} /> Propina 10%:</label><b>${plata(propina).toFixed(2)}</b></div> : <button type="button" onClick={()=>setPropinaCheck(true)} className="text-[10px] text-white/40 hover:text-white/70">Agregar propina</button>}
+            <div className="flex justify-between text-lg border-t border-white/10 pt-2 mt-2"><span className="font-black">Total a pagar:</span><b className="text-teal-300 text-xl">${plata(total).toFixed(2)}</b></div>
             {items.length === 0 || total <= 0 ? <div className="text-right text-[11px] font-black text-white/40">Sin productos</div> : null}
           </div>
 <div className="grid grid-cols-3 gap-2 mt-3">
-  <button type="button" onClick={() => { if (bloqueoConsumidorFinal) return; setCajaAbierta(true) }} disabled={bloqueoConsumidorFinal} className={`font-black py-3 rounded-xl text-xs ${bloqueoConsumidorFinal ? "bg-white/10 text-white/30" : "bg-[#00f5d4] text-black"}`}>
-    CAJA Y COBRO
+  <button type="button" onClick={() => { if (bloqueoConsumidorFinal) return; setCajaAbierta(true) }} disabled={bloqueoConsumidorFinal} className={`font-semibold py-3 rounded-xl text-xs ${bloqueoConsumidorFinal ? "bg-white/10 text-white/30" : "bg-teal-400 text-slate-950"}`}>
+    Caja y Cobro
   </button>
-  <button onClick={() => guardarComoBorrador()} className="bg-[#ffbe0a] text-black font-black py-3 rounded-xl text-xs">
-    📝 BORRADOR
+  <button onClick={() => guardarComoBorrador()} className="bg-slate-800 border border-slate-700 text-slate-300 font-semibold py-3 rounded-xl text-xs">
+    Borrador
   </button>
-  <button type="button" onClick={() => emitirComprobante()} disabled={!pagoRealizado || bloqueoConsumidorFinal || !emisorListo || itemSinTarifa} className={`font-black py-3 rounded-xl text-xs ${pagoRealizado && !bloqueoConsumidorFinal && emisorListo && !itemSinTarifa ? 'bg-white text-black' : 'bg-white/10 text-white/20'}`}>
+  <button type="button" onClick={() => emitirComprobante()} disabled={!pagoRealizado || bloqueoConsumidorFinal || !emisorListo || itemSinTarifa} className={`font-semibold py-3 rounded-xl text-xs border ${pagoRealizado && !bloqueoConsumidorFinal && emisorListo && !itemSinTarifa ? 'bg-slate-900 border-teal-400/30 text-teal-100' : 'bg-white/10 border-transparent text-white/20'}`}>
     {configEmisor.ambiente === "PRODUCCIÓN" ? "ENVIAR A SRI PRODUCCIÓN" : "ENVIAR A SRI PRUEBAS"}
   </button>
 </div>
