@@ -11,11 +11,15 @@ function xml(valor: unknown) {
   return String(valor ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
 }
 
-function fechaHoy() {
-  const hoy = new Date()
-  const d = String(hoy.getDate()).padStart(2, "0")
-  const m = String(hoy.getMonth() + 1).padStart(2, "0")
-  return `${d}/${m}/${hoy.getFullYear()}`
+export function obtenerFechaEcuador(): string {
+  const ahora = new Date()
+  const opciones: Intl.DateTimeFormatOptions = {
+    timeZone: "America/Guayaquil",
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+  }
+  return new Intl.DateTimeFormat("es-EC", opciones).format(ahora)
 }
 
 export async function POST(req: Request) {
@@ -42,7 +46,7 @@ export async function POST(req: Request) {
     const serie = String(extra.establecimiento || extra.serie || "001-001")
     const [estab, pto] = serie.split("-")
     const secuencial = "000000001"
-    const fecha = fechaHoy()
+    const fecha = obtenerFechaEcuador()
     const claveAcceso = claveAcceso49({
       fecha: fecha.replace(/\D/g, ""),
       tipoComprobante: "05",
