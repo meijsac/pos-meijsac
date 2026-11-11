@@ -4,13 +4,13 @@ import { usuarioConEmpresaDesdeRequest } from "@/lib/empresa-sesion"
 import { accesoEmpresa, ipDe, navegadorDe, puede, sanitizarTexto } from "@/lib/seguridad"
 import { anotarFacturaCaja } from "@/lib/login-memoria"
 import { FaltanDatosSri, armarXmlFactura } from "@/lib/sri/xml-factura"
-import { firmarFacturaXml } from "@/lib/sri/firmar"
-import { codigoAmbiente } from "@/lib/sri/ambiente"
-import { URLS_SRI, enviarAlSri } from "@/lib/sri/cliente-sri"
+import { firmarXmlEmpresa } from "@/lib/sri/firmar"
+import { ambienteDeEmpresa } from "@/lib/sri/ambiente"
+import { enviarAlSri } from "@/lib/sri/cliente-sri"
 import { guardarRespuestaSri, sriStatusDe } from "@/lib/sri/guardar-respuesta"
 import { elegirSecuencial, serieDeAmbiente } from "@/lib/sri/punto-emision"
-import { desencriptarBytes, desencriptar } from "@/lib/seguridad"
 import { validarEntradaFactura } from "@/lib/factura-entrada"
+import { encolarReenvioSri } from "@/lib/security/cola"
 
 export const maxDuration = 60
 
@@ -30,13 +30,9 @@ export async function POST(req: Request) {
     const diferirSri = body?.diferirSri === true
     if (body) delete body.diferirSri
     if (body?.cliente) body.cliente.razon = sanitizarTexto(body.cliente.razon)
-    const claveFirma = String(body?.claveFirma || "")
-    delete body.claveFirma
     if (body?.firma) delete body.firma.clave
-    const extraPrevio = sesion.empresa.datosRegistro && typeof sesion.empresa.datosRegistro === "object" && !Array.isArray(sesion.empresa.datosRegistro)
-      ? sesion.empresa.datosRegistro as Record<string, unknown>
-      : {}
-    const ambientePrevio = codigoAmbiente(extraPrevio.ambiente || extraPrevio.ambienteCodigo || body?.configEmisor?.ambiente)
+    delete body.claveFirma
+    const ambientePrevio = ambienteDeEmpresa(sesion.empresa)
     if (body?.estadoSRI !== "BORRADOR") {
       const pedida = String(body?.establecimiento || "").trim()
       const serie = /^\d{3}-\d{3}$/.test(pedida) ? pedida : serieDeAmbiente(ambientePrevio)
@@ -63,22 +59,11 @@ export async function POST(req: Request) {
       if (e instanceof FaltanDatosSri) return NextResponse.json({ error: e.message, faltantes: e.faltantes }, { status: 400 })
       throw e
     }
-    const extra = sesion.empresa.datosRegistro && typeof sesion.empresa.datosRegistro === "object" && !Array.isArray(sesion.empresa.datosRegistro)
-      ? sesion.empresa.datosRegistro as Record<string, unknown>
-      : {}
-    const ambiente = codigoAmbiente(extra.ambiente || extra.ambienteCodigo || body?.configEmisor?.ambiente)
+    const ambiente = ambienteDeEmpresa(sesion.empresa)
     let xml = armado.xml
     let firmado = false
-    const firma = await prisma.firmaElectronica.findUnique({ where: { empresaId: sesion.empresa.id } })
-    if (!firma) return NextResponse.json({ error: "Falta el archivo .p12. Súbelo en Configuración, pestaña Firma." }, { status: 400 })
-    let claveGuardada = ""
-    if (firma.claveCifrada) {
-      try { claveGuardada = desencriptar(firma.claveCifrada) } catch { claveGuardada = "" }
-    }
-    const claveUsar = claveFirma || claveGuardada
-    if (!claveUsar) return NextResponse.json({ error: "Guarda la contraseña del .p12 en Configuración, pestaña Firma." }, { status: 400 })
     try {
-      xml = firmarFacturaXml(xml, desencriptarBytes(firma.p12Cifrado), claveUsar)
+      xml = await firmarXmlEmpresa(sesion.empresa.id, xml)
       firmado = true
     } catch (e: any) {
       return NextResponse.json({ error: e.message || "No se pudo firmar el XML" }, { status: 400 })
@@ -146,15 +131,28 @@ export async function POST(req: Request) {
         conectado: null,
       })
     }
-    const urls = URLS_SRI[ambiente]
+    if (process.env.QSTASH_TOKEN) {
+      const encolado = await encolarReenvioSri(sesion.empresa.id, armado.claveAcceso).catch(() => false)
+      if (encolado) {
+        return NextResponse.json({
+          id: factura.id,
+          claveAcceso: armado.claveAcceso,
+          establecimiento: `${armado.estab}-${armado.pto}`,
+          secuencial: armado.secuencial,
+          estado: "PENDIENTE",
+          firmado,
+          encolado: true,
+          fechaAutorizacion: "",
+          conectado: null,
+        })
+      }
+    }
     let real
     try {
       real = await enviarAlSri({
         xmlFirmado: xml,
         claveAcceso: armado.claveAcceso,
         ambiente,
-        recepcionUrl: urls.recepcion,
-        autorizacionUrl: urls.autorizacion,
       })
     } catch (error: any) {
       const code = String(error?.cause?.code || error?.code || error?.codigo || "")

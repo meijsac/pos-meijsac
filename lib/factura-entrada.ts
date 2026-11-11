@@ -1,15 +1,22 @@
+import { z } from "zod"
+
 function numero(valor: unknown) {
   const n = Number(valor)
   return Number.isFinite(n) ? n : null
 }
 
+const esquemaTexto = z.object({
+  placa: z.string().regex(/^[A-Z0-9-]{0,8}$/, "La placa solo puede tener letras, números y guion"),
+  email: z.string().email("El correo del cliente no es válido").or(z.literal("")),
+  identificacion: z.string().regex(/^\d*$/, "La identificación solo puede tener dígitos"),
+})
+
 export function validarEntradaFactura(body: { placaVehiculo?: unknown; cliente?: { email?: unknown; identificacion?: unknown; tipoDoc?: unknown; tipoId?: unknown }; items?: unknown; totales?: Record<string, unknown> } | null) {
-  const placa = String(body?.placaVehiculo || "").trim()
-  if (placa && !/^[A-Z0-9-]{1,8}$/.test(placa)) return "La placa solo puede tener letras, números y guion"
+  const placa = String(body?.placaVehiculo || "").trim().toUpperCase()
   const email = String(body?.cliente?.email || "").trim()
-  if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return "El correo del cliente no es válido"
   const id = String(body?.cliente?.identificacion || "").replace(/\s/g, "")
-  if (id && !/^\d+$/.test(id)) return "La identificación solo puede tener dígitos"
+  const texto = esquemaTexto.safeParse({ placa, email, identificacion: id })
+  if (!texto.success) return texto.error.issues[0]?.message || "Datos inválidos"
   const tipo = String(body?.cliente?.tipoDoc || body?.cliente?.tipoId || "")
   if (tipo === "04" && id.length !== 13) return "El RUC debe tener 13 dígitos"
   if (tipo === "05" && id.length !== 10) return "La cédula debe tener 10 dígitos"

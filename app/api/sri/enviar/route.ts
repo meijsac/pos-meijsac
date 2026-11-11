@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server"
 import { usuarioConEmpresaDesdeRequest } from "@/lib/empresa-sesion"
-import { codigoAmbiente } from "@/lib/sri/ambiente"
+import { ambienteDeEmpresa } from "@/lib/sri/ambiente"
 import { enviarComprobante } from "@/lib/sri/soap"
 
 export const dynamic = "force-dynamic"
@@ -13,13 +13,10 @@ export async function POST(req: Request) {
   if (!body?.confirmar) {
     return NextResponse.json({ enviado: false, bloqueado: true, estado: "PENDIENTE_DE_AUTORIZAR", mensaje: "El envío a pruebas se hace con ENVIAR A SRI PRUEBAS." }, { status: 403 })
   }
-  const extra = sesion.empresa.datosRegistro && typeof sesion.empresa.datosRegistro === "object" && !Array.isArray(sesion.empresa.datosRegistro)
-    ? sesion.empresa.datosRegistro as Record<string, unknown>
-    : {}
   const resultado = await enviarComprobante({
     xmlFirmado: String(body?.xml || body?.xmlFirmado || ""),
     claveAcceso: String(body?.clave || body?.claveAcceso || ""),
-    ambiente: codigoAmbiente(extra.ambiente || extra.ambienteCodigo),
+    ambiente: ambienteDeEmpresa(sesion.empresa),
   })
   const status = resultado.bloqueado ? 403 : 200
   return NextResponse.json({ ...resultado, estadoSRI: resultado.estado }, { status })

@@ -2,14 +2,12 @@ import { NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
 import { usuarioConEmpresaDesdeRequest } from "@/lib/empresa-sesion"
 import { claveAcceso49 } from "@/lib/sri/clave"
-import { codigoAmbiente, SRI_AMBIENTES } from "@/lib/sri/ambiente"
+import { ambienteDeEmpresa, SRI_AMBIENTES } from "@/lib/sri/ambiente"
 import { enviarAlSri } from "@/lib/sri/cliente-sri"
-import { firmarFacturaXml } from "@/lib/sri/firmar"
-import { desencriptar, desencriptarBytes, ipDe } from "@/lib/seguridad"
-
-function xml(valor: unknown) {
-  return String(valor ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
-}
+import { firmarXmlEmpresa } from "@/lib/sri/firmar"
+import { sanitizarTextoXml as xml } from "@/lib/sri/sanitizar"
+import { ipDe } from "@/lib/seguridad"
+import { archivarComprobante } from "@/lib/security/storage"
 
 function obtenerFechaEcuador() {
   return new Intl.DateTimeFormat("es-EC", {
@@ -175,7 +173,7 @@ export async function POST(req: Request) {
     let mayor = 0
     for (const n of usados) mayor = Math.max(mayor, Number(n))
     const secuencial = String(mayor + 1).padStart(9, "0")
-    const ambiente = codigoAmbiente(extra.ambiente)
+    const ambiente = ambienteDeEmpresa(sesion.empresa)
     const ruc = String(sesion.empresa.ruc || "").replace(/\D/g, "")
     const fechaHoyEcuador = obtenerFechaEcuador()
     const claveAcceso = claveAcceso49({
@@ -241,12 +239,17 @@ export async function POST(req: Request) {
     }).join("")}
   </detalles>
 </notaCredito>`
-    const firma = await prisma.firmaElectronica.findUnique({ where: { empresaId: sesion.empresa.id } })
-    if (!firma?.p12Cifrado || !firma.claveCifrada) return NextResponse.json({ autorizado: false, mensaje: "Falta la firma electrónica en Configuración." }, { status: 400 })
-    const firmado = firmarFacturaXml(xmlSinFirmar, desencriptarBytes(firma.p12Cifrado), desencriptar(firma.claveCifrada))
+    let firmado = ""
+    try {
+      firmado = await firmarXmlEmpresa(sesion.empresa.id, xmlSinFirmar)
+    } catch (error) {
+      const mensaje = error instanceof Error ? error.message : "No se pudo firmar"
+      return NextResponse.json({ autorizado: false, mensaje }, { status: 400 })
+    }
     const urls = SRI_AMBIENTES[ambiente]
     const real = await enviarAlSri({ xmlFirmado: firmado, claveAcceso, ambiente, recepcionUrl: urls.recepcion, autorizacionUrl: urls.autorizacion })
     const fechaSri = String(real.fechaAutorizacion || "").trim()
+    archivarComprobante(sesion.empresa.id, claveAcceso, firmado, real).catch(() => {})
     const payload = {
       tipoComprobante: "04",
       codDoc: "04",

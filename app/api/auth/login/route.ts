@@ -47,7 +47,12 @@ export async function POST(req: Request) {
     const seguridad = await prisma.usuarioSeguridad.findUnique({ where: { usuarioId: usuario.id } }).catch(() => null)
     if (seguridad?.dosFaActivo) {
       const codigo = String(body.codigo2fa || "")
-      const secreto = seguridad.totpCifrado ? Buffer.from(desencriptar(seguridad.totpCifrado), "base64") : Buffer.alloc(0)
+      let secreto = Buffer.alloc(0)
+      try {
+        if (seguridad.totpCifrado) secreto = Buffer.from(desencriptar(seguridad.totpCifrado), "base64")
+      } catch {
+        return responder({ requiere2fa: true, error: "Vuelve a activar el segundo factor en Configuración" }, 401)
+      }
       const respaldo = seguridad.respaldos.split(",").filter(Boolean).includes(hashCodigo(codigo))
       if (!totpValido(secreto, codigo) && !respaldo) {
         return responder({ requiere2fa: true, error: "Ingresa el código de 6 dígitos" }, 401)

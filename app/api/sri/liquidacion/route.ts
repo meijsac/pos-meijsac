@@ -2,13 +2,12 @@ import { NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
 import { usuarioConEmpresaDesdeRequest } from "@/lib/empresa-sesion"
 import { claveAcceso49 } from "@/lib/sri/clave"
-import { codigoAmbiente, SRI_AMBIENTES } from "@/lib/sri/ambiente"
+import { ambienteDeEmpresa, SRI_AMBIENTES } from "@/lib/sri/ambiente"
 import { enviarAlSri } from "@/lib/sri/cliente-sri"
-import { firmarFacturaXml } from "@/lib/sri/firmar"
-import { desencriptar, desencriptarBytes, ipDe } from "@/lib/seguridad"
-function xml(valor: unknown) {
-  return String(valor ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
-}
+import { firmarXmlEmpresa } from "@/lib/sri/firmar"
+import { sanitizarTextoXml as xml } from "@/lib/sri/sanitizar"
+import { ipDe } from "@/lib/seguridad"
+import { archivarComprobante } from "@/lib/security/storage"
 function dinero(valor: number) {
   return (Number.isFinite(valor) ? valor : 0).toFixed(2)
 }
@@ -91,7 +90,7 @@ export async function POST(req: Request) {
     const mapa03 = extra.secuenciales03 && typeof extra.secuenciales03 === "object" ? extra.secuenciales03 as Record<string, string> : {}
     const base03 = String(Math.max(Number(punto.ultimo || 0), Number(String(mapa03[serie] || "").replace(/\D/g, "") || 0))).padStart(9, "0")
     const secuencial = siguiente(filas, "03", serie, { ...mapa03, [serie]: base03 })
-    const ambiente = codigoAmbiente(extra.ambiente)
+    const ambiente = ambienteDeEmpresa(sesion.empresa)
     const ruc = String(sesion.empresa.ruc || "").replace(/\D/g, "")
     const fechaHoy = obtenerFechaEcuador()
     const claveLiquidacion = claveAcceso49({ fecha: fechaHoy.replace(/\D/g, ""), tipoComprobante: "03", ruc, ambiente, establecimiento: punto.estab, puntoEmision: punto.pto, secuencial })
@@ -119,11 +118,13 @@ export async function POST(req: Request) {
   <infoLiquidacionCompra><fechaEmision>${fechaHoy}</fechaEmision><dirEstablecimiento>${xml(sucursal)}</dirEstablecimiento><obligadoContabilidad>${obligado}</obligadoContabilidad><tipoIdentificacionProveedor>${tipoId}</tipoIdentificacionProveedor><razonSocialProveedor>${xml(nombre)}</razonSocialProveedor><identificacionProveedor>${xml(tipoId === "05" ? digitos : identificacion)}</identificacionProveedor><direccionProveedor>${xml(direccionProveedor)}</direccionProveedor><totalSinImpuestos>${dinero(subtotal15 + subtotal0)}</totalSinImpuestos><totalDescuento>0.00</totalDescuento><totalConImpuestos>${impuestos}</totalConImpuestos><importeTotal>${dinero(total)}</importeTotal><moneda>DOLAR</moneda><pagos><pago><formaPago>${formaPago}</formaPago><total>${dinero(total)}</total></pago></pagos></infoLiquidacionCompra>
   <detalles>${lineas.map((l: { codigo: string; descripcion: string; cantidad: number; precio: number; base: number; aplica: boolean; iva: number }) => `<detalle><codigoPrincipal>${xml(l.codigo)}</codigoPrincipal><descripcion>${xml(l.descripcion)}</descripcion><cantidad>${dinero(l.cantidad)}</cantidad><precioUnitario>${dinero(l.precio)}</precioUnitario><descuento>0.00</descuento><precioTotalSinImpuesto>${dinero(l.base)}</precioTotalSinImpuesto><impuestos><impuesto><codigo>2</codigo><codigoPorcentaje>${l.aplica ? "4" : "0"}</codigoPorcentaje><tarifa>${l.aplica ? "15.00" : "0.00"}</tarifa><baseImponible>${dinero(l.base)}</baseImponible><valor>${dinero(l.iva)}</valor></impuesto></impuestos></detalle>`).join("")}</detalles>
 </liquidacionCompra>`
-    const firma = await prisma.firmaElectronica.findUnique({ where: { empresaId: sesion.empresa.id } })
-    if (!firma?.p12Cifrado || !firma.claveCifrada) return NextResponse.json({ autorizado: false, mensaje: "Falta la firma electrónica en Configuración." }, { status: 400 })
-    const p12 = desencriptarBytes(firma.p12Cifrado)
-    const claveP12 = desencriptar(firma.claveCifrada)
-    const firmado = firmarFacturaXml(xmlLiquidacion, p12, claveP12)
+    let firmado = ""
+    try {
+      firmado = await firmarXmlEmpresa(sesion.empresa.id, xmlLiquidacion)
+    } catch (error) {
+      const mensaje = error instanceof Error ? error.message : "No se pudo firmar"
+      return NextResponse.json({ autorizado: false, mensaje }, { status: 400 })
+    }
     const urls = SRI_AMBIENTES[ambiente]
     const real = await enviarAlSri({ xmlFirmado: firmado, claveAcceso: claveLiquidacion, ambiente, recepcionUrl: urls.recepcion, autorizacionUrl: urls.autorizacion })
     const fechaSri = String(real.fechaAutorizacion || "").trim()
@@ -136,6 +137,7 @@ export async function POST(req: Request) {
       xmlContent: firmado, fechaAutorizacion: fechaSri, estadoSRI: fechaSri ? "AUTORIZADO" : "PENDIENTE", sriAutorizacion: real.autorizacion,
     }
     await prisma.facturaEmitida.create({ data: { empresaId: sesion.empresa.id, estado: fechaSri ? "AUTORIZADO" : "PENDIENTE", sriStatus: fechaSri ? "AUTORIZADO" : "PENDIENTE", payload: payloadBase } })
+    archivarComprobante(sesion.empresa.id, claveLiquidacion, firmado, real).catch(() => {})
     let mensajeRetencion = ""
     let claveRetencion = ""
     let sec07 = ""
@@ -151,7 +153,7 @@ export async function POST(req: Request) {
       const clave07 = claveAcceso49({ fecha: fechaHoy.replace(/\D/g, ""), tipoComprobante: "07", ruc, ambiente, establecimiento: puntoRetencion.estab, puntoEmision: puntoRetencion.pto, secuencial: sec07 })
       const numDoc = `${punto.estab}${punto.pto}${secuencial}`
       const xmlRetencion = `<?xml version="1.0" encoding="UTF-8"?><comprobanteRetencion id="comprobante" version="2.0.0"><infoTributaria><ambiente>${ambiente}</ambiente><tipoEmision>1</tipoEmision><razonSocial>${xml(sesion.empresa.razonSocial)}</razonSocial><ruc>${ruc}</ruc><claveAcceso>${clave07}</claveAcceso><codDoc>07</codDoc><estab>${puntoRetencion.estab}</estab><ptoEmi>${puntoRetencion.pto}</ptoEmi><secuencial>${sec07}</secuencial><dirMatriz>${xml(direccion)}</dirMatriz></infoTributaria><infoCompRetencion><fechaEmision>${fechaHoy}</fechaEmision><dirEstablecimiento>${xml(sucursal)}</dirEstablecimiento><obligadoContabilidad>${obligado}</obligadoContabilidad><tipoIdentificacionSujetoRetenido>${tipoId}</tipoIdentificacionSujetoRetenido><parteRel>NO</parteRel><razonSocialSujetoRetenido>${xml(nombre)}</razonSocialSujetoRetenido><identificacionSujetoRetenido>${xml(tipoId === "05" ? digitos : identificacion)}</identificacionSujetoRetenido><periodoFiscal>${fechaHoy.slice(3)}</periodoFiscal></infoCompRetencion><docsSustento><docSustento><codSustento>01</codSustento><codDocSustento>03</codDocSustento><numDocSustento>${numDoc}</numDocSustento><fechaEmisionDocSustento>${fechaHoy}</fechaEmisionDocSustento><numAutDocSustento>${claveLiquidacion}</numAutDocSustento><pagoLocExt>01</pagoLocExt><totalSinImpuestos>${dinero(base)}</totalSinImpuestos><importeTotal>${dinero(total)}</importeTotal><impuestosDocSustento>${subtotal15 > 0 ? `<impuestoDocSustento><codImpuestoDocSustento>2</codImpuestoDocSustento><codigoPorcentaje>4</codigoPorcentaje><baseImponible>${dinero(subtotal15)}</baseImponible><tarifa>15.00</tarifa><valorImpuesto>${dinero(iva15)}</valorImpuesto></impuestoDocSustento>` : ""}${subtotal0 > 0 ? `<impuestoDocSustento><codImpuestoDocSustento>2</codImpuestoDocSustento><codigoPorcentaje>0</codigoPorcentaje><baseImponible>${dinero(subtotal0)}</baseImponible><tarifa>0.00</tarifa><valorImpuesto>0.00</valorImpuesto></impuestoDocSustento>` : ""}</impuestosDocSustento><retenciones><retencion><codigo>1</codigo><codigoRetencion>${codigoRenta}</codigoRetencion><baseImponible>${dinero(base)}</baseImponible><porcentajeRetener>${dinero(porcentaje)}</porcentajeRetener><valorRetenido>${dinero(valorRenta)}</valorRetenido></retencion>${iva15 > 0 ? `<retencion><codigo>2</codigo><codigoRetencion>3</codigoRetencion><baseImponible>${dinero(iva15)}</baseImponible><porcentajeRetener>100.00</porcentajeRetener><valorRetenido>${dinero(iva15)}</valorRetenido></retencion>` : ""}</retenciones><pagos><pago><formaPago>${formaPago}</formaPago><total>${dinero(total)}</total></pago></pagos></docSustento></docsSustento></comprobanteRetencion>`
-      const firmado07 = firmarFacturaXml(xmlRetencion, p12, claveP12)
+      const firmado07 = await firmarXmlEmpresa(sesion.empresa.id, xmlRetencion)
       const real07 = await enviarAlSri({ xmlFirmado: firmado07, claveAcceso: clave07, ambiente, recepcionUrl: urls.recepcion, autorizacionUrl: urls.autorizacion })
       const fecha07 = String(real07.fechaAutorizacion || "").trim()
       claveRetencion = clave07
@@ -163,6 +165,7 @@ export async function POST(req: Request) {
           payload: { tipoComprobante: "07", codDoc: "07", claveAcceso: clave07, establecimiento: serie07, secuencial: sec07, numDocSustento: numDoc, fechaEmisionDocSustento: fechaHoy, periodoFiscal: fechaHoy.slice(3), fechaEmisionFormato: fechaHoy, cliente: payloadBase.cliente, configEmisor: payloadBase.configEmisor, xmlContent: firmado07, fechaAutorizacion: fecha07, estadoSRI: fecha07 ? "AUTORIZADO" : "PENDIENTE", sriAutorizacion: real07.autorizacion },
         },
       })
+      archivarComprobante(sesion.empresa.id, clave07, firmado07, real07).catch(() => {})
       const listaPuntos = Array.isArray(extra.secuenciales) ? extra.secuenciales.map((fila) => ({ ...(fila as object) })) : []
       if (listaPuntos[punto.indice]) (listaPuntos[punto.indice] as { ultimo?: string }).ultimo = secuencial
       if (fecha07 && listaPuntos[puntoRetencion.indice]) (listaPuntos[puntoRetencion.indice] as { ultimo?: string }).ultimo = sec07

@@ -5,7 +5,7 @@ import { abrirSesion } from "@/lib/login-memoria"
 
 export function secretoJwt() {
   const secreto = process.env.JWT_SECRET || ""
-  if (!secreto || secreto === "MEIJSAC_SECRET_2026") throw new Error("JWT_SECRET no configurado")
+  if (!secreto) throw new Error("JWT_SECRET no configurado")
   return secreto
 }
 
@@ -152,6 +152,23 @@ export async function usuarioConEmpresaDesdeRequest(req: Request) {
   }
   if (payload.empresaId && payload.empresaId !== usuario.empresaId) {
     return { error: "La sesión no corresponde a la empresa del usuario", status: 403 as const }
+  }
+  await prisma.empresaUsuario.upsert({
+    where: { empresaId_userId: { empresaId: usuario.empresaId, userId: usuario.id } },
+    update: { rol: usuario.rol },
+    create: { empresaId: usuario.empresaId, userId: usuario.id, rol: usuario.rol },
+  }).catch(() => {})
+  const tokenSupabase = req.headers.get("x-supabase-access-token") || ""
+  if (tokenSupabase) {
+    const url = process.env.SUPABASE_URL || ""
+    const key = process.env.SUPABASE_SERVICE_ROLE_KEY || ""
+    if (!url || !key) return { error: "Falta Supabase Auth en el servidor", status: 503 as const }
+    const { createClient } = await import("@supabase/supabase-js")
+    const supabase = createClient(url, key, { auth: { persistSession: false, autoRefreshToken: false } })
+    const { data, error } = await supabase.auth.getUser(tokenSupabase)
+    if (error || !data.user) return { error: "Sesión de Supabase inválida", status: 401 as const }
+    const miembro = await prisma.empresaUsuario.findFirst({ where: { empresaId: usuario.empresaId, userId: data.user.id } })
+    if (!miembro) return { error: "El usuario no pertenece a esta empresa", status: 403 as const }
   }
   return { usuario, empresa: usuario.empresa }
 }

@@ -13,12 +13,10 @@ export class FaltanDatosSri extends Error {
   }
 }
 
+import { sanitizarTextoXml } from "@/lib/sri/sanitizar"
+
 function xml(valor: unknown) {
-  return String(valor ?? "")
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;")
+  return sanitizarTextoXml(valor)
 }
 
 function dinero(n: number) {

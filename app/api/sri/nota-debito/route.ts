@@ -2,14 +2,12 @@ import { NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
 import { usuarioConEmpresaDesdeRequest } from "@/lib/empresa-sesion"
 import { claveAcceso49 } from "@/lib/sri/clave"
-import { codigoAmbiente, SRI_AMBIENTES } from "@/lib/sri/ambiente"
+import { ambienteDeEmpresa, SRI_AMBIENTES } from "@/lib/sri/ambiente"
 import { enviarAlSri } from "@/lib/sri/cliente-sri"
-import { firmarFacturaXml } from "@/lib/sri/firmar"
-import { desencriptar, desencriptarBytes, ipDe } from "@/lib/seguridad"
-
-function xml(valor: unknown) {
-  return String(valor ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
-}
+import { firmarXmlEmpresa } from "@/lib/sri/firmar"
+import { sanitizarTextoXml as xml } from "@/lib/sri/sanitizar"
+import { ipDe } from "@/lib/seguridad"
+import { archivarComprobante } from "@/lib/security/storage"
 
 export function obtenerFechaEcuador(): string {
   const ahora = new Date()
@@ -41,7 +39,7 @@ export async function POST(req: Request) {
     const extra = sesion.empresa.datosRegistro && typeof sesion.empresa.datosRegistro === "object" && !Array.isArray(sesion.empresa.datosRegistro)
       ? sesion.empresa.datosRegistro as Record<string, unknown>
       : {}
-    const ambiente = codigoAmbiente(extra.ambiente)
+    const ambiente = ambienteDeEmpresa(sesion.empresa)
     const ruc = String(sesion.empresa.ruc || "").replace(/\D/g, "")
     const serie = String(extra.establecimiento || extra.serie || "001-001")
     const [estab, pto] = serie.split("-")
@@ -104,12 +102,17 @@ export async function POST(req: Request) {
     ${motivos.map((m: { razon?: string; valor?: number }) => `<motivo><razon>${xml(m.razon)}</razon><valor>${Number(m.valor).toFixed(2)}</valor></motivo>`).join("")}
   </motivos>
 </notaDebito>`
-    const firma = await prisma.firmaElectronica.findUnique({ where: { empresaId: sesion.empresa.id } })
-    if (!firma?.p12Cifrado || !firma.claveCifrada) return NextResponse.json({ autorizado: false, mensaje: "Falta la firma electrónica en Configuración." }, { status: 400 })
-    const firmado = firmarFacturaXml(xmlSinFirmar, desencriptarBytes(firma.p12Cifrado), desencriptar(firma.claveCifrada))
+    let firmado = ""
+    try {
+      firmado = await firmarXmlEmpresa(sesion.empresa.id, xmlSinFirmar)
+    } catch (error) {
+      const mensaje = error instanceof Error ? error.message : "No se pudo firmar"
+      return NextResponse.json({ autorizado: false, mensaje }, { status: 400 })
+    }
     const urls = SRI_AMBIENTES[ambiente]
     const real = await enviarAlSri({ xmlFirmado: firmado, claveAcceso, ambiente, recepcionUrl: urls.recepcion, autorizacionUrl: urls.autorizacion })
     const fechaSri = String(real.fechaAutorizacion || "").trim()
+    archivarComprobante(sesion.empresa.id, claveAcceso, firmado, real).catch(() => {})
     prisma.seguridadLog.create({ data: { empresaId: sesion.empresa.id, usuario: sesion.usuario.nombre, ip: ipDe(req), accion: fechaSri ? "NOTA_DEBITO_AUTORIZADA" : "NOTA_DEBITO_PENDIENTE", detalle: claveAcceso } }).catch(() => {})
     return NextResponse.json({
       autorizado: Boolean(fechaSri),

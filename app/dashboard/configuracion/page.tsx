@@ -176,8 +176,8 @@ export default function ConfiguracionAvanzadaSRI() {
         let vivo = true;
         if (tab === "FIRMA") {
           fetch("/api/sri/clave-firma").then(r => r.json()).then(data => {
-            if (!vivo || !data?.clave) return;
-            setCfg((p: any) => ({ ...p, firma: { ...p?.firma, clave: data.clave } }));
+            if (!vivo || !data?.guardada) return
+            setCfg((p: any) => ({ ...p, firma: { ...p?.firma, clave: "" } }))
           }).catch(() => {});
           return () => { vivo = false };
         }
@@ -276,7 +276,7 @@ export default function ConfiguracionAvanzadaSRI() {
           form.append("p12", archivoFirma);
           form.append("clave", claveFirma);
           form.append("rucEmpresa", payload.ruc || "");
-          const subidaFirma = await fetch("/api/sri/validar-firma", { method: "POST", body: form });
+          const subidaFirma = await fetch("/api/certificados/subir", { method: "POST", body: form });
           const dataFirma = await subidaFirma.json().catch(() => ({}));
           if (!subidaFirma.ok || !dataFirma.ok) throw new Error(dataFirma.error || "No se pudo guardar la firma");
           if (dataFirma.valido === false) throw new Error("El certificado está vencido");
@@ -444,7 +444,7 @@ base.sucursales = datosReales.sucursales || base.sucursales || [];
         if(enviados > 0){
           const nuevaCfg = { ...cfg, colaOffline: colaRestante, ultimoEnvioOffline: new Date().toLocaleString() };
           setCfg(nuevaCfg);
-          localStorage.setItem("meijsac_config_pro", JSON.stringify(nuevaCfg));
+          localStorage.setItem("meijsac_config_pro", JSON.stringify(nuevaCfg, (clave, valor) => clave === "clave" || clave === "password" ? "" : valor));
           alert(`SRI SYNC: ${enviados} facturas enviadas automáticamente`);
         }
       };
@@ -463,7 +463,7 @@ base.sucursales = datosReales.sucursales || base.sucursales || [];
     const wsActual = SRI_URLS[(cfg.firma?.ambiente || cfg.ambiente || "1") as "1" | "2"];
 
     const guardar = (accion: string) => {
-        localStorage.setItem("meijsac_config_pro", JSON.stringify(cfg));
+        localStorage.setItem("meijsac_config_pro", JSON.stringify(cfg, (clave, valor) => clave === "clave" || clave === "password" ? "" : valor));
         const nuevoLog = { accion, usuario: cfg.roles[0].usuario, ip: "192.168.1.10", fecha: new Date().toLocaleString() };
         const all = [nuevoLog, ...logs].slice(0, 50);
         localStorage.setItem("meijsac_logs", JSON.stringify(all));

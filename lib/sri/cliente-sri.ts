@@ -189,8 +189,8 @@ function esperar(ms: number) {
 export async function enviarAlSri(entrada: { xmlFirmado: string; claveAcceso: string; ambiente: unknown; recepcionUrl?: string; autorizacionUrl?: string }): Promise<ResultadoConexion> {
   const ambiente = codigoAmbiente(entrada.ambiente)
   const urls = {
-    recepcion: entrada.recepcionUrl || URLS_SRI[ambiente].recepcion,
-    autorizacion: entrada.autorizacionUrl || URLS_SRI[ambiente].autorizacion,
+    recepcion: URLS_SRI[ambiente].recepcion,
+    autorizacion: URLS_SRI[ambiente].autorizacion,
   }
   const vacio: ResultadoConexion = {
     conectado: false,

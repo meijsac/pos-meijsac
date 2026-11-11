@@ -4,13 +4,13 @@ import { usuarioConEmpresaDesdeRequest } from "@/lib/empresa-sesion"
 import { accesoEmpresa, ipDe, navegadorDe, puede, sanitizarTexto } from "@/lib/seguridad"
 import { anotarFacturaCaja } from "@/lib/login-memoria"
 import { FaltanDatosSri, armarXmlFactura } from "@/lib/sri/xml-factura"
-import { firmarFacturaXml } from "@/lib/sri/firmar"
-import { codigoAmbiente } from "@/lib/sri/ambiente"
+import { firmarXmlEmpresa } from "@/lib/sri/firmar"
+import { ambienteDeEmpresa } from "@/lib/sri/ambiente"
 import { enviarComprobante } from "@/lib/sri/soap"
 import { clasificarEstadoSri } from "@/lib/sri/estado-visible"
 import { elegirSecuencial, serieDeAmbiente } from "@/lib/sri/punto-emision"
-import { desencriptarBytes, desencriptar } from "@/lib/seguridad"
 import { validarEntradaFactura } from "@/lib/factura-entrada"
+import { archivarComprobante } from "@/lib/security/storage"
 
 export const maxDuration = 60
 
@@ -28,13 +28,9 @@ export async function POST(req: Request) {
     const caja = String(body?.caja || sesion.usuario.id)
     if (anotarFacturaCaja(caja, Date.now()) > 30) return NextResponse.json({ error: "Demasiadas facturas por minuto" }, { status: 429 })
     if (body?.cliente) body.cliente.razon = sanitizarTexto(body.cliente.razon)
-    const claveFirma = String(body?.claveFirma || "")
-    delete body.claveFirma
     if (body?.firma) delete body.firma.clave
-    const extraPrevio = sesion.empresa.datosRegistro && typeof sesion.empresa.datosRegistro === "object" && !Array.isArray(sesion.empresa.datosRegistro)
-      ? sesion.empresa.datosRegistro as Record<string, unknown>
-      : {}
-    const ambientePrevio = codigoAmbiente(extraPrevio.ambiente || extraPrevio.ambienteCodigo || body?.configEmisor?.ambiente)
+    delete body.claveFirma
+    const ambientePrevio = ambienteDeEmpresa(sesion.empresa)
     if (body?.estadoSRI !== "BORRADOR") {
       const pedida = String(body?.establecimiento || "").trim()
       const serie = /^\d{3}-\d{3}$/.test(pedida) ? pedida : serieDeAmbiente(ambientePrevio)
@@ -61,22 +57,11 @@ export async function POST(req: Request) {
       if (e instanceof FaltanDatosSri) return NextResponse.json({ error: e.message, faltantes: e.faltantes }, { status: 400 })
       throw e
     }
-    const extra = sesion.empresa.datosRegistro && typeof sesion.empresa.datosRegistro === "object" && !Array.isArray(sesion.empresa.datosRegistro)
-      ? sesion.empresa.datosRegistro as Record<string, unknown>
-      : {}
-    const ambiente = codigoAmbiente(extra.ambiente || extra.ambienteCodigo || body?.configEmisor?.ambiente)
+    const ambiente = ambienteDeEmpresa(sesion.empresa)
     let xml = armado.xml
     let firmado = false
-    const firma = await prisma.firmaElectronica.findUnique({ where: { empresaId: sesion.empresa.id } })
-    if (!firma) return NextResponse.json({ error: "Falta el archivo .p12. Súbelo en Configuración, pestaña Firma." }, { status: 400 })
-    let claveGuardada = ""
-    if (firma.claveCifrada) {
-      try { claveGuardada = desencriptar(firma.claveCifrada) } catch { claveGuardada = "" }
-    }
-    const claveUsar = claveFirma || claveGuardada
-    if (!claveUsar) return NextResponse.json({ error: "Guarda la contraseña del .p12 en Configuración, pestaña Firma." }, { status: 400 })
     try {
-      xml = firmarFacturaXml(xml, desencriptarBytes(firma.p12Cifrado), claveUsar)
+      xml = await firmarXmlEmpresa(sesion.empresa.id, xml)
       firmado = true
     } catch (e: any) {
       return NextResponse.json({ error: e.message || "No se pudo firmar el XML" }, { status: 400 })
@@ -139,6 +124,7 @@ export async function POST(req: Request) {
     body.mensajesSri = resultado.mensajes
     body.numeroAutorizacion = fechaSri ? (resultado.numeroAutorizacion || "") : ""
     body.fechaAutorizacion = fechaSri
+    archivarComprobante(sesion.empresa.id, armado.claveAcceso, xml, { estado: estadoGuardado, fechaAutorizacion: fechaSri, numeroAutorizacion: body.numeroAutorizacion || "" }).catch(() => {})
     body.estadoRecepcion = resultado.estadoRecepcion || ""
     body.mensajeRecepcion = resultado.mensajeRecepcion || ""
     body.fechaRecepcion = resultado.fechaRecepcion || ""

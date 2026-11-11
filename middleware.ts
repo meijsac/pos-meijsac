@@ -28,7 +28,7 @@ async function sesionFirmada(token: string) {
   const partes = token.split(".")
   if (partes.length !== 3) return false
   const secreto = process.env.JWT_SECRET || ""
-  if (!secreto || secreto === "MEIJSAC_SECRET_2026") return false
+  if (!secreto) return false
   try {
     const key = await crypto.subtle.importKey("raw", new TextEncoder().encode(secreto), { name: "HMAC", hash: "SHA-256" }, false, ["verify"])
     const ok = await crypto.subtle.verify("HMAC", key, bytes(partes[2]), new TextEncoder().encode(`${partes[0]}.${partes[1]}`))
@@ -48,12 +48,30 @@ export async function middleware(req: NextRequest) {
     return proteger(NextResponse.redirect(destino))
   }
   if (req.nextUrl.pathname.startsWith("/api")) {
+    const publica = ["/api/auth/login", "/api/auth/recuperar", "/api/auth/restablecer", "/api/admin/login", "/api/empresa/registro", "/api/sri/cola", "/api/sri-status", "/api/whatsapp/webhook"]
+    const libre = publica.some((ruta) => req.nextUrl.pathname === ruta || req.nextUrl.pathname.startsWith(`${ruta}/`))
+    if (!libre && !(await sesionFirmada(tokenSesion(req)))) {
+      return proteger(NextResponse.json({ error: "No hay sesión" }, { status: 401 }))
+    }
     const ip = (req.headers.get("x-forwarded-for") || "local").split(",")[0].trim()
     const ahora = Date.now()
     const previas = (visitas.get(ip) || []).filter((t) => ahora - t < 60_000)
     previas.push(ahora)
     visitas.set(ip, previas)
-    if (previas.length > 100) return proteger(NextResponse.json({ error: "Demasiadas solicitudes" }, { status: 429 }))
+    const emision = /^\/api\/(facturar|facturas|sri|certificados)/.test(req.nextUrl.pathname)
+    const tope = emision ? 30 : 100
+    if (previas.length > tope) return proteger(NextResponse.json({ error: "Demasiadas solicitudes" }, { status: 429 }))
+    if (emision && process.env.UPSTASH_REDIS_REST_URL && process.env.UPSTASH_REDIS_REST_TOKEN) {
+      const { Ratelimit } = await import("@upstash/ratelimit")
+      const { Redis } = await import("@upstash/redis")
+      const limite = new Ratelimit({
+        redis: new Redis({ url: process.env.UPSTASH_REDIS_REST_URL, token: process.env.UPSTASH_REDIS_REST_TOKEN }),
+        limiter: Ratelimit.slidingWindow(30, "1 m"),
+        prefix: "meijsac-emision",
+      })
+      const cupo = await limite.limit(ip).catch(() => ({ success: true }))
+      if (!cupo.success) return proteger(NextResponse.json({ error: "Demasiadas emisiones" }, { status: 429 }))
+    }
   }
   if (req.nextUrl.pathname.startsWith("/dashboard")) {
     if (!(await sesionFirmada(tokenSesion(req)))) {

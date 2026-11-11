@@ -1,6 +1,6 @@
 import { prisma } from "@/lib/prisma"
 import { clasificarEstadoSri } from "@/lib/sri/estado-visible"
-import type { ResultadoConexion } from "@/lib/sri/cliente-sri"
+import { archivarComprobante } from "@/lib/security/storage"
 
 export function sriStatusDe(estado: string, fecha: string) {
   if (estado === "BORRADOR") return "BORRADOR"
@@ -43,6 +43,15 @@ export async function guardarRespuestaSri(facturaId: string, body: any, real: Re
     where: { id: facturaId },
     data: { estado: estadoGuardado, sriStatus, payload: body },
   })
+  const dueña = await prisma.facturaEmitida.findUnique({ where: { id: facturaId }, select: { empresaId: true } })
+  if (dueña?.empresaId) {
+    archivarComprobante(dueña.empresaId, String(body.claveAcceso || ""), String(body.xmlContent || ""), {
+      estado: estadoGuardado,
+      fechaAutorizacion: fechaSri,
+      numeroAutorizacion: body.numeroAutorizacion || "",
+      mensajes: resultado.mensajes,
+    }).catch(() => {})
+  }
   return {
     estado: estadoGuardado,
     sriStatus,

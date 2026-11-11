@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
 import { usuarioConEmpresaDesdeRequest } from "@/lib/empresa-sesion"
-import { codigoAmbiente } from "@/lib/sri/ambiente"
+import { ambienteDeEmpresa } from "@/lib/sri/ambiente"
 import { consultarAutorizacion } from "@/lib/sri/soap"
 import { clasificarEstadoSri, estadoEnModal } from "@/lib/sri/estado-visible"
 
@@ -26,12 +26,9 @@ export async function POST(req: Request) {
       mensaje: "Esta factura no tiene una clave de acceso de 49 dígitos. No se puede consultar en el SRI.",
     })
   }
-  const extra = sesion.empresa.datosRegistro && typeof sesion.empresa.datosRegistro === "object" && !Array.isArray(sesion.empresa.datosRegistro)
-    ? sesion.empresa.datosRegistro as Record<string, unknown>
-    : {}
   const resultado = await consultarAutorizacion({
     claveAcceso: clave,
-    ambiente: codigoAmbiente(extra.ambiente || extra.ambienteCodigo || body?.ambiente),
+    ambiente: ambienteDeEmpresa(sesion.empresa),
   })
   const visible = clasificarEstadoSri(resultado.estado, resultado.fechaAutorizacion)
   if (factura) {

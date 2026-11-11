@@ -4,7 +4,7 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
-    "build": "node scripts/sync-empresa-plan.mjs && next build",
+    "build": "node scripts/sync-empresa-plan.mjs && prisma generate && next build",
     "start": "next start",
     "build:apk": "npx cap copy android && npx cap open android"
   },
@@ -16,6 +16,10 @@
     "@capacitor/share": "^8.0.2",
     "@marsidev/react-turnstile": "^1.6.3",
     "@prisma/client": "^6.8.0",
+    "@supabase/supabase-js": "^2.119.0",
+    "@upstash/qstash": "^2.12.1",
+    "@upstash/ratelimit": "^2.2.0",
+    "@upstash/redis": "^1.41.0",
     "@xmldom/xmldom": "^0.9.12",
     "bcryptjs": "^3.0.3",
     "dexie": "^4.4.6",
@@ -24,14 +28,15 @@
     "fast-xml-parser": "^5.12.0",
     "framer-motion": "^13.4.0",
     "jsonwebtoken": "^9.0.3",
-    "next": "16.3.5",
+    "next": "^16.4.6",
     "next-pwa": "^5.6.0",
     "node-forge": "^1.4.0",
     "pg": "^8.23.1",
     "react": "19.2.8",
     "react-dom": "19.2.8",
     "xlsx": "^0.18.5",
-    "xml-crypto": "^6.4.0"
+    "xml-crypto": "^6.4.0",
+    "zod": "^4.6.7"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
@@ -41,7 +46,7 @@
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "eslint": "^9.39.5",
-    "eslint-config-next": "16.3.5",
+    "eslint-config-next": "^16.4.6",
     "prisma": "^6.8.0",
     "tailwindcss": "^4",
     "typescript": "^5"

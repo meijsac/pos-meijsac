@@ -331,3 +331,86 @@ BEGIN
     );
   END LOOP;
 END $$;
+
+ALTER TABLE "Empresa" ADD COLUMN IF NOT EXISTS ambiente_sri TEXT NOT NULL DEFAULT '1';
+UPDATE "Empresa" SET ambiente_sri = '2'
+WHERE ambiente_sri = '1' AND (
+  "datosRegistro"->>'ambienteCodigo' = '2'
+  OR upper(coalesce("datosRegistro"->>'ambiente', '')) LIKE '%PROD%'
+);
+
+ALTER TABLE "firma_electronica" DROP COLUMN IF EXISTS "p12Cifrado";
+ALTER TABLE "firma_electronica" DROP COLUMN IF EXISTS "claveCifrada";
+
+CREATE TABLE IF NOT EXISTS certificados_sri (
+  empresa_id TEXT PRIMARY KEY REFERENCES "Empresa"(id) ON DELETE CASCADE,
+  storage_path TEXT NOT NULL,
+  p12_iv TEXT NOT NULL,
+  p12_tag TEXT NOT NULL,
+  clave_cifrada TEXT NOT NULL,
+  clave_iv TEXT NOT NULL,
+  clave_tag TEXT NOT NULL,
+  expira TIMESTAMP(3) NOT NULL,
+  titular TEXT NOT NULL DEFAULT '',
+  nombre TEXT NOT NULL DEFAULT '',
+  ruc_certificado TEXT NOT NULL DEFAULT '',
+  updated_at TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+CREATE TABLE IF NOT EXISTS empresa_usuarios (
+  id TEXT PRIMARY KEY,
+  empresa_id TEXT NOT NULL REFERENCES "Empresa"(id) ON DELETE CASCADE,
+  user_id TEXT NOT NULL,
+  rol TEXT NOT NULL,
+  UNIQUE (empresa_id, user_id)
+);
+INSERT INTO empresa_usuarios (id, empresa_id, user_id, rol)
+SELECT u.id, u."empresaId", u.id, u.rol
+FROM "Usuario" u
+ON CONFLICT (empresa_id, user_id) DO UPDATE SET rol = EXCLUDED.rol;
+
+ALTER TABLE certificados_sri ENABLE ROW LEVEL SECURITY;
+ALTER TABLE empresa_usuarios ENABLE ROW LEVEL SECURITY;
+REVOKE ALL ON certificados_sri FROM anon;
+REVOKE ALL ON empresa_usuarios FROM anon;
+DROP POLICY IF EXISTS certificados_sri_bloqueo ON certificados_sri;
+CREATE POLICY certificados_sri_bloqueo ON certificados_sri
+  FOR ALL TO anon, authenticated
+  USING (false) WITH CHECK (false);
+
+DO $$
+DECLARE
+  t text;
+BEGIN
+  IF to_regprocedure('auth.uid()') IS NULL THEN RETURN; END IF;
+  DROP POLICY IF EXISTS empresa_usuarios_propia ON empresa_usuarios;
+  CREATE POLICY empresa_usuarios_propia ON empresa_usuarios
+    FOR SELECT TO authenticated
+    USING (user_id = auth.uid()::text);
+  FOREACH t IN ARRAY ARRAY['FacturaEmitida','Producto','Cliente','Usuario','Proveedor','firma_electronica'] LOOP
+    IF to_regclass(format('public.%I', t)) IS NULL THEN CONTINUE; END IF;
+    EXECUTE format('DROP POLICY IF EXISTS miembro_empresa ON %I', t);
+    EXECUTE format(
+      'CREATE POLICY miembro_empresa ON %I FOR ALL TO authenticated USING (EXISTS (SELECT 1 FROM empresa_usuarios eu WHERE eu.empresa_id = %I."empresaId" AND eu.user_id = auth.uid()::text)) WITH CHECK (EXISTS (SELECT 1 FROM empresa_usuarios eu WHERE eu.empresa_id = %I."empresaId" AND eu.user_id = auth.uid()::text))',
+      t, t, t
+    );
+  END LOOP;
+END $$;
+
+DO $$
+BEGIN
+  IF to_regclass('storage.buckets') IS NULL THEN RETURN; END IF;
+  INSERT INTO storage.buckets (id, name, public)
+  VALUES ('firmas-electronicas', 'firmas-electronicas', false)
+  ON CONFLICT (id) DO UPDATE SET public = false;
+  INSERT INTO storage.buckets (id, name, public)
+  VALUES ('comprobantes-sri', 'comprobantes-sri', false)
+  ON CONFLICT (id) DO UPDATE SET public = false;
+  DROP POLICY IF EXISTS firmas_sin_cliente ON storage.objects;
+  CREATE POLICY firmas_sin_cliente ON storage.objects
+    AS RESTRICTIVE
+    FOR ALL TO anon, authenticated
+    USING (bucket_id <> 'firmas-electronicas' AND bucket_id <> 'comprobantes-sri')
+    WITH CHECK (bucket_id <> 'firmas-electronicas' AND bucket_id <> 'comprobantes-sri');
+EXCEPTION WHEN OTHERS THEN
+  NULL;
+END $$;

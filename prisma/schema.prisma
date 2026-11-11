@@ -60,20 +60,50 @@ model Empresa {
   kardex          KardexMovimiento[]
   transferencias  TransferenciaInventario[]
   inventarioConfig InventarioConfig?
+  ambienteSri      String   @default("1") @map("ambiente_sri")
   firmaElectronica FirmaElectronica?
+  certificadoSri   CertificadoSri?
+  miembros         EmpresaUsuario[]
 }
 
 model FirmaElectronica {
   empresaId  String   @id
   empresa    Empresa  @relation(fields: [empresaId], references: [id], onDelete: Cascade)
   nombre     String
-  p12Cifrado String   @db.Text
   titular    String   @default("")
-  claveCifrada String @default("")
   expira     DateTime
   updatedAt  DateTime @updatedAt
 
   @@map("firma_electronica")
+}
+
+model CertificadoSri {
+  empresaId       String   @id @map("empresa_id")
+  empresa         Empresa  @relation(fields: [empresaId], references: [id], onDelete: Cascade)
+  storagePath     String   @map("storage_path")
+  p12Iv           String   @map("p12_iv")
+  p12Tag          String   @map("p12_tag")
+  claveCifrada    String   @map("clave_cifrada")
+  claveIv         String   @map("clave_iv")
+  claveTag        String   @map("clave_tag")
+  expira          DateTime
+  titular         String   @default("")
+  nombre          String   @default("")
+  rucCertificado  String   @default("") @map("ruc_certificado")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+
+  @@map("certificados_sri")
+}
+
+model EmpresaUsuario {
+  id        String  @id @default(cuid())
+  empresaId String  @map("empresa_id")
+  userId    String  @map("user_id")
+  rol       String
+  empresa   Empresa @relation(fields: [empresaId], references: [id], onDelete: Cascade)
+
+  @@unique([empresaId, userId])
+  @@map("empresa_usuarios")
 }
 
 model DocumentoLegal {

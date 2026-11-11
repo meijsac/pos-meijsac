@@ -1,4 +1,5 @@
-import { createHmac, randomBytes, scryptSync, timingSafeEqual, createCipheriv, createDecipheriv, createHash } from "crypto"
+import { createHmac, randomBytes, timingSafeEqual, createCipheriv, createDecipheriv, createHash } from "crypto"
+import { masterKey } from "@/lib/security/crypto"
 
 const COMUNES = ["12345678", "password", "admin", "meijsac", "123456789", "qwerty123"]
 
@@ -93,9 +94,7 @@ export function accesoEmpresa(empresaSesion: string, empresaRecurso: string) {
 }
 
 export function claveCifrado() {
-  const secreto = process.env.JWT_SECRET || ""
-  if (!secreto || secreto === "MEIJSAC_SECRET_2026") throw new Error("JWT_SECRET no configurado")
-  return scryptSync(secreto, "meijsac-seguridad", 32)
+  return masterKey()
 }
 
 export function encriptar(texto: string) {

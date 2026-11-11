@@ -20,6 +20,13 @@ export const SRI_AMBIENTES = {
 
 export type CodigoAmbiente = "1" | "2"
 
+export function ambienteDeEmpresa(empresa: { ambienteSri?: string | null; datosRegistro?: unknown }) {
+  const extra = empresa.datosRegistro && typeof empresa.datosRegistro === "object" && !Array.isArray(empresa.datosRegistro)
+    ? empresa.datosRegistro as Record<string, unknown>
+    : {}
+  return codigoAmbiente(empresa.ambienteSri || extra.ambienteCodigo || extra.ambiente)
+}
+
 export function codigoAmbiente(valor: unknown): CodigoAmbiente {
   const texto = String(valor || "").trim().toUpperCase()
   if (texto === "2" || texto.includes("PROD")) return "2"
