@@ -33,24 +33,60 @@ function getColor(dias: number){
 
 type Serie = { dia: number[]; semana: number[]; mes: number[]; año: number[] }
 type Metrica = { ventas: number; pedidos: number; carrito: number }
+type Periodo = "dia" | "semana" | "mes" | "año"
 
-function BarrasColoresCompact({ series }: { series: Serie }){
-  const [filtro, setFiltro] = useState<'dia'|'semana'|'mes'|'año'>('dia')
+function Trazo({ d, className = "w-3.5 h-3.5" }: { d: string; className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" className={className} fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d={d} />
+    </svg>
+  )
+}
+
+const iconosModulo: Record<string, string> = {
+  "CONFIGURACIÓN": "M12 8 a4 4 0 1 0 0.01 0 M12 3 v2 M12 19 v2 M3 12 h2 M19 12 h2",
+  "COMPROBANTES ELECTRÓNICOS": "M14 3 H7 a2 2 0 0 0-2 2 v14 a2 2 0 0 0 2 2 h10 a2 2 0 0 0 2-2 V8 z M14 3 v5 h5",
+  "POS TICKET": "M6 7 h12 v10 H6 z M8 11 h8 M8 14 h5",
+  "RESTAURANTE POS": "M6 4 v8 a3 3 0 0 0 6 0 V4 M9 4 v16 M16 8 h3 v8 a2 2 0 0 1-2 2 h-1",
+  "CONTABILIDAD": "M5 19 V9 M10 19 V5 M15 19 v-7 M20 19 V8",
+  "CUENTAS POR COBRAR": "M4 8 h16 v9 H4 z M4 11 h16 M8 15 h3",
+  "INVENTARIO": "M4 8 l8-4 8 4-8 4 z M4 12 l8 4 8-4 M4 16 l8 4 8-4",
+  "CAJA": "M5 9 h14 v8 H5 z M8 9 V7 a4 4 0 0 1 8 0 v2 M12 13 v2",
+  "CLIENTES": "M9 11 a3 3 0 1 0 0.01 0 M16 11 a2.5 2.5 0 1 0 0.01 0 M4 19 c1-3 3-4 5-4 s4 1 5 4 M14 15 c1.2-.6 2.4-.8 3.5-.6 1.6.3 2.8 1.4 3.5 3.6",
+  "REPORTES": "M5 19 V10 M10 19 V6 M15 19 v-8 M20 19 V8",
+  "COMPROBANTES ADICIONALES": "M8 4 h8 v16 H8 z M10 8 h4 M10 12 h4 M10 16 h3",
+}
+
+const titulosModulo: Record<string, string> = {
+  "CONFIGURACIÓN": "Configuración",
+  "COMPROBANTES ELECTRÓNICOS": "Comprobantes Electrónicos",
+  "POS TICKET": "POS Ticket",
+  "RESTAURANTE POS": "Restaurante POS",
+  "CONTABILIDAD": "Contabilidad",
+  "CUENTAS POR COBRAR": "Cuentas por Cobrar",
+  "INVENTARIO": "Inventario",
+  "CAJA": "Caja",
+  "CLIENTES": "Clientes",
+  "REPORTES": "Reportes",
+  "COMPROBANTES ADICIONALES": "Comprobantes Adicionales",
+}
+
+function BarrasColoresCompact({ series, filtro, setFiltro }: { series: Serie; filtro: Periodo; setFiltro: (f: Periodo) => void }){
   const values = series[filtro] || []
   const max = Math.max(...values, 0)
   const vacio = max <= 0
   const colors = ['#ff7a7a','#c5b3ff','#ff8a8a','#ff9f6e','#ffd76e','#ffe08a','#a0e8a0','#23AAB3','#e879f9','#60a5fa']
   return (
-    <div className="rounded-2xl border border-white/[0.05] bg-[#12141d] p-3 h-[72px] overflow-hidden">
+    <div className="rounded-2xl border border-white/[0.05] border-t-2 border-t-teal-500/50 bg-[#12141d] p-3 h-[72px] overflow-hidden">
       <div className="flex justify-between items-center mb-2">
         <p className="text-[8px] opacity-40 tracking-widest font-bold">MOVIMIENTOS</p>
         <div className="flex gap-1 bg-black/40 rounded-full p-0.5 border border-white/5">
           {(['dia','semana','mes','año'] as const).map(f=>(
-            <button key={f} onClick={()=>setFiltro(f)} className={`text-[7px] px-2 py-0.5 rounded-full font-bold uppercase transition-all ${filtro===f ? 'bg-white text-black' : 'text-white/40'}`}>{f}</button>
+            <button key={f} onClick={()=>setFiltro(f)} className={`text-[7px] px-2 py-0.5 rounded-full font-bold uppercase transition-all ${filtro===f ? 'bg-teal-400 text-slate-950' : 'text-white/40'}`}>{f}</button>
           ))}
         </div>
       </div>
-      {vacio ? <p className="text-[10px] opacity-50">Sin movimientos aún</p> : (
+      {vacio ? <div className="h-[30px]" /> : (
         <div className="flex items-end gap-[3px] h-[30px]">
           {values.map((v,i)=>{
             const h = (v/max)*100
@@ -62,8 +98,7 @@ function BarrasColoresCompact({ series }: { series: Serie }){
   )
 }
 
-function VentasAreaCompact({ series, metricas }: { series: Serie; metricas: Record<string, Metrica> }){
-  const [filtro, setFiltro] = useState<'dia'|'semana'|'mes'|'año'>('mes')
+function VentasAreaCompact({ series, metricas, filtro }: { series: Serie; metricas: Record<string, Metrica>; filtro: Periodo }){
   const [tab, setTab] = useState(0)
   const m = metricas[filtro] || { ventas: 0, pedidos: 0, carrito: 0 }
   const tabs = [
@@ -74,24 +109,24 @@ function VentasAreaCompact({ series, metricas }: { series: Serie; metricas: Reco
   const points = series[filtro] || []
   const max = Math.max(...points, 0)
   return (
-    <div className="rounded-2xl border border-white/[0.05] bg-[#12141d] overflow-hidden h-[108px] flex flex-col">
-      <div className="flex justify-end gap-1 px-2 pt-1">
-        {(['dia','semana','mes','año'] as const).map(f => (
-          <button key={f} onClick={()=>setFiltro(f)} className={`text-[7px] px-2 py-0.5 rounded-full font-bold uppercase ${filtro===f ? 'bg-white text-black' : 'text-white/40'}`}>{f}</button>
-        ))}
-      </div>
+    <div className="rounded-2xl border border-white/[0.05] border-t-2 border-t-teal-500/50 bg-[#12141d] overflow-hidden h-[108px] flex flex-col">
       <div className="grid grid-cols-3 border-b border-white/[0.06]">
         {tabs.map((t,i)=>(
-          <button key={t.label} onClick={()=>setTab(i)} className={`p-1.5 text-left border-r border-white/[0.04] last:border-0 ${tab===i ? 'bg-[#0f6cb6] text-white' : 'text-white/30 hover:text-white/60'}`}>
+          <button key={t.label} onClick={()=>setTab(i)} className={`p-1.5 text-left border-r border-white/[0.04] last:border-0 ${tab===i ? 'bg-teal-400 text-slate-950 shadow-sm shadow-teal-500/20' : 'text-white/30 hover:text-white/60'}`}>
             <p className="text-[7px] font-bold truncate">{t.label}</p>
             <p className="text-[10px] font-black truncate">{t.value}</p>
           </button>
         ))}
       </div>
       <div className="flex-1 relative px-2">
-        {max <= 0 ? <p className="text-[10px] opacity-50 pt-2">Sin movimientos aún</p> : (
+        {max <= 0 ? (
+          <div className="h-full flex items-center justify-center gap-2 text-slate-500">
+            <Trazo d="M5 19 V10 M10 19 V6 M15 19 v-8 M20 19 V8" className="w-4 h-4 text-slate-600" />
+            <p className="text-[10px] leading-tight">Tus ventas y pedidos del día aparecerán aquí en tiempo real</p>
+          </div>
+        ) : (
           <svg viewBox="0 0 1000 40" className="w-full h-[28px]">
-            <polyline fill="none" stroke="#1f7fcf" strokeWidth="2" points={points.map((v,i)=> `${points.length === 1 ? 0 : (i/(points.length-1))*1000},${40 - (v/max)*34}`).join(' ')} />
+            <polyline fill="none" stroke="#2dd4bf" strokeWidth="2" points={points.map((v,i)=> `${points.length === 1 ? 0 : (i/(points.length-1))*1000},${40 - (v/max)*34}`).join(' ')} />
           </svg>
         )}
       </div>
@@ -106,6 +141,7 @@ export default function DashboardMeijsac(){
   const [ventas, setVentas] = useState({ hoy: 0, mes: 0, pedidosHoy: 0, pedidosMes: 0 })
   const [docsLegales, setDocsLegales] = useState<{ id: string; tipo: string; nombre: string; fecha_caducidad: string }[]>([])
   const vacioSerie = { dia: [], semana: [], mes: [], año: [] }
+  const [periodoMov, setPeriodoMov] = useState<Periodo>("dia")
   const [series, setSeries] = useState<Serie>(vacioSerie)
   const [metricas, setMetricas] = useState<Record<string, Metrica>>({})
   const ambiente = useAmbienteVivo()
@@ -211,7 +247,7 @@ export default function DashboardMeijsac(){
     const dias = Math.ceil((new Date(vence).getTime() - Date.now()) / 86400000)
     if (dias < 0) return { clase: "text-red-300", texto: `VENCIDO - Venció hace ${Math.abs(dias)} días` }
     if (dias <= 30) return { clase: "text-amber-300", texto: `POR VENCER - Faltan ${dias} días` }
-    return { clase: "text-emerald-300", texto: `AL DÍA - Vence en ${dias} días` }
+    return { clase: "inline-block mt-1 text-teal-200 bg-teal-400/15 border border-teal-400/30 rounded-full px-2 py-0.5", texto: `AL DÍA - Vence en ${dias} días` }
   }
   const estaBloqueado = accesoPlan ? accesoPlan.estado === "BLOQUEADO" : miSuscripcion?.estado === "BLOQUEADO"
   const estaPorVencer = accesoPlan ? false : miSuscripcion?.estado === "POR VENCER"
@@ -314,15 +350,30 @@ export default function DashboardMeijsac(){
 
         <div className="max-w-[1600px] mx-auto grid grid-cols-12 gap-3 mb-5">
           <div className="col-span-12 md:col-span-6 grid grid-cols-3 gap-3">
-            <div className="bg-[#12141d] rounded-2xl border border-white/[0.05] p-3 shadow-sm flex flex-col justify-between h-[188px]">
-              <div><p className="text-[9px] opacity-40 tracking-widest">VENTAS HOY</p><p className="text-[16px] font-black mt-1">${ventas.hoy.toFixed(2)}</p><p className="text-[9px] opacity-50 mt-1">{ventas.pedidosHoy} facturas autorizadas hoy</p><p className="text-[9px] opacity-50">Mes: ${ventas.mes.toFixed(2)} • {ventas.pedidosMes} autorizadas • CxC ${porCobrar.toFixed(2)}</p></div>
+            <div className="bg-[#12141d] rounded-2xl border border-white/[0.05] border-t-2 border-t-teal-500/50 p-3 shadow-sm flex flex-col justify-between h-[188px]">
+              <div>
+                <div className="flex justify-between items-start gap-2">
+                  <p className="text-[9px] opacity-40 tracking-widest">VENTAS HOY</p>
+                  <span className="w-7 h-7 rounded-lg bg-teal-400/15 text-teal-300 grid place-items-center"><Trazo d="M12 4 v16 M8 8 h6 a3 3 0 0 1 0 6 H9 a3 3 0 0 0 0 6 h7" /></span>
+                </div>
+                <p className="text-[16px] font-black mt-1 text-teal-400">${ventas.hoy.toFixed(2)}</p><p className="text-[9px] opacity-50 mt-1">{ventas.pedidosHoy} facturas autorizadas hoy</p><p className="text-[9px] opacity-50">Mes: ${ventas.mes.toFixed(2)} • {ventas.pedidosMes} autorizadas • CxC ${porCobrar.toFixed(2)}</p>
+              </div>
             </div>
-            <div className="bg-[#12141d] rounded-2xl border border-white/[0.05] p-3 shadow-sm flex flex-col justify-between h-[188px]">
-              <div><p className="text-[9px] opacity-40 tracking-widest">ESTADO FINANCIERO</p><p className="text-[13px] font-bold mt-3">Sin egresos registrados</p><p className="text-[9px] opacity-50 mt-1">Ingresos ${ventas.mes.toFixed(2)} - Egresos $0.00 (sin compras registradas)</p></div>
+            <div className="bg-[#12141d] rounded-2xl border border-white/[0.05] border-t-2 border-t-teal-500/50 p-3 shadow-sm flex flex-col justify-between h-[188px]">
+              <div>
+                <div className="flex justify-between items-start gap-2">
+                  <p className="text-[9px] opacity-40 tracking-widest">ESTADO FINANCIERO</p>
+                  <span className="w-7 h-7 rounded-lg bg-teal-400/15 text-teal-300 grid place-items-center"><Trazo d="M4 10 h16 M7 10 V7 h10 v3 M8 10 v8 M16 10 v8 M6 18 h12" /></span>
+                </div>
+                <p className="text-[13px] font-bold mt-3">Sin egresos registrados</p><p className="text-[9px] opacity-50 mt-1">Ingresos ${ventas.mes.toFixed(2)} - Egresos $0.00 (sin compras registradas)</p>
+              </div>
               <div><div className="h-1.5 bg-white/10 rounded-full overflow-hidden"><div className="h-full w-0" style={{ background: CORPORATE }} /></div></div>
             </div>
-            <div className="bg-[#12141d] rounded-2xl border border-white/[0.05] p-3 shadow-sm h-[188px]">
-              <p className="text-[9px] opacity-40 tracking-widest mb-2">CUMPLIMIENTO DOCUMENTAL</p>
+            <div className="bg-[#12141d] rounded-2xl border border-white/[0.05] border-t-2 border-t-teal-500/50 p-3 shadow-sm h-[188px]">
+              <div className="flex justify-between items-start gap-2 mb-2">
+                <p className="text-[9px] opacity-40 tracking-widest">CUMPLIMIENTO DOCUMENTAL</p>
+                <span className="w-7 h-7 rounded-lg bg-teal-400/15 text-teal-300 grid place-items-center shrink-0"><Trazo d="M12 3 l7 3 v6 c0 4.5-3 7.5-7 9 c-4-1.5-7-4.5-7-9 V6 z M9 12 l2 2 4-4" /></span>
+              </div>
               <div className="space-y-1.5 overflow-auto max-h-[150px]">
                 {docsVista.length === 0 ? (
                   <div className="text-[10px] leading-snug">
@@ -342,8 +393,8 @@ export default function DashboardMeijsac(){
             </div>
           </div>
           <div className="col-span-12 md:col-span-6 flex flex-col gap-3 h-[188px]">
-            <BarrasColoresCompact series={series} />
-            <VentasAreaCompact series={series} metricas={metricas} />
+            <BarrasColoresCompact series={series} filtro={periodoMov} setFiltro={setPeriodoMov} />
+            <VentasAreaCompact series={series} metricas={metricas} filtro={periodoMov} />
           </div>
         </div>
 
@@ -361,16 +412,16 @@ export default function DashboardMeijsac(){
                     {isSide ? (
                       <>
                         <div className="flex items-center gap-2">
-                          <span className="text-[32px] leading-none w-9 h-9 grid place-items-center bg-white/15 rounded-full shrink-0">{m.icon}</span>
-                          <h2 className="text-[13px] font-black leading-[1.05] flex-1">{m.title}</h2>
+                          <span className="w-9 h-9 grid place-items-center bg-white/80 text-[#0f4a4f] rounded-xl shrink-0"><Trazo d={iconosModulo[m.title]} className="w-4 h-4" /></span>
+                          <h2 className="text-[13px] font-black leading-[1.05] flex-1">{titulosModulo[m.title] || m.title}</h2>
                           <span className="text-[10px] opacity-40 group-hover:translate-x-1 transition-transform shrink-0">→</span>
                         </div>
                         <div className="pl-[44px]"><p className={`text-[11px] leading-[1.1] opacity-70`}>{m.desc}</p></div>
                       </>
                     ) : (
                       <>
-                        <div className="flex justify-between items-center"><span className="text-[32px] leading-none w-9 h-9 grid place-items-center bg-white/15 rounded-full shrink-0">{m.icon}</span><span className="text-[10px] opacity-40 group-hover:translate-x-1 transition-transform">→</span></div>
-                        <div><h2 className="text-[13px] font-black leading-tight">{m.title}</h2><p className={`text-[11px] mt-1 leading-tight opacity-70`}>{m.desc}</p></div>
+                        <div className="flex justify-between items-center"><span className="w-9 h-9 grid place-items-center bg-white/80 text-[#0f4a4f] rounded-xl shrink-0"><Trazo d={iconosModulo[m.title]} className="w-4 h-4" /></span><span className="text-[10px] opacity-40 group-hover:translate-x-1 transition-transform">→</span></div>
+                        <div><h2 className="text-[13px] font-black leading-tight">{titulosModulo[m.title] || m.title}</h2><p className={`text-[11px] mt-1 leading-tight opacity-70`}>{m.desc}</p></div>
                       </>
                     )}
                   </div>
