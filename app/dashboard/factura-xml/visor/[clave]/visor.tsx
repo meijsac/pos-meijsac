@@ -3,14 +3,35 @@
 import Link from "next/link"
 import { useEffect, useRef, useState } from "react"
 
-export function VisorComprobante({ clave }: { clave: string }) {
+function documentoGuardado(clave: string) {
+  const nombres = ["meijsac_comprobantes_emitidos", "meijsac_documentos_emitidos", "meijsac_facturas", "meijsac_autorizados", "meijsac_enviados_sri"]
+  for (const nombre of nombres) {
+    try {
+      const lista = JSON.parse(localStorage.getItem(nombre) || "[]")
+      const doc = (Array.isArray(lista) ? lista : []).find((d: { claveAcceso?: string; clave?: string }) => String(d?.claveAcceso || d?.clave || "").replace(/\D/g, "") === clave)
+      if (doc) return doc as { estadoSRI?: string; fechaAutorizacion?: string }
+    } catch {}
+  }
+  return null
+}
+
+export function VisorComprobante({ clave, soloLectura = false }: { clave: string; soloLectura?: boolean }) {
   const marco = useRef<HTMLIFrameElement>(null)
   const [ticket, setTicket] = useState(false)
-  const [estado, setEstado] = useState("Enviando al SRI…")
+  const [estado, setEstado] = useState(soloLectura ? "Documento guardado" : "Enviando al SRI…")
   const [marca, setMarca] = useState(0)
   const src = `/dashboard/factura-xml/pdf/${clave}${ticket ? "?ticket=1" : ""}${ticket ? "&" : "?"}v=${marca}`
 
   useEffect(() => {
+    if (soloLectura) {
+      const doc = documentoGuardado(clave)
+      const fecha = String(doc?.fechaAutorizacion || "").trim()
+      const marcaEstado = String(doc?.estadoSRI || "").trim()
+      if (fecha) setEstado(`Autorizado ${fecha}`)
+      else if (marcaEstado) setEstado(marcaEstado)
+      else setEstado("Documento guardado")
+      return
+    }
     let vivo = true
     ;(async () => {
       const res = await fetch("/api/facturar/sri", {
@@ -47,7 +68,7 @@ export function VisorComprobante({ clave }: { clave: string }) {
       if (fecha) ["meijsac_enviados_sri", "meijsac_autorizados", "meijsac_comprobantes_sri"].forEach(guardar)
     })()
     return () => { vivo = false }
-  }, [clave])
+  }, [clave, soloLectura])
 
   return (
     <div className="min-h-screen bg-slate-100 flex flex-col">

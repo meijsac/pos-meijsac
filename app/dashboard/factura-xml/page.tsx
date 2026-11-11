@@ -35,12 +35,36 @@ function productoDeApi(p: any) {
   }
 }
 
+let catalogoMemoria: any[] | null = null
+let catalogoPromesa: Promise<any[] | null> | null = null
+
+function cargarCatalogo() {
+  if (catalogoMemoria) return Promise.resolve(catalogoMemoria)
+  if (!catalogoPromesa) {
+    catalogoPromesa = fetch("/api/productos")
+      .then(async (res) => {
+        const data = await res.json().catch(() => [])
+        if (!Array.isArray(data)) throw new Error("catalogo")
+        catalogoMemoria = data.map(productoDeApi)
+        return catalogoMemoria
+      })
+      .catch(() => {
+        catalogoPromesa = null
+        catalogoMemoria = null
+        return null
+      })
+  }
+  return catalogoPromesa
+}
+
 async function buscarProductosEnBase(texto: string) {
   const q = texto.trim()
   if (!q) return []
+  const lista = await cargarCatalogo()
+  if (lista) return lista.filter((p) => coincideProducto(p, q)).slice(0, 8)
   const res = await fetch(`/api/productos?q=${encodeURIComponent(q)}`)
   const data = await res.json().catch(() => [])
-  return Array.isArray(data) ? data.map(productoDeApi) : []
+  return Array.isArray(data) ? data.map(productoDeApi).slice(0, 8) : []
 }
 
 function productoExacto(productos: any[], texto: string) {
@@ -403,6 +427,7 @@ const [sugerencias, setSugerencias] = useState<any[]>([]);
   }
 
   const [productos, setProductos] = useState<any[]>([])
+  useEffect(() => { void cargarCatalogo() }, [])
     const codigoRef = useRef<HTMLInputElement>(null)
   const [codigoRapido, setCodigoRapido] = useState("")
   const [errorLector, setErrorLector] = useState("")
@@ -458,6 +483,7 @@ const toggleTurismoFeriado = (checked: boolean) => {
   const [tarjetaData, setTarjetaData] = useState({ tipoSRI:"19", forma:"CORRIENTE", plazo:0, franquicia:"Datafast - Visa / Mastercard" })
   const [conteoCaja, setConteoCaja] = useState({ "100":0,"50":0,"20":0,"10":0,"5":0,"1":0,"0.50":0,"0.25":0,"0.10":0,"0.05":0,"0.01":0 } as any)
   const [pagoRealizado, setPagoRealizado] = useState(false)
+  const [enviandoSri, setEnviandoSri] = useState(false)
   const [cajaAbierta, setCajaAbierta] = useState(false)
   const [tipoCobro, setTipoCobro] = useState<'efectivo'|'tarjeta'|'transfer'|'pendiente'|'credito'>('efectivo')
   const [refTarjeta, setRefTarjeta] = useState("")
@@ -762,6 +788,7 @@ const total = subtotalSin + iva15 + ivaDiferenciado + valorICE + valorIRBPNR + p
     try {
       await fetch("/api/facturas", { method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${localStorage.getItem("meijsac_token") || ""}` }, body: JSON.stringify(completo) })
     } catch {}
+    alert("El comprobante ha sido guardado.")
     window.location.href = "/dashboard/comprobantes/emitidos"
   }
   
@@ -774,6 +801,8 @@ const total = subtotalSin + iva15 + ivaDiferenciado + valorICE + valorIRBPNR + p
     if (itemSinTarifa) return alert("Hay un producto sin tarifa IVA. No se puede emitir.")
     if(!pagoRealizado) return alert("Primero cobra en CAJA")
     if (tipoCobro === "credito" && (!(plazoCredito > 0) || !(cuotasCredito >= 1))) return alert("Para crédito debes poner plazo y cuotas")
+    if (!window.confirm("¿Está seguro de enviar la factura al SRI?")) return
+    setEnviandoSri(true)
     const venta = window.open("", "_blank")
     try {
       venta?.document.write("<p style=\"font-family:Arial,sans-serif;padding:24px\">Generando el comprobante…</p>")
@@ -781,8 +810,8 @@ const total = subtotalSin + iva15 + ivaDiferenciado + valorICE + valorIRBPNR + p
     } catch {}
     const { emisionBloqueada, rucLocal } = await import("@/lib/plan-cliente")
     const avisoPlan = await emisionBloqueada(configEmisor?.ruc || rucLocal())
-    if (avisoPlan) { venta?.close(); return alert(avisoPlan) }
-    if (!Number.isFinite(total)) { venta?.close(); return alert("No se puede emitir: faltan valores de la factura que no se pueden calcular.") }
+    if (avisoPlan) { setEnviandoSri(false); venta?.close(); return alert(avisoPlan) }
+    if (!Number.isFinite(total)) { setEnviandoSri(false); venta?.close(); return alert("No se puede emitir: faltan valores de la factura que no se pueden calcular.") }
     const sinCobro = tipoCobro === "pendiente" || tipoCobro === "credito"
     const netoEmit = sinCobro ? 0 : (Number.isFinite(Number(pagosReales.efectivo)) ? Number(pagosReales.efectivo) : 0)
     const entregadoCaja = Number(abonos.efectivo || 0) + Number(abonos.transfer || 0) + Number(abonos.tarjeta || 0)
@@ -945,6 +974,7 @@ const total = subtotalSin + iva15 + ivaDiferenciado + valorICE + valorIRBPNR + p
       const guardada = await guardado.json().catch(() => ({}))
       if (!guardado.ok) {
         const faltan = Array.isArray(guardada.faltantes) ? `\n${guardada.faltantes.join("\n")}` : ""
+        setEnviandoSri(false)
         venta?.close()
         alert((guardada.error || "No se pudo guardar la factura en la base.") + faltan)
         cargarPunto()
@@ -1006,14 +1036,19 @@ const total = subtotalSin + iva15 + ivaDiferenciado + valorICE + valorIRBPNR + p
       localStorage.setItem("meijsac_ultima_factura_pendiente", JSON.stringify(facturaPendiente))
       const claveRide = String(guardada.claveAcceso || facturaPendiente.claveAcceso || "").replace(/\D/g, "")
       const urlRide = `/dashboard/factura-xml/visor/${claveRide}`
+      setEnviandoSri(false)
       if (claveRide.length === 49) {
-        if (venta) venta.location.href = urlRide
-        else window.open(urlRide, "_blank")
+        if (venta && !venta.closed) venta.location.href = urlRide
+        else {
+          const abierta = window.open(urlRide, "_blank")
+          if (!abierta) alert(`La factura quedó ${estadoVisible}. Permite las ventanas emergentes para ver el comprobante.`)
+        }
       } else {
         venta?.close()
         alert("No se pudo obtener la clave de acceso del comprobante.")
       }
     } catch {
+      setEnviandoSri(false)
       venta?.close()
       alert("No se pudo guardar la factura en la base.")
       return
@@ -1475,10 +1510,10 @@ const total = subtotalSin + iva15 + ivaDiferenciado + valorICE + valorIRBPNR + p
     Caja y Cobro
   </button>
   <button onClick={() => guardarComoBorrador()} className="bg-slate-800 border border-slate-700 text-slate-300 font-semibold py-3 rounded-xl text-xs">
-    Borrador
+    Guardar
   </button>
-  <button type="button" onClick={() => emitirComprobante()} disabled={!pagoRealizado || bloqueoConsumidorFinal || !emisorListo || itemSinTarifa} className={`font-semibold py-3 rounded-xl text-xs border ${pagoRealizado && !bloqueoConsumidorFinal && emisorListo && !itemSinTarifa ? 'bg-slate-900 border-teal-400/30 text-teal-100' : 'bg-white/10 border-transparent text-white/20'}`}>
-    {configEmisor.ambiente === "PRODUCCIÓN" ? "ENVIAR A SRI PRODUCCIÓN" : "ENVIAR A SRI PRUEBAS"}
+  <button type="button" onClick={() => emitirComprobante()} disabled={enviandoSri || !pagoRealizado || bloqueoConsumidorFinal || !emisorListo || itemSinTarifa} className={`font-semibold py-3 rounded-xl text-xs border ${!enviandoSri && pagoRealizado && !bloqueoConsumidorFinal && emisorListo && !itemSinTarifa ? 'bg-teal-400 border-teal-300 text-slate-950' : 'bg-white/10 border-transparent text-white/20'}`}>
+    {enviandoSri ? "Enviando…" : (configEmisor.ambiente === "PRODUCCIÓN" ? "ENVIAR A SRI PRODUCCIÓN" : "ENVIAR A SRI PRUEBAS")}
   </button>
 </div>
           {cajaAbierta && (

@@ -179,7 +179,7 @@ export default function EmitidosPage(){
   const verImprimir = (doc: ComprobanteHistorialSRI) => {
     const clave = String(doc.claveAcceso || "").replace(/\D/g, "")
     if (clave.length !== 49) { alert("Este comprobante no tiene el documento real emitido."); return }
-    router.push(`/dashboard/factura-xml/visor/${clave}`)
+    router.push(`/dashboard/factura-xml/visor/${clave}?ver=1`)
   }
   const nombreTipo = (codigo: string) => ({ "01": "Factura", "03": "Liq. compra", "04": "Nota crédito", "05": "Nota débito", "06": "Guía", "07": "Retención" }[codigo] || "Factura")
   const insigniaPago = (d: ComprobanteHistorialSRI) => {

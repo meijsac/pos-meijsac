@@ -33,18 +33,41 @@ async function guardarUno(empresaId: string, body: any) {
 export async function GET(req: Request) {
   const sesion = await usuarioConEmpresaDesdeRequest(req)
   if ("error" in sesion) return NextResponse.json({ error: sesion.error }, { status: sesion.status })
-  const q = new URL(req.url).searchParams.get("q")?.trim().toLowerCase() || ""
-  const productos = await prisma.producto.findMany({
-    where: { empresaId: sesion.empresa.id },
-    orderBy: { createdAt: "desc" },
-  })
-  if (!q) return NextResponse.json(productos)
-  const coincide = (p: (typeof productos)[number]) => {
-    const ficha = p.ficha && typeof p.ficha === "object" ? p.ficha as Record<string, unknown> : {}
-    return [p.codigo, p.nombre, ficha.codigoAuxiliar, ficha.codigoBarras, ficha.codigo_barras, ficha.sku, ficha.nombre]
-      .some((c) => String(c || "").trim().toLowerCase().includes(q))
+  const q = new URL(req.url).searchParams.get("q")?.trim() || ""
+  if (!q) {
+    const productos = await prisma.producto.findMany({
+      where: { empresaId: sesion.empresa.id },
+      orderBy: { createdAt: "desc" },
+    })
+    return NextResponse.json(productos)
   }
-  return NextResponse.json(productos.filter(coincide))
+  try {
+    const productos = await prisma.$queryRaw<Array<Record<string, unknown>>>`
+      SELECT * FROM "Producto"
+      WHERE "empresaId" = ${sesion.empresa.id}
+        AND (
+          COALESCE("codigo", '') ILIKE ${"%" + q + "%"}
+          OR "nombre" ILIKE ${"%" + q + "%"}
+          OR COALESCE("ficha"::text, '') ILIKE ${"%" + q + "%"}
+        )
+      ORDER BY "createdAt" DESC
+      LIMIT 12
+    `
+    return NextResponse.json(productos)
+  } catch {
+    const productos = await prisma.producto.findMany({
+      where: {
+        empresaId: sesion.empresa.id,
+        OR: [
+          { codigo: { contains: q, mode: "insensitive" } },
+          { nombre: { contains: q, mode: "insensitive" } },
+        ],
+      },
+      orderBy: { createdAt: "desc" },
+      take: 12,
+    })
+    return NextResponse.json(productos)
+  }
 }
 
 export async function POST(req: Request) {
