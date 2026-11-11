@@ -9,34 +9,47 @@ interface CompraATS {
 }
 
 const CATALOGO_RENTA = [
-  { code:"312", label:"312 - Bienes Muebles 1.75%", porc:1.75, desc:"Compra general mercadería" },
-  { code:"343", label:"343 - RIMPE EMPRENDEDOR 1% ★", porc:1.00, desc:"EL REY DEL RESTAURANTE", fav:true },
-  { code:"348", label:"348 - RIMPE NEGOCIO POPULAR 0%", porc:0.00, desc:"Informativo XML obligatorio" },
-  { code:"320", label:"320 - Servicios Mano Obra 2.75%", porc:2.75, desc:"Fletes, limpieza, seguridad" },
-  { code:"332", label:"332 - Otras Compras 2.75%", porc:2.75, desc:"Código descarte contable" },
-  { code:"344", label:"344 - Microempresas 1.75%", porc:1.75, desc:"Rezagos microempresas" },
-  { code:"303", label:"303 - Honorarios con Título 10%", porc:10.00, desc:"Abogados, contadores" },
-  { code:"304", label:"304 - Honorarios sin Título 8%", porc:8.00, desc:"Intelectuales sin título" },
-  { code:"307", label:"307 - Comisiones 8%", porc:8.00, desc:"Delivery, agencias" },
-  { code:"308", label:"308 - Artistas 2%", porc:2.00, desc:"Deportistas, comunicación" },
-  { code:"319", label:"319 - Arriendo Inmueble 8%", porc:8.00, desc:"Pago local comercial" },
-  { code:"314A", label:"314A - Publicidad 1%", porc:1.00, desc:"Medios locales/digitales" },
-  { code:"322", label:"322 - Seguros 1.75%", porc:1.75, desc:"Primas seguros" },
-  { code:"311", label:"311 - Agrícola 1%", porc:1.00, desc:"Pollo/verdura directo productor" },
-  { code:"338", label:"338 - Combustible 1%", porc:1.00, desc:"Gas, diesel" },
-  { code:"310", label:"310 - Construcción 1.75%", porc:1.75, desc:"Obra civil" },
-  { code:"346", label:"346 - Tarjetas/Bancos 0%", porc:0.00, desc:"Datafast automático" },
-  { code:"318", label:"318 - Dividendos 15%/25%", porc:15.00, desc:"Distribución utilidades" },
+  { code:"312", label:"312 - Transferencia de bienes (1.75%)", porc:1.75 },
+  { code:"343", label:"343 - Régimen RIMPE Emprendedor (1%)", porc:1.00 },
+  { code:"348", label:"348 - Régimen RIMPE Negocio Popular (0%)", porc:0.00 },
+  { code:"320", label:"320 - Servicios de mano de obra (2.75%)", porc:2.75 },
+  { code:"332", label:"332 - Otras compras de bienes y servicios (2.75%)", porc:2.75 },
+  { code:"344", label:"344 - Microempresas (1.75%)", porc:1.75 },
+  { code:"303", label:"303 - Honorarios profesionales (10%)", porc:10.00 },
+  { code:"304", label:"304 - Honorarios sin título (8%)", porc:8.00 },
+  { code:"307", label:"307 - Comisiones (8%)", porc:8.00 },
+  { code:"308", label:"308 - Artistas y deportistas (2%)", porc:2.00 },
+  { code:"319", label:"319 - Arriendo de inmueble (8%)", porc:8.00 },
+  { code:"314A", label:"314A - Publicidad (1%)", porc:1.00 },
+  { code:"322", label:"322 - Seguros y reaseguros (1.75%)", porc:1.75 },
+  { code:"311", label:"311 - Actividad agrícola (1%)", porc:1.00 },
+  { code:"338", label:"338 - Combustibles (1%)", porc:1.00 },
+  { code:"310", label:"310 - Construcción (1.75%)", porc:1.75 },
+  { code:"346", label:"346 - Pagos con tarjeta o entidad financiera (0%)", porc:0.00 },
+  { code:"318", label:"318 - Dividendos (15%)", porc:15.00 },
 ]
 
 const CATALOGO_IVA = [
   { code:"1", label:"1 - 30% Bienes", porc:30 },
   { code:"2", label:"2 - 70% Servicios", porc:70 },
-  { code:"3", label:"3 - 100% Total", porc:100 },
-  { code:"9", label:"9 - 10% Exportador", porc:10 },
-  { code:"10", label:"10 - 20% Grandes Contrib", porc:20 },
-  { code:"7", label:"7 - 0% No Retención", porc:0 },
+  { code:"3", label:"3 - 100% Liquidación / Arriendo", porc:100 },
+  { code:"9", label:"9 - 10% Bienes (Contribuyente especial)", porc:10 },
+  { code:"10", label:"10 - 20% Servicios (Contribuyente especial)", porc:20 },
+  { code:"7", label:"7 - No procede retención (0%)", porc:0 },
 ]
+
+function fechaLimpia(fecha: string) {
+  const dia = String(fecha || "").match(/(\d{2})\/(\d{2})\/(\d{4})/)
+  if (dia) return `${dia[1]}/${dia[2]}/${dia[3]}`
+  const iso = String(fecha || "").match(/(\d{4})-(\d{2})-(\d{2})/)
+  if (iso) return `${iso[3]}/${iso[2]}/${iso[1]}`
+  return ""
+}
+
+function numeroSustento(secuencial: string) {
+  const digitos = String(secuencial || "").replace(/\D/g, "")
+  return digitos.length >= 15 ? digitos.slice(-15) : ""
+}
 
 export default function ComprasRecibidasV2(){
   const [compras,setCompras]=useState<CompraATS[]>([])
@@ -50,6 +63,7 @@ export default function ComprasRecibidasV2(){
   const [filtroBusqueda, setFiltroBusqueda] = useState("")
   const [periodoFiltro, setPeriodoFiltro] = useState("2026-09")
   const [alertaDuplicado, setAlertaDuplicado] = useState("")
+  const [enviandoRetencion, setEnviandoRetencion] = useState(false)
 
   useEffect(()=>{
     try{
@@ -77,10 +91,8 @@ export default function ComprasRecibidasV2(){
   }
 
   const calcularPeriodoFiscal = (fecha:string)=>{
-    if(!fecha) return "09/2026"
-    const parts = fecha.split(/[\/\-]/)
-    if(parts.length>=3) return `${parts[1].padStart(2,"0")}/${parts[2]}`
-    return "09/2026"
+    const dia = fechaLimpia(fecha)
+    return dia ? dia.slice(3) : ""
   }
 
   const manejarSeleccionCompraParaRetener = (compraSeleccionada:CompraATS)=>{
@@ -131,54 +143,53 @@ export default function ComprasRecibidasV2(){
     setRetForm((prev:any)=>({...prev, codigoIva:code, detalleIva:cat.label, porcIvaRet:cat.porc, valorRetIva: +(prev.baseImponibleIvaAuto * cat.porc / 100).toFixed(2)}))
   }
 
-  const generarRetencion07 = ()=>{
-    if(!activa) return
-    const numRet = `001-001-${String(compras.filter(c=>c.estadoAts==='RETENIDO').length+1).padStart(9,"0")}`
-    const fechaISO = new Date().toISOString()
-    const rets = JSON.parse(localStorage.getItem("meijsac_retenciones")||"[]")
-    const nuevaRet = { id:Date.now()+"",...retForm, numRetencion:numRet, fechaGeneracion:fechaISO, claveAccesoSustento: activa.claveAccesoProveedor, estado:"AUTORIZADO" }
-    rets.push(nuevaRet)
-    localStorage.setItem("meijsac_retenciones", JSON.stringify(rets))
-
-    const docParaEmitidos = {
-      id: nuevaRet.id,
-      tipo: "07 - RETENCIÓN",
-      secuencial: numRet,
-      claveAcceso: "07" + activa.claveAccesoProveedor.slice(2),
-      proveedor: activa.razonSocialProveedor,
-      razon: activa.razonSocialProveedor,
-      ruc: activa.rucProveedor,
-      fecha: fechaISO,
-      total: retForm.valorRetRenta + retForm.valorRetIva,
-      estado: "AUTORIZADO",
-      origen: "ATS v2 - COMPRAS",
-      xmlFirmado: true,
-      valorRetenido: retForm.valorRetRenta + retForm.valorRetIva
+  const generarRetencion07 = async ()=>{
+    if(!activa || enviandoRetencion) return
+    const fecha = fechaLimpia(activa.fechaEmision)
+    const periodo = calcularPeriodoFiscal(activa.fechaEmision)
+    const sustento = numeroSustento(activa.secuencial)
+    if(!fecha || periodo.length !== 7 || sustento.length !== 15){
+      alert("La factura necesita fecha día/mes/año y número de 15 dígitos.")
+      return
     }
-
-    const destinos = [
-      "meijsac_facturas", 
-      "meijsac_documentos_emitidos", 
-      "meijsac_comprobantes_emitidos", 
-      "meijsac_enviados_sri", 
-      "meijsac_autorizados", 
-      "meijsac_sri_documentos",
-      "meijsac_comprobantes_sri",
-      "meijsac_facturas_emitidas"
-    ];
-
-    destinos.forEach(key=>{
-      const lista = JSON.parse(localStorage.getItem(key)||"[]")
-      if(!lista.some((d:any)=>d.secuencial===numRet)){
-        lista.push(docParaEmitidos)
-        localStorage.setItem(key, JSON.stringify(lista))
+    setEnviandoRetencion(true)
+    try {
+      const res = await fetch("/api/sri/retencion", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          proveedor: { ruc: activa.rucProveedor, razonSocial: activa.razonSocialProveedor },
+          sustento: {
+            codSustento: activa.sustento || "01",
+            codDocSustento: String(activa.tipo || "01").slice(0, 2),
+            numeroFacturaSinGuiones: sustento,
+            fechaEmision: fecha,
+            periodoFiscal: periodo,
+            claveAcceso: String(activa.claveAccesoProveedor || "").replace(/\D/g, ""),
+            baseImponible: Number(retForm.baseImponibleRentaAuto || 0),
+            baseCero: Number(activa.subtotalIva0 || 0),
+            baseNoObjeto: Number(activa.subtotalNoObjeto || 0),
+            baseExento: Number(activa.subtotalExento || 0),
+            valorIva: Number(activa.valorIva || 0),
+            totalFactura: Number(activa.totalDocumento || 0),
+          },
+          retencionRenta: { codigo: retForm.codigoRenta, porcentaje: retForm.porcRenta, valor: retForm.valorRetRenta },
+          retencionIva: { codigo: retForm.codigoIva, porcentaje: retForm.porcIvaRet, valor: retForm.valorRetIva },
+        }),
+      })
+      const data = await res.json()
+      if (data.autorizado && data.fechaAutorizacion && data.claveAcceso) {
+        save(compras.map(c => c.id === activa.id ? { ...c, estadoAts: "RETENIDO" as const, numRetencion: data.numero || data.claveAcceso } : c))
+        setShowRet(false)
+        router.push(`/dashboard/factura-xml/visor/${data.claveAcceso}`)
+        return
       }
-    })
-
-    const lista = compras.map(c=> c.id===activa.id? {...c, estadoAts:'RETENIDO' as const, numRetencion:numRet} : c)
-    save(lista)
-    setShowRet(false)
-    alert(`✅ Retención ${numRet} generada para ${activa.razonSocialProveedor}\n→ Ahora aparece en COMPROBANTES / EMITIDOS y AUTORIZADOS`)
+      alert(data.mensaje || "El SRI no autorizó la retención.")
+    } catch {
+      alert("No pude conectar con el servidor.")
+    } finally {
+      setEnviandoRetencion(false)
+    }
   }
 
   // --- CORREGIDO LINEA 195 - SIN e:any ---
@@ -352,43 +363,46 @@ export default function ComprasRecibidasV2(){
       )}
 
       {showRet && activa && (
-        <div className="fixed inset-0 bg-black/80 flex items-center justify-center p-4 z-50">
-          <div className="bg-[#121725] w-full max-w-[760px] rounded-[20px] p-6 border border-white/10 max-h-[90vh] overflow-y-auto">
-            <h2 className="font-black text-[13px] mb-1">REGISTRO DE RETENCIÓN 07 - AUTO - CATALOGO MAESTRO</h2>
-            <p className="text-[10px] opacity-50 mb-3">Sustento: {retForm.claveAccesoSustento}</p>
-            <div className="bg-black/50 p-3 rounded-xl text-[11px] mb-3">
-              <div><b>Proveedor:</b> {retForm.proveedorNombre} - {retForm.proveedorRuc}</div>
-              <div><b>Factura Sustento:</b> {retForm.secuencialCompra} | {retForm.fechaEmisionCompra} {retForm.esNotaVenta && <span className="bg-yellow-500/20 text-yellow-300 px-2 py-0.5 rounded ml-2">RIMPE POPULAR</span>}</div>
-              <div className="flex gap-2 mt-1">
-                <span className="bg-[#1a1f2e] px-2 py-1 rounded">Periodo Fiscal: <b>{retForm.periodoFiscalCalculado}</b></span>
-                <span className="bg-[#00ffc6]/20 text-[#00ffc6] px-2 py-1 rounded">Clave 49 dig validada ✓</span>
+        <div className="fixed inset-0 bg-black/75 backdrop-blur-sm flex items-center justify-center p-4 z-50">
+          <div className="bg-[#111827] border border-slate-800 w-full max-w-2xl rounded-2xl p-6 shadow-2xl max-h-[90vh] overflow-y-auto text-slate-200">
+            <div className="border-b border-slate-800 pb-4 flex justify-between items-start">
+              <div>
+                <h2 className="text-base font-semibold text-white">Emitir Comprobante de Retención</h2>
+                <p className="text-[11px] text-slate-400 font-mono mt-0.5 truncate max-w-md">Sustento: {retForm.claveAccesoSustento}</p>
+              </div>
+              <span className="text-xs bg-slate-800 text-slate-300 px-2.5 py-1 rounded-lg border border-slate-700 font-mono">Cód. 07</span>
+            </div>
+            <div className="bg-[#0B0F19] border border-slate-800 rounded-xl p-4 text-xs space-y-2 mt-4">
+              <div className="flex justify-between gap-3"><span className="text-slate-400">Proveedor</span><span className="font-semibold text-white text-right">{retForm.proveedorNombre} ({retForm.proveedorRuc})</span></div>
+              <div className="flex justify-between gap-3"><span className="text-slate-400">Factura sustento</span><span className="font-mono text-slate-200">{retForm.secuencialCompra} · {fechaLimpia(retForm.fechaEmisionCompra)}</span></div>
+              <div className="flex items-center gap-2 pt-1">
+                <span className="bg-slate-800 text-slate-300 px-2.5 py-1 rounded-md font-mono text-[11px]">Periodo fiscal: <b>{retForm.periodoFiscalCalculado}</b></span>
+                <span className="bg-teal-950/50 text-teal-400 border border-teal-500/30 px-2.5 py-1 rounded-md text-[11px]">Clave validada</span>
               </div>
             </div>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-              <div className="bg-black p-3 rounded-xl">
-                <label className="text-[9px] opacity-60">FILA RENTA - Código SRI 1 - CATALOGO COMPLETO</label>
-                <div className="text-[11px] mt-1">Base: <b>${retForm.baseImponibleRentaAuto}</b></div>
-                <select value={retForm.codigoRenta} onChange={e=>onChangeRenta(e.target.value)} className="bg-[#1a1f2e] w-full p-2 rounded mt-2 text-[11px]">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4 text-xs">
+              <div className="bg-[#0B0F19] border border-slate-800 rounded-xl p-4 space-y-3">
+                <div className="flex justify-between text-slate-400 text-[11px]"><span className="uppercase font-medium">Impuesto a la Renta</span><span className="font-mono">Base: ${Number(retForm.baseImponibleRentaAuto || 0).toFixed(2)}</span></div>
+                <select value={retForm.codigoRenta} onChange={e=>onChangeRenta(e.target.value)} className="w-full bg-[#111827] border border-slate-700 rounded-xl px-3 py-2 text-white outline-none focus:border-teal-400">
                   {CATALOGO_RENTA.map(cat=>(
-                    <option key={cat.code} value={cat.code}>{cat.label} - {cat.desc}</option>
+                    <option key={cat.code} value={cat.code}>{cat.label}</option>
                   ))}
                 </select>
-                <div className="mt-2 font-black text-[#00ffc6]">Ret. Renta: ${retForm.valorRetRenta} ({retForm.porcRenta}%)</div>
+                <p className="text-sm font-bold text-teal-400 font-mono">Ret. Renta: ${Number(retForm.valorRetRenta || 0).toFixed(2)} ({retForm.porcRenta}%)</p>
               </div>
-              <div className="bg-black p-3 rounded-xl">
-                <label className="text-[9px] opacity-60">FILA IVA - Código SRI 2 - OFICIAL SRI</label>
-                <div className="text-[11px] mt-1">Base: <b>${retForm.baseImponibleIvaAuto}</b> {retForm.esIvaCero && "- Auto Código 7 0%"}</div>
-                <select value={retForm.codigoIva} onChange={e=>onChangeIva(e.target.value)} className="bg-[#1a1f2e] w-full p-2 rounded mt-2 text-[11px]">
+              <div className="bg-[#0B0F19] border border-slate-800 rounded-xl p-4 space-y-3">
+                <div className="flex justify-between text-slate-400 text-[11px]"><span className="uppercase font-medium">Retención de IVA</span><span className="font-mono">Base: ${Number(retForm.baseImponibleIvaAuto || 0).toFixed(2)}</span></div>
+                <select value={retForm.codigoIva} onChange={e=>onChangeIva(e.target.value)} className="w-full bg-[#111827] border border-slate-700 rounded-xl px-3 py-2 text-white outline-none focus:border-teal-400">
                   {CATALOGO_IVA.map(cat=>(
                     <option key={cat.code} value={cat.code}>{cat.label}</option>
                   ))}
                 </select>
-                <div className="mt-2 font-black text-[#00ffc6]">Ret. IVA: ${retForm.valorRetIva} ({retForm.porcIvaRet}%)</div>
+                <p className="text-sm font-bold text-teal-400 font-mono">Ret. IVA: ${Number(retForm.valorRetIva || 0).toFixed(2)} ({retForm.porcIvaRet}%)</p>
               </div>
             </div>
-            <div className="flex gap-3 mt-6">
-              <button onClick={()=>setShowRet(false)} className="flex-1 bg-[#2a2f3e] p-3 rounded-full font-bold text-[12px]">CANCELAR</button>
-              <button onClick={generarRetencion07} className="flex-1 bg-[#00ffc6] text-black p-3 rounded-full font-black text-[12px]">GENERAR RETENCIÓN 07</button>
+            <div className="flex gap-3 pt-5">
+              <button onClick={()=>setShowRet(false)} className="w-1/3 py-3 rounded-xl text-xs font-medium text-slate-300 bg-slate-800 hover:bg-slate-700">Cancelar</button>
+              <button onClick={generarRetencion07} disabled={enviandoRetencion} className="w-2/3 py-3 rounded-xl text-xs font-bold text-slate-950 bg-teal-400 hover:bg-teal-300 disabled:opacity-50">{enviandoRetencion ? "Autorizando en el SRI..." : `Generar retención ($${(Number(retForm.valorRetRenta || 0) + Number(retForm.valorRetIva || 0)).toFixed(2)})`}</button>
             </div>
           </div>
         </div>
