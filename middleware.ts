@@ -48,7 +48,7 @@ export async function middleware(req: NextRequest) {
     return proteger(NextResponse.redirect(destino))
   }
   if (req.nextUrl.pathname.startsWith("/api")) {
-    const publica = ["/api/auth/login", "/api/auth/recuperar", "/api/auth/restablecer", "/api/admin/login", "/api/empresa/registro", "/api/sri/cola", "/api/sri-status", "/api/whatsapp/webhook"]
+    const publica = ["/api/auth/login", "/api/auth/captcha", "/api/auth/recuperar", "/api/auth/restablecer", "/api/admin/login", "/api/empresa/registro", "/api/sri/cola", "/api/sri-status", "/api/whatsapp/webhook"]
     const libre = publica.some((ruta) => req.nextUrl.pathname === ruta || req.nextUrl.pathname.startsWith(`${ruta}/`))
     if (!libre && !(await sesionFirmada(tokenSesion(req)))) {
       return proteger(NextResponse.json({ error: "No hay sesión" }, { status: 401 }))

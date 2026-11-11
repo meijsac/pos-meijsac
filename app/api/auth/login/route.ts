@@ -4,7 +4,7 @@ import { randomBytes } from "crypto"
 import { NextResponse } from "next/server"
 import { cookiesSesion, empresaParaCliente, firmarSesion } from "@/lib/empresa-sesion"
 import { abrirSesion, anotarIntento, leerIntentos } from "@/lib/login-memoria"
-import { evaluarBloqueo, ipDe, navegadorDe, totpValido, hashCodigo, desencriptar } from "@/lib/seguridad"
+import { captchaCorrecto, evaluarBloqueo, ipDe, navegadorDe } from "@/lib/seguridad"
 
 function responder(body: unknown, status: number, cookies: string[] = []) {
   const res = NextResponse.json(body, { status })
@@ -29,6 +29,11 @@ export async function POST(req: Request) {
       prisma.seguridadLog.create({ data: { ip, usuario: ruc.slice(0, 80), accion: "LOGIN_BLOQUEADO", dispositivo: ua, detalle: "5 fallos en 15 minutos" } }).catch(() => {})
       return responder({ error: bloqueo.mensaje || "Demasiados intentos. Intenta en 15 minutos." }, 429)
     }
+    if (!captchaCorrecto(body.captchaToken, body.captcha)) {
+      anotarIntento({ correo: "captcha", ip, fecha: ahora, exitoso: false, canal })
+      const otra = evaluarBloqueo(leerIntentos(), ruc, ip, ahora, canal)
+      return responder({ error: otra.bloqueado ? otra.mensaje : "El captcha no es correcto" }, 401)
+    }
     if (!ruc || !password) return responder({ error: "Falta RUC o clave" }, 400)
 
     const usuarios = await prisma.usuario.findMany({ where: { empresa: { ruc } }, include: { empresa: true } })
@@ -42,21 +47,6 @@ export async function POST(req: Request) {
       const fallos = leerIntentos().filter((i) => i.correo === ruc && i.canal === canal && !i.exitoso).length
       await new Promise((r) => setTimeout(r, fallos * 1000))
       return responder({ error: "Clave incorrecta" }, 401)
-    }
-
-    const seguridad = await prisma.usuarioSeguridad.findUnique({ where: { usuarioId: usuario.id } }).catch(() => null)
-    if (seguridad?.dosFaActivo) {
-      const codigo = String(body.codigo2fa || "")
-      let secreto = Buffer.alloc(0)
-      try {
-        if (seguridad.totpCifrado) secreto = Buffer.from(desencriptar(seguridad.totpCifrado), "base64")
-      } catch {
-        return responder({ requiere2fa: true, error: "Vuelve a activar el segundo factor en Configuración" }, 401)
-      }
-      const respaldo = seguridad.respaldos.split(",").filter(Boolean).includes(hashCodigo(codigo))
-      if (!totpValido(secreto, codigo) && !respaldo) {
-        return responder({ requiere2fa: true, error: "Ingresa el código de 6 dígitos" }, 401)
-      }
     }
 
     anotarIntento({ correo: ruc, ip, fecha: ahora, exitoso: true, canal })

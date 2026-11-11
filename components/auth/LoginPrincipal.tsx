@@ -10,8 +10,6 @@ export function LoginPrincipal({ dark = true }: { dark?: boolean }){
   const [pass, setPass] = useState("")
   const [loading, setLoading] = useState(false)
   const [captcha, setCaptcha] = useState("")
-  const [codigo2fa, setCodigo2fa] = useState("")
-
   const i = `w-full mt-1.5 p-4 rounded-xl border outline-none text-[13px] ${dark? "bg-[#020a0f] border-white/10 text-white placeholder:text-white/20 focus:border-[#00f5d4]" : "bg-gray-50 border-gray-200 text-black focus:border-[#00f5d4]"}`;
 
   async function handleLogin() {
@@ -25,14 +23,13 @@ export function LoginPrincipal({ dark = true }: { dark?: boolean }){
   const res = await fetch('/api/auth/login', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ ruc: ruc.trim(), password: pass, captcha, codigo2fa, canal: "LOGIN" })
+    body: JSON.stringify({ ruc: ruc.trim(), password: pass, captcha, canal: "LOGIN" })
   });
 
   const data = await res.json();
   if (!res.ok) throw new Error(data.error || 'Error al ingresar');
 
   // Ahora SÍ guardamos el token REAL de la base de datos
-  if (data.requiere2fa) throw new Error(data.error || "Ingresa el código de 6 dígitos")
   if (data.empresa) guardarEmpresaLocal(data.empresa, undefined, data.usuario)
   localStorage.removeItem("meijsac_token")
   localStorage.setItem('esisa_modo', 'real');
@@ -61,7 +58,6 @@ export function LoginPrincipal({ dark = true }: { dark?: boolean }){
         {loading? 'INGRESANDO...' : 'INGRESAR →'}
       </button>
       <Turnstile onToken={setCaptcha} />
-      <input className={i} placeholder="Código 2FA si está activo" value={codigo2fa} onChange={e=>setCodigo2fa(e.target.value)} />
       <a href="/recuperar" className="block text-[11px] text-[#00f5d4]">Olvidé mi contraseña</a>
       <p className="text-[10px] opacity-60"><a href="/privacidad">Política de Privacidad</a> · <a href="/terminos">Términos</a></p>
     </div>

@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
-import { prisma } from "@/lib/prisma"
 import { usuarioConEmpresaDesdeRequest } from "@/lib/empresa-sesion"
 import { guardarCertificado } from "@/lib/security/certificado"
+import { confirmaClaveIngreso } from "@/lib/seguridad"
 
 export const dynamic = "force-dynamic"
 
@@ -9,11 +9,13 @@ export async function POST(req: NextRequest) {
   const sesion = await usuarioConEmpresaDesdeRequest(req)
   if ("error" in sesion) return NextResponse.json({ ok: false, error: sesion.error }, { status: sesion.status })
   if (sesion.usuario.rol !== "ADMIN") return NextResponse.json({ ok: false, error: "Solo el administrador sube la firma" }, { status: 403 })
-  const seguridad = await prisma.usuarioSeguridad.findUnique({ where: { usuarioId: sesion.usuario.id } })
-  if (!seguridad?.dosFaActivo) return NextResponse.json({ ok: false, error: "Activa el segundo factor antes de subir o reemplazar la firma" }, { status: 403 })
   const formData = await req.formData().catch(() => null)
   const file = formData?.get("p12")
   const clave = String(formData?.get("clave") || "")
+  const password = String(formData?.get("password") || "")
+  if (!(await confirmaClaveIngreso(sesion.usuario.password, password))) {
+    return NextResponse.json({ ok: false, error: "Confirma tu contraseña de ingreso para cambiar la firma" }, { status: 401 })
+  }
   if (!(file instanceof File) || !clave) return NextResponse.json({ ok: false, error: "Sube el archivo .p12 y su contraseña" }, { status: 400 })
   const bytes = Buffer.from(await file.arrayBuffer())
   try {

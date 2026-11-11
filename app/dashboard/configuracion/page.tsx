@@ -72,19 +72,11 @@ export const calcularTotalesUniversal = (itemsCarrito: any[]) => {
 
 function PanelSeguridad() {
   const [eventos, setEventos] = useState<any[]>([])
-  const [aviso, setAviso] = useState("")
   useEffect(() => {
     fetch("/api/seguridad/actividad").then((r) => r.json()).then((d) => setEventos(d.eventos || [])).catch(() => {})
   }, [])
-  const activar = async () => {
-    const res = await fetch("/api/auth/2fa", { method: "POST" })
-    const data = await res.json()
-    setAviso(res.ok ? `2FA activo. Secreto: ${data.secreto}. Respaldos: ${data.respaldos.join(", ")}` : data.error)
-  }
   return (
     <div className="space-y-3 text-[12px]">
-      <button onClick={activar} className="bg-[#00f5d4] text-black font-black rounded-xl px-4 py-2">Activar 2FA</button>
-      {aviso && <p className="text-[#00f5d4]">{aviso}</p>}
       <p className="font-black">Actividad reciente</p>
       {eventos.slice(0, 50).map((e) => <p key={e.id}>{e.fecha} · {e.usuario} · {e.ip} · {e.accion} · {e.dispositivo}</p>)}
       {eventos.length === 0 && <p className="opacity-50">Sin eventos todavía.</p>}
@@ -187,6 +179,7 @@ export default function ConfiguracionAvanzadaSRI() {
     const [cfg, setCfg] = useState<any>(null);
     const [logs, setLogs] = useState<any[]>([]);
     const [infoFirma, setInfoFirma] = useState<any>(null);
+    const [claveIngreso, setClaveIngreso] = useState("");
     const [guardando, setGuardando] = useState(false);
     const [avisoLogo, setAvisoLogo] = useState("");
     const [sriConexion, setSriConexion] = useState<any>(null);
@@ -202,10 +195,16 @@ export default function ConfiguracionAvanzadaSRI() {
     e.target.value = ""; // Limpia el input para que no quede pegado
     return;
   }
+  if(!claveIngreso){
+    alert("Confirma tu contraseña de ingreso para cambiar la firma");
+    e.target.value = "";
+    return;
+  }
 
   const form = new FormData();
   form.append('p12', file);
   form.append('clave', cfg?.firma?.clave || "");
+  form.append('password', claveIngreso);
   form.append('rucEmpresa', cfg?.ruc || "");
   const res = await fetch('/api/sri/validar-firma', {method:'POST', body: form});
   const data = await res.json();
@@ -273,8 +272,10 @@ export default function ConfiguracionAvanzadaSRI() {
         delete payload.firma?.archivo;
         if (archivoFirma && claveFirma) {
           const form = new FormData();
+          if (!claveIngreso) throw new Error("Confirma tu contraseña de ingreso para cambiar la firma");
           form.append("p12", archivoFirma);
           form.append("clave", claveFirma);
+          form.append("password", claveIngreso);
           form.append("rucEmpresa", payload.ruc || "");
           const subidaFirma = await fetch("/api/certificados/subir", { method: "POST", body: form });
           const dataFirma = await subidaFirma.json().catch(() => ({}));
@@ -282,7 +283,8 @@ export default function ConfiguracionAvanzadaSRI() {
           if (dataFirma.valido === false) throw new Error("El certificado está vencido");
         }
         if (claveFirma) {
-          const guardada = await fetch("/api/sri/clave-firma", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ clave: claveFirma }) });
+          if (!claveIngreso) throw new Error("Confirma tu contraseña de ingreso para cambiar la firma");
+          const guardada = await fetch("/api/sri/clave-firma", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ clave: claveFirma, password: claveIngreso }) });
           const dataClave = await guardada.json().catch(() => ({}));
           if (!guardada.ok) throw new Error(dataClave.error || "No se pudo guardar la contraseña de la firma");
         }
@@ -582,6 +584,8 @@ base.sucursales = datosReales.sucursales || base.sucursales || [];
                 {tab === "FIRMA" && (
                   <div className="space-y-4">
                     <p className="text-[#ffbe0a] font-bold text-[11px]">2. MÓDULO FIRMA ELECTRÓNICA AVANZADO - CARGA VISUAL.P12</p>
+                    <div><label className="text-[9px] text-white/40">Contraseña de ingreso</label><input type="password" value={claveIngreso} onChange={(e)=> setClaveIngreso(e.target.value)} className="w-full bg-black border border-white/10 rounded p-2 text-[11px] text-white" /><p className="text-[8px] text-white/40 mt-1">Confírmala para subir o cambiar la firma. No se guarda en el navegador.</p></div>
+                    <div><label className="text-[9px] text-white/40">Clave Firma.p12</label><input type="password" value={cfg?.firma?.clave || ""} onChange={(e:any)=> setCfg((p:any)=>({...p, firma:{...p.firma, clave: e.target.value}}))} className="w-full bg-black border border-white/10 rounded p-2 text-[11px] text-white" /><p className="text-[8px] text-white/40 mt-1">Queda guardada cifrada en esta sección. Al facturar se usa sola, sin pedirla otra vez.</p></div>
 
                     <div
                       onDrop={(e:any)=>{e.preventDefault(); const f=e.dataTransfer.files[0]; if(!f.name.toLowerCase().endsWith('.p12')){ alert('Solo archivos.p12'); return; } if(f){ setCfg((p:any)=>({...p, firma:{...p?.firma, nombre:f.name}})); handleFirmaChange({target:{files:[f]}} as any); }}}
@@ -614,7 +618,6 @@ base.sucursales = datosReales.sucursales || base.sucursales || [];
                       </div>
                     )}
 
-                    <div><label className="text-[9px] text-white/40">Clave Firma.p12</label><input type="password" value={cfg?.firma?.clave || ""} onChange={(e:any)=> setCfg((p:any)=>({...p, firma:{...p.firma, clave: e.target.value}}))} className="w-full bg-black border border-white/10 rounded p-2 text-[11px] text-white" /><p className="text-[8px] text-white/40 mt-1">Queda guardada cifrada en esta sección. Al facturar se usa sola, sin pedirla otra vez.</p></div>
                   </div>
                 )}
                 

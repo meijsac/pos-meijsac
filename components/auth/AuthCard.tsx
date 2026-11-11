@@ -1,9 +1,8 @@
 "use client"
-import { FormEvent, useEffect, useRef, useState } from "react"
+import { FormEvent, useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
 import { motion } from "framer-motion"
 import { guardarEmpresaLocal } from "@/lib/sesion-cliente"
-import { Turnstile, type TurnstileHandle } from "@/components/auth/Turnstile"
 
 export function AuthCard({ dark, setDark, onOpenRegister }: { dark: boolean; setDark: (v: boolean) => void; onOpenRegister: () => void }) {
   const router = useRouter()
@@ -11,7 +10,9 @@ export function AuthCard({ dark, setDark, onOpenRegister }: { dark: boolean; set
   const [ruc, setRuc] = useState("")
   const [clave, setClave] = useState("")
   const [error, setError] = useState("")
-  const turnstileRef = useRef<TurnstileHandle>(null)
+  const [pregunta, setPregunta] = useState("")
+  const [tokenCaptcha, setTokenCaptcha] = useState("")
+  const [respuesta, setRespuesta] = useState("")
 
   useEffect(() => {
     const aviso = sessionStorage.getItem("meijsac_aviso_sesion")
@@ -28,6 +29,22 @@ export function AuthCard({ dark, setDark, onOpenRegister }: { dark: boolean; set
     return () => { vivo = false }
   }, [router])
 
+  async function cargarCaptcha() {
+    const res = await fetch("/api/auth/captcha", { cache: "no-store" })
+    const data = await res.json().catch(() => ({}))
+    if (!res.ok || !data.token) {
+      setPregunta("")
+      setTokenCaptcha("")
+      setError(data.error || "No se pudo cargar el captcha")
+      return
+    }
+    setPregunta(data.pregunta)
+    setTokenCaptcha(data.token)
+    setRespuesta("")
+  }
+
+  useEffect(() => { void cargarCaptcha() }, [])
+
   async function enviar() {
     const rucValue = ruc.trim()
     try {
@@ -35,7 +52,7 @@ export function AuthCard({ dark, setDark, onOpenRegister }: { dark: boolean; set
         method: "POST",
         headers: { "Content-Type": "application/json" },
         credentials: "same-origin",
-        body: JSON.stringify({ ruc: rucValue, password: clave, canal: tab === "CAJA" ? "POS" : "LOGIN" })
+        body: JSON.stringify({ ruc: rucValue, password: clave, captcha: respuesta.trim(), captchaToken: tokenCaptcha, canal: tab === "CAJA" ? "POS" : "LOGIN" })
       })
       const data = await res.json()
       if (!res.ok) throw new Error(data.error || "RUC o clave incorrectos")
@@ -45,6 +62,7 @@ export function AuthCard({ dark, setDark, onOpenRegister }: { dark: boolean; set
       router.replace(tab === "ADMIN" ? "/dashboard" : "/dashboard/pos-ticket")
     } catch (err: any) {
       setError(err.message || "RUC o clave incorrectos")
+      void cargarCaptcha()
     }
   }
 
@@ -59,8 +77,11 @@ export function AuthCard({ dark, setDark, onOpenRegister }: { dark: boolean; set
       setError("SRI: El RUC debe tener 13 dígitos numéricos")
       return
     }
+    if (!respuesta.trim() || !tokenCaptcha) {
+      setError("Resuelve el captcha para entrar")
+      return
+    }
     setError("")
-    turnstileRef.current?.execute()
     void enviar()
   }
 
@@ -105,14 +126,10 @@ export function AuthCard({ dark, setDark, onOpenRegister }: { dark: boolean; set
           <label className={`text-[10px] font-bold tracking-widest ${dark ? "text-white/60" : "text-black/60"}`}>CONTRASEÑA PRINCIPAL</label>
           <input id="clave" type="password" value={clave} onChange={(e) => setClave(e.target.value)} className={`w-full mt-2 p-4 rounded-2xl border outline-none text-sm ${dark ? "bg-black/60 border-white/10 text-white focus:border-[#ff00a8]" : "bg-gray-100 border-black/10 text-black focus:border-[#ff00a8]"}`} />
         </div>
-        <Turnstile
-          ref={turnstileRef}
-          sitekey={process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY}
-          size="invisible"
-          execution="execute"
-          onVerify={() => {}}
-          onError={() => {}}
-        />
+        <div>
+          <label className={`text-[10px] font-bold tracking-widest ${dark ? "text-white/60" : "text-black/60"}`}>CAPTCHA: {pregunta || "..."}</label>
+          <input inputMode="numeric" value={respuesta} onChange={(e) => setRespuesta(e.target.value.replace(/[^\d]/g, ""))} placeholder="Resultado" className={`w-full mt-2 p-4 rounded-2xl border outline-none text-sm ${dark ? "bg-black/60 border-white/10 text-white focus:border-[#00f5d4]" : "bg-gray-100 border-black/10 text-black focus:border-[#00f5d4]"}`} />
+        </div>
         <button type="submit" className="w-full py-4 rounded-2xl bg-[#00f5d4] text-black font-black tracking-wide">
           ENTRAR
         </button>

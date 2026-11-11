@@ -2,6 +2,7 @@ import { NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
 import { usuarioConEmpresaDesdeRequest } from "@/lib/empresa-sesion"
 import { encryptBuffer } from "@/lib/security/crypto"
+import { confirmaClaveIngreso } from "@/lib/seguridad"
 
 export const dynamic = "force-dynamic"
 
@@ -18,6 +19,10 @@ export async function POST(req: Request) {
   if (sesion.usuario.rol !== "ADMIN") return NextResponse.json({ error: "Solo el administrador guarda la contraseña" }, { status: 403 })
   const body = await req.json().catch(() => ({}))
   const clave = String(body?.clave || "")
+  const password = String(body?.password || "")
+  if (!(await confirmaClaveIngreso(sesion.usuario.password, password))) {
+    return NextResponse.json({ error: "Confirma tu contraseña de ingreso para cambiar la firma" }, { status: 401 })
+  }
   if (!clave) return NextResponse.json({ error: "Escribe la contraseña del .p12" }, { status: 400 })
   const firma = await prisma.certificadoSri.findUnique({ where: { empresaId: sesion.empresa.id } })
   if (!firma) return NextResponse.json({ error: "Primero sube el archivo .p12" }, { status: 400 })

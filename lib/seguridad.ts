@@ -1,10 +1,41 @@
 import { createHmac, randomBytes, timingSafeEqual, createCipheriv, createDecipheriv, createHash } from "crypto"
+import bcrypt from "bcryptjs"
 import { masterKey } from "@/lib/security/crypto"
+import { secretoJwt } from "@/lib/empresa-sesion"
 
 const COMUNES = ["12345678", "password", "admin", "meijsac", "123456789", "qwerty123"]
 
 export function exigeCaptcha(token: unknown) {
   return Boolean(String(token || "").trim())
+}
+
+export function crearCaptcha() {
+  const izquierda = 2 + Math.floor(Math.random() * 8)
+  const derecha = 2 + Math.floor(Math.random() * 8)
+  const suma = Math.random() < 0.5
+  const a = suma || izquierda >= derecha ? izquierda : derecha
+  const b = suma || izquierda >= derecha ? derecha : izquierda
+  const respuesta = suma ? a + b : a - b
+  const expira = Date.now() + 5 * 60 * 1000
+  const mac = createHmac("sha256", secretoJwt()).update(`${expira}.${respuesta}`).digest("base64url")
+  return { pregunta: `${a} ${suma ? "+" : "-"} ${b}`, token: `${expira}.${mac}` }
+}
+
+export function captchaCorrecto(token: unknown, respuesta: unknown) {
+  const partes = String(token || "").split(".")
+  if (partes.length !== 2) return false
+  const expira = Number(partes[0])
+  const numero = String(respuesta ?? "").trim()
+  if (!Number.isFinite(expira) || expira < Date.now() || !/^\d+$/.test(numero)) return false
+  const mac = createHmac("sha256", secretoJwt()).update(`${expira}.${numero}`).digest("base64url")
+  const recibido = Buffer.from(partes[1])
+  const esperado = Buffer.from(mac)
+  return recibido.length === esperado.length && timingSafeEqual(recibido, esperado)
+}
+
+export function confirmaClaveIngreso(hash: string, clave: string) {
+  if (!clave || !hash) return Promise.resolve(false)
+  return bcrypt.compare(clave, hash)
 }
 
 export function claveValida(clave: string) {

@@ -8,7 +8,7 @@ export const POLITICA_SEGURIDAD = {
   sesionMin: 30, // expira en 30 min sin actividad
   passwordMin: 8,
   requiereMayuscula: true,
-  requiere2FA: true,
+  requiere2FA: false,
   encriptarCliente: true, // RUC, telefono, etc.
 };
 
