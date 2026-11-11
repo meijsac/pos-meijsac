@@ -60,14 +60,19 @@ export function empresaParaCliente(
   }
 }
 
-const UNA_HORA_SEG = 60 * 60
-const UNA_HORA_MS = UNA_HORA_SEG * 1000
+const JORNADA_SEG = 8 * 60 * 60
+const RECORDAR_SEG = 3 * 24 * 60 * 60
+const INACTIVIDAD_MS = 30 * 60 * 1000
 
-export function firmarSesion(usuario: { id: string; empresaId: string; sid: string; ip: string; ua: string }, dias?: "7d") {
+export function segundosDeSesion(recordarme: boolean) {
+  return recordarme ? RECORDAR_SEG : JORNADA_SEG
+}
+
+export function firmarSesion(usuario: { id: string; empresaId: string; sid: string; ip: string; ua: string }, segundos = JORNADA_SEG) {
   return jwt.sign(
     { id: usuario.id, empresaId: usuario.empresaId, sid: usuario.sid, ip: usuario.ip, ua: usuario.ua },
     secretoJwt(),
-    { expiresIn: dias || "1h" }
+    { expiresIn: segundos }
   )
 }
 
@@ -89,15 +94,15 @@ export function sesionEstaVencida(fila: { revocada: boolean; expira: Date; updat
   if (fila.revocada) return true
   if (new Date(fila.expira).getTime() <= ahora) return true
   const toque = new Date(fila.updatedAt).getTime()
-  if (Number.isFinite(toque) && ahora - toque >= UNA_HORA_MS) return true
+  if (Number.isFinite(toque) && ahora - toque >= INACTIVIDAD_MS) return true
   return false
 }
 
-export function cookiesSesion(acceso: string, refresh: string) {
+export function cookiesSesion(acceso: string, refresh: string, segundos = JORNADA_SEG) {
   const secure = process.env.NODE_ENV === "production" ? "; Secure" : ""
   return [
-    `meijsac_sesion=${encodeURIComponent(acceso)}; HttpOnly; Path=/; SameSite=Lax; Max-Age=${UNA_HORA_SEG}${secure}`,
-    `meijsac_refresh=${encodeURIComponent(refresh)}; HttpOnly; Path=/api/auth; SameSite=Lax; Max-Age=${UNA_HORA_SEG}${secure}`,
+    `meijsac_sesion=${encodeURIComponent(acceso)}; HttpOnly; Path=/; SameSite=Strict; Max-Age=${segundos}${secure}`,
+    `meijsac_refresh=${encodeURIComponent(refresh)}; HttpOnly; Path=/api/auth; SameSite=Strict; Max-Age=${segundos}${secure}`,
   ]
 }
 
@@ -128,7 +133,7 @@ export async function usuarioConEmpresaDesdeRequest(req: Request) {
           data: {
             id: dato.sid,
             usuarioId: dato.id,
-            expira: new Date(Date.now() + UNA_HORA_MS),
+            expira: new Date(Date.now() + JORNADA_SEG * 1000),
             ip: dato.ip || "",
             navegador: (dato.ua || "").slice(0, 180),
           },

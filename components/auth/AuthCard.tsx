@@ -1,18 +1,20 @@
 "use client"
-import { FormEvent, useEffect, useState } from "react"
+import { FormEvent, useEffect, useRef, useState } from "react"
 import { useRouter } from "next/navigation"
 import { motion } from "framer-motion"
 import { guardarEmpresaLocal } from "@/lib/sesion-cliente"
+import { Turnstile, type TurnstileHandle } from "@/components/auth/Turnstile"
 
 export function AuthCard({ dark, setDark, onOpenRegister }: { dark: boolean; setDark: (v: boolean) => void; onOpenRegister: () => void }) {
   const router = useRouter()
-  const [tab, setTab] = useState<"ADMIN" | "CAJA">("ADMIN")
   const [ruc, setRuc] = useState("")
   const [clave, setClave] = useState("")
   const [error, setError] = useState("")
-  const [pregunta, setPregunta] = useState("")
-  const [tokenCaptcha, setTokenCaptcha] = useState("")
-  const [respuesta, setRespuesta] = useState("")
+  const [recordarme, setRecordarme] = useState(false)
+  const [trampa, setTrampa] = useState("")
+  const [pideCaptcha, setPideCaptcha] = useState(false)
+  const turnstileRef = useRef<TurnstileHandle>(null)
+  const tokenListo = useRef<(token: string) => void>(() => {})
 
   useEffect(() => {
     const aviso = sessionStorage.getItem("meijsac_aviso_sesion")
@@ -29,44 +31,19 @@ export function AuthCard({ dark, setDark, onOpenRegister }: { dark: boolean; set
     return () => { vivo = false }
   }, [router])
 
-  async function cargarCaptcha() {
-    const res = await fetch("/api/auth/captcha", { cache: "no-store" })
-    const data = await res.json().catch(() => ({}))
-    if (!res.ok || !data.token) {
-      setPregunta("")
-      setTokenCaptcha("")
-      setError(data.error || "No se pudo cargar el captcha")
-      return
-    }
-    setPregunta(data.pregunta)
-    setTokenCaptcha(data.token)
-    setRespuesta("")
+  function pedirToken() {
+    return new Promise<string>((resolve, reject) => {
+      const timer = window.setTimeout(() => reject(new Error("Resuelve el captcha para entrar")), 12000)
+      tokenListo.current = (token) => {
+        window.clearTimeout(timer)
+        resolve(token)
+      }
+      turnstileRef.current?.reset()
+      turnstileRef.current?.execute()
+    })
   }
 
-  useEffect(() => { void cargarCaptcha() }, [])
-
-  async function enviar() {
-    const rucValue = ruc.trim()
-    try {
-      const res = await fetch("/api/auth/login", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        credentials: "same-origin",
-        body: JSON.stringify({ ruc: rucValue, password: clave, captcha: respuesta.trim(), captchaToken: tokenCaptcha, canal: tab === "CAJA" ? "POS" : "LOGIN" })
-      })
-      const data = await res.json()
-      if (!res.ok) throw new Error(data.error || "RUC o clave incorrectos")
-      if (data.empresa) guardarEmpresaLocal(data.empresa, undefined, data.usuario)
-      sessionStorage.setItem("meijsac_acceso_ok", "1")
-      sessionStorage.removeItem("meijsac_aviso_sesion")
-      router.replace(tab === "ADMIN" ? "/dashboard" : "/dashboard/pos-ticket")
-    } catch (err: any) {
-      setError(err.message || "RUC o clave incorrectos")
-      void cargarCaptcha()
-    }
-  }
-
-  function ingresar(e?: FormEvent) {
+  async function enviar(e?: FormEvent) {
     e?.preventDefault()
     const rucValue = ruc.trim()
     if (!rucValue || !clave) {
@@ -74,15 +51,29 @@ export function AuthCard({ dark, setDark, onOpenRegister }: { dark: boolean; set
       return
     }
     if (rucValue.length !== 13 || !/^[0-9]+$/.test(rucValue)) {
-      setError("SRI: El RUC debe tener 13 dígitos numéricos")
-      return
-    }
-    if (!respuesta.trim() || !tokenCaptcha) {
-      setError("Resuelve el captcha para entrar")
+      setError("Ingresa el RUC de 13 dígitos y la contraseña")
       return
     }
     setError("")
-    void enviar()
+    try {
+      let captcha = ""
+      if (pideCaptcha) captcha = await pedirToken()
+      const res = await fetch("/api/auth/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "same-origin",
+        body: JSON.stringify({ ruc: rucValue, password: clave, recordarme, captcha, empresa_web: trampa }),
+      })
+      const data = await res.json()
+      if (data.requiereCaptcha) setPideCaptcha(true)
+      if (!res.ok) throw new Error(data.error || "Credenciales inválidas")
+      if (data.empresa) guardarEmpresaLocal(data.empresa, undefined, data.usuario)
+      sessionStorage.setItem("meijsac_acceso_ok", "1")
+      sessionStorage.removeItem("meijsac_aviso_sesion")
+      router.replace(data.destino || "/dashboard")
+    } catch (err: any) {
+      setError(err.message || "Credenciales inválidas")
+    }
   }
 
   return (
@@ -106,19 +97,11 @@ export function AuthCard({ dark, setDark, onOpenRegister }: { dark: boolean; set
         </button>
       </div>
 
-      <div className="flex bg-black/60 p-1 rounded-2xl mb-6">
-        <button type="button" onClick={() => setTab("ADMIN")} className={`flex-1 py-3 rounded-xl text-xs font-black transition ${tab === "ADMIN" ? "bg-[#00f5d4] text-black" : "text-white/40"}`}>
-          ADMIN
-        </button>
-        <button type="button" onClick={() => setTab("CAJA")} className={`flex-1 py-3 rounded-xl text-xs font-black transition ${tab === "CAJA" ? "bg-[#00f5d4] text-black" : "text-white/40"}`}>
-          CAJA / VENTAS
-        </button>
-      </div>
-
-      <form className="space-y-4" onSubmit={ingresar}>
+      <form className="space-y-4" onSubmit={enviar}>
+        <input name="empresa_web" value={trampa} onChange={(e) => setTrampa(e.target.value)} tabIndex={-1} autoComplete="off" aria-hidden="true" className="absolute -left-[9999px] h-0 w-0 opacity-0" />
         <div>
           <label className={`text-[10px] font-bold tracking-widest ${dark ? "text-white/60" : "text-black/60"}`}>
-            {tab === "ADMIN" ? "RUC / USUARIO EMPRESA (13 DÍGITOS)" : "USUARIO CAJA"}
+            RUC / USUARIO EMPRESA (13 DÍGITOS)
           </label>
           <input id="ruc" maxLength={13} value={ruc} onChange={(e) => setRuc(e.target.value)} className={`w-full mt-2 p-4 rounded-2xl border outline-none text-sm tracking-widest ${dark ? "bg-black/60 border-white/10 text-white focus:border-[#00f5d4]" : "bg-gray-100 border-black/10 text-black focus:border-[#00f5d4]"}`} />
         </div>
@@ -126,17 +109,26 @@ export function AuthCard({ dark, setDark, onOpenRegister }: { dark: boolean; set
           <label className={`text-[10px] font-bold tracking-widest ${dark ? "text-white/60" : "text-black/60"}`}>CONTRASEÑA PRINCIPAL</label>
           <input id="clave" type="password" value={clave} onChange={(e) => setClave(e.target.value)} className={`w-full mt-2 p-4 rounded-2xl border outline-none text-sm ${dark ? "bg-black/60 border-white/10 text-white focus:border-[#ff00a8]" : "bg-gray-100 border-black/10 text-black focus:border-[#ff00a8]"}`} />
         </div>
-        <div>
-          <label className={`text-[10px] font-bold tracking-widest ${dark ? "text-white/60" : "text-black/60"}`}>CAPTCHA: {pregunta || "..."}</label>
-          <input inputMode="numeric" value={respuesta} onChange={(e) => setRespuesta(e.target.value.replace(/[^\d]/g, ""))} placeholder="Resultado" className={`w-full mt-2 p-4 rounded-2xl border outline-none text-sm ${dark ? "bg-black/60 border-white/10 text-white focus:border-[#00f5d4]" : "bg-gray-100 border-black/10 text-black focus:border-[#00f5d4]"}`} />
-        </div>
+        {pideCaptcha && (
+          <Turnstile
+            ref={turnstileRef}
+            size="invisible"
+            execution="execute"
+            onVerify={(token) => tokenListo.current(token)}
+            onToken={(token) => tokenListo.current(token)}
+            onError={() => tokenListo.current("")}
+          />
+        )}
         <button type="submit" className="w-full py-4 rounded-2xl bg-[#00f5d4] text-black font-black tracking-wide">
           ENTRAR
         </button>
         {error && <p className="text-sm font-bold text-red-400">{error}</p>}
         <div className="flex justify-between text-[11px] mt-3">
-          <span className={dark ? "text-white/50" : "text-black/50"}>✓ Recordarme</span>
-          <span className="text-[#00f5d4] font-bold">¿Olvidaste tu contraseña?</span>
+          <label className={`flex items-center gap-2 ${dark ? "text-white/50" : "text-black/50"}`}>
+            <input type="checkbox" checked={recordarme} onChange={(e) => setRecordarme(e.target.checked)} />
+            Recordarme
+          </label>
+          <a href="/recuperar" className="text-[#00f5d4] font-bold">¿Olvidaste tu contraseña?</a>
         </div>
         <div className="text-center mt-3">
           <button type="button" onClick={onOpenRegister} className={`text-[11px] bg-transparent border-none cursor-pointer p-0 ${dark ? "text-white/30" : "text-black/40"}`}>

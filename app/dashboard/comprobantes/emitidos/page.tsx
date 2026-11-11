@@ -38,6 +38,7 @@ export default function EmitidosPage(){
   const [filtroCobro,setFiltroCobro]=useState("todos")
   const [pagoDoc,setPagoDoc]=useState<ComprobanteHistorialSRI|null>(null)
   const [showAnular,setShowAnular]=useState<ComprobanteHistorialSRI|null>(null)
+  const [claveAnular,setClaveAnular]=useState("")
   const [borradores,setBorradores]=useState<any[]>([])
   const [pendientes,setPendientes]=useState<ComprobanteHistorialSRI[]>([])
   let refrescando = false
@@ -188,8 +189,10 @@ export default function EmitidosPage(){
     return { texto: "Pagado", clase: "bg-teal-500/10 text-teal-300 border border-teal-500/30" }
   }
 
-  const anularLogico = ()=>{
+  const anularLogico = async ()=>{
     if(!showAnular) return
+    const conf = await fetch("/api/auth/confirmar-clave", { method: "POST", credentials: "same-origin", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ password: claveAnular }) })
+    if (!conf.ok) { alert("Confirma tu contraseña para anular"); return }
     const todosKeys = ["meijsac_comprobantes_sri","meijsac_comprobantes_emitidos","meijsac_documentos_emitidos","meijsac_facturas","meijsac_retenciones","meijsac_ventas_pos","meijsac_restaurante_facturas","meijsac_enviados_sri","meijsac_comprobantes_pendientes_sri"]
     todosKeys.forEach(k=>{
       const lista = JSON.parse(localStorage.getItem(k)||"[]")
@@ -202,6 +205,7 @@ export default function EmitidosPage(){
       })
       localStorage.setItem(k, JSON.stringify(nueva))
     })
+    setClaveAnular("")
     setShowAnular(null)
     cargar()
   }
@@ -354,8 +358,9 @@ export default function EmitidosPage(){
               <span>🔗 ABRIR SRI EN LÍNEA - ANULACIÓN</span>
               <span className="bg-black text-[#00f5d4] px-2 py-1 rounded-full text-[8px]">GOB.EC</span>
             </a>
+            <input type="password" value={claveAnular} onChange={(e) => setClaveAnular(e.target.value)} placeholder="Contraseña de ingreso" className="w-full mb-3 bg-black border border-white/10 rounded-xl p-3 text-sm" />
             <div className="flex gap-2">
-              <button onClick={()=>setShowAnular(null)} className="flex-1 bg-white/10 py-3 rounded-xl text-xs font-bold">Cancelar</button>
+              <button onClick={()=>{ setClaveAnular(""); setShowAnular(null) }} className="flex-1 bg-white/10 py-3 rounded-xl text-xs font-bold">Cancelar</button>
               <button onClick={anularLogico} className="flex-1 bg-red-500 text-white py-3 rounded-xl text-xs font-black hover:bg-red-600">✓ Ya anulé en SRI → ANULADO</button>
             </div>
           </div>

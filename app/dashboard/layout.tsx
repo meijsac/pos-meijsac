@@ -42,6 +42,25 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     }
   }, [router])
 
+  useEffect(() => {
+    let timer = 0
+    const armar = () => {
+      window.clearTimeout(timer)
+      timer = window.setTimeout(() => {
+        sessionStorage.setItem("meijsac_aviso_sesion", "Sesión vencida")
+        fetch("/api/auth/logout", { method: "POST", credentials: "same-origin" }).catch(() => {})
+        router.replace("/login")
+      }, 30 * 60 * 1000)
+    }
+    const eventos = ["mousemove", "keydown", "click", "touchstart"] as const
+    eventos.forEach((evento) => window.addEventListener(evento, armar))
+    armar()
+    return () => {
+      window.clearTimeout(timer)
+      eventos.forEach((evento) => window.removeEventListener(evento, armar))
+    }
+  }, [router])
+
   return (
     <div className="min-h-screen bg-[#0a0a0a] text-white">
       <SelloAmbiente />
