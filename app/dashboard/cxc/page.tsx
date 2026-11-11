@@ -15,6 +15,7 @@ export default function CXCPage(){
   const [modal, setModal] = useState<Deuda|null>(null)
   const [abonoMonto, setAbonoMonto] = useState("")
   const [formaPago, setFormaPago] = useState("01 - EFECTIVO")
+  const [busca, setBusca] = useState("")
 
   useEffect(()=>{
     const data = JSON.parse(localStorage.getItem("meijsac_cxc")||"[]")
@@ -85,35 +86,80 @@ export default function CXCPage(){
   const pagados = cxc.filter(c=>c.estado==="PAGADO")
   const totalPorCobrar = pendientes.reduce((s,c)=>s+c.saldo,0)
   const totalMora = pendientes.filter(c=> calcularMora(c.fechaVencISO).tipo==="MORA").length
+  const q = busca.trim().toLowerCase()
+  const coincide = (c: Deuda) => !q || c.cliente.toLowerCase().includes(q) || c.documento.toLowerCase().includes(q)
+  const pendientesVista = pendientes.filter(coincide)
+  const pagadosVista = pagados.filter(coincide)
+  const hoy = new Date()
+  const recaudadoMes = pagados.reduce((s, c) => {
+    const partes = String(c.fechaPago || "").split(/[\/\-]/).map(Number)
+    if (partes.length < 3) return s
+    const mes = partes[1]
+    const anio = partes[2] < 100 ? 2000 + partes[2] : partes[2]
+    return mes === hoy.getMonth() + 1 && anio === hoy.getFullYear() ? s + c.monto : s
+  }, 0)
 
   return (
     <div className="min-h-screen bg-[#080c14] text-white p-4">
-      <div className="flex justify-between bg-[#1e293b] p-4 rounded-2xl mb-4 border border-white/10">
-        <div>
-          <h1 className="font-black text-xl">CUENTAS POR COBRAR (CXC) - SRI FormaPago 20</h1>
-          <p className="text-[10px] opacity-50">Por cobrar: ${totalPorCobrar.toFixed(2)} | En mora: {totalMora} clientes | Lector activo</p>
+      <div className="bg-[#12141d] p-4 rounded-2xl mb-4 border border-white/10 border-t-2 border-t-teal-500/50">
+        <div className="flex flex-col lg:flex-row lg:justify-between lg:items-center gap-3">
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className="w-2 h-2 rounded-full bg-teal-400 shrink-0" />
+            <h1 className="font-black text-xl">Cuentas por Cobrar</h1>
+            <span className="text-[10px] px-2 py-0.5 rounded-full border border-teal-400/40 text-teal-200 bg-teal-400/10">Créditos y Cartera</span>
+          </div>
+          <div className="flex gap-2 flex-wrap items-center">
+            <Link href="/dashboard" className="bg-white/10 px-4 py-2 rounded-xl text-xs">← Dashboard</Link>
+            <input value={busca} onChange={e => setBusca(e.target.value)} placeholder="Cliente o factura" className="bg-black/40 border border-white/10 rounded-xl px-3 py-2 text-xs outline-none focus:border-teal-400/60 w-44" />
+            <button onClick={()=>setTab("PENDIENTES")} className={`px-4 py-2 rounded-xl text-xs font-semibold ${tab==="PENDIENTES"?"bg-teal-400 text-slate-950":"bg-white/10 text-white/70"}`}>Pendientes ({pendientes.length})</button>
+            <button onClick={()=>setTab("PAGADOS")} className={`px-4 py-2 rounded-xl text-xs font-semibold ${tab==="PAGADOS"?"bg-teal-400 text-slate-950":"bg-white/10 text-white/50"}`}>Cobrados ({pagados.length})</button>
+          </div>
         </div>
-        <div className="flex gap-2">
-          <Link href="/dashboard" className="bg-white/10 px-4 py-2 rounded-xl text-xs">← Dashboard</Link>
-          <button onClick={()=>setTab("PENDIENTES")} className={`px-4 py-2 rounded-xl text-xs font-black ${tab==="PENDIENTES"?"bg-white text-black":"bg-white/10"}`}>PENDIENTES ({pendientes.length})</button>
-          <button onClick={()=>setTab("PAGADOS")} className={`px-4 py-2 rounded-xl text-xs font-black ${tab==="PAGADOS"?"bg-[#00f5d4] text-black":"bg-white/10"}`}>COBRADOS ({pagados.length})</button>
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mt-4">
+          <div className="rounded-xl bg-black/30 border border-white/10 px-3 py-2">
+            <p className="text-[10px] text-white/45">Total por cobrar</p>
+            <p className="text-lg font-black text-teal-300">${totalPorCobrar.toFixed(2)}</p>
+          </div>
+          <div className={`rounded-xl bg-black/30 border px-3 py-2 ${totalMora > 0 ? "border-amber-400/40" : "border-white/10"}`}>
+            <p className="text-[10px] text-white/45">Cartera vencida</p>
+            <p className={`text-lg font-black ${totalMora > 0 ? "text-amber-200" : "text-white/80"}`}>{totalMora} clientes</p>
+          </div>
+          <div className="rounded-xl bg-black/30 border border-white/10 px-3 py-2">
+            <p className="text-[10px] text-white/45">Recaudado este mes</p>
+            <p className="text-lg font-black text-white/90">${recaudadoMes.toFixed(2)}</p>
+          </div>
         </div>
       </div>
 
       {tab==="PENDIENTES" && (
-        <div className="bg-[#1e293b] rounded-2xl border border-white/10 overflow-auto">
+        <div className="bg-[#12141d] rounded-2xl border border-white/10 overflow-auto">
           {pendientes.length===0? (
-            <div className="p-20 text-center opacity-40"><p className="text-4xl mb-2">📭</p><p>Cartera al día - PENDIENTES (0)</p><p className="text-[10px] mt-2">Cuando des clic en Confirmar Crédito en POS, aparecerá aquí automático</p></div>
+            <div className="p-16 text-center">
+              <div className="w-16 h-16 mx-auto rounded-full bg-[#0b1220] border border-teal-400/25 grid place-items-center text-teal-300 mb-4">
+                <svg viewBox="0 0 24 24" className="w-7 h-7" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                  <path d="M12 3 l7 3 v6 c0 4.5-3 7.5-7 9 c-4-1.5-7-4.5-7-9 V6 z" />
+                  <path d="M8 12 h8 M12 9 v6" />
+                </svg>
+              </div>
+              <p className="font-semibold">Cartera al día</p>
+              <p className="text-sm text-white/50 mt-2 max-w-md mx-auto">No tienes cobros pendientes por el momento. Las ventas emitidas a crédito aparecerán aquí automáticamente para gestionar sus abonos.</p>
+            </div>
+          ) : pendientesVista.length===0 ? (
+            <div className="p-12 text-center text-sm text-white/50">Ningún crédito coincide con esa búsqueda.</div>
           ) : (
           <table className="w-full text-[11px]"><thead className="bg-black/50 text-[10px] opacity-60"><tr><th className="p-3 text-left">Cliente y Teléfono</th><th className="p-3">Documento Origen SRI</th><th className="p-3">Fecha Venta / Vencimiento</th><th className="p-3">Mora Semáforo</th><th className="p-3">Monto / Saldo</th><th className="p-3">Acción</th></tr></thead>
-          <tbody>{pendientes.sort((a,b)=> new Date(a.fechaVencISO).getTime() - new Date(b.fechaVencISO).getTime()).map(c=>{ const mora=calcularMora(c.fechaVencISO); return (
+          <tbody>{pendientesVista.sort((a,b)=> new Date(a.fechaVencISO).getTime() - new Date(b.fechaVencISO).getTime()).map(c=>{ const mora=calcularMora(c.fechaVencISO); const abonado=Math.max(0, c.monto-c.saldo); const pct=c.monto>0?Math.min(100,(abonado/c.monto)*100):0; return (
             <tr key={c.id} className="border-t border-white/5 hover:bg-white/5">
-              <td className="p-3"><b>{c.cliente}</b><br/><a href={`tel:${c.telefono}`} className="text-[#00f5d4] underline">{c.telefono||'Sin teléfono'}</a><br/><span className="text-[9px] opacity-40">{c.politica} | {c.plazo}d | {c.estado}</span></td>
+              <td className="p-3"><b>{c.cliente}</b><br/><a href={`tel:${c.telefono}`} className="text-teal-300 underline">{c.telefono||'Sin teléfono'}</a><br/><span className="text-[9px] opacity-40">{c.politica} | {c.plazo}d | {c.estado}</span></td>
               <td className="p-3 font-mono text-[10px]">{c.documento}</td>
               <td className="p-3">{c.fechaVenta}<br/><span className="font-bold">{c.fechaVencimiento}</span></td>
               <td className="p-3"><span className={`px-2 py-1 rounded-full border text-[10px] ${mora.color}`}>{mora.texto}</span></td>
-              <td className="p-3"><span className="opacity-60">${c.monto.toFixed(2)}</span><br/><span className="font-black text-[#00f5d4] text-[13px]">${c.saldo.toFixed(2)}</span></td>
-              <td className="p-3"><button onClick={()=>{ setModal(c); setAbonoMonto(c.saldo.toFixed(2)) }} className="bg-[#00f5d4] text-black px-3 py-2 rounded-xl font-black text-[11px] hover:scale-105">Abono / Pagar</button></td>
+              <td className="p-3">
+                <span className="opacity-60">${c.monto.toFixed(2)}</span><br/><span className="font-black text-teal-300 text-[13px]">${c.saldo.toFixed(2)}</span>
+                <div className="mt-1.5 h-1.5 w-28 bg-white/10 rounded-full overflow-hidden"><div className="h-full bg-teal-400" style={{width:`${pct}%`}} /></div>
+                <p className="text-[9px] text-white/40 mt-0.5">Abonado ${abonado.toFixed(2)}</p>
+              </td>
+              <td className="p-3"><button onClick={()=>{ setModal(c); setAbonoMonto(c.saldo.toFixed(2)) }} className="bg-teal-400/15 text-teal-100 border border-teal-400/40 px-3 py-2 rounded-xl font-semibold text-[11px]">Registrar Abono</button></td>
             </tr>
           )})}</tbody></table>
           )}
@@ -121,8 +167,12 @@ export default function CXCPage(){
       )}
 
       {tab==="PAGADOS" && (
-        <div className="bg-[#1e293b] rounded-2xl border border-white/10 overflow-auto">
-          <table className="w-full text-[11px]"><thead className="bg-black/50 text-[10px] opacity-60"><tr><th className="p-3">Cliente</th><th className="p-3">Documento</th><th className="p-3">Fecha Pago Real</th><th className="p-3">Forma Recaudo Caja</th><th className="p-3">Monto</th></tr></thead><tbody>{pagados.map(c=>(<tr key={c.id} className="border-t border-white/5"><td className="p-3">{c.cliente}</td><td className="p-3 font-mono">{c.documento}</td><td className="p-3 text-green-400">{c.fechaPago}</td><td className="p-3">{c.formaRecaudo}</td><td className="p-3 font-black">${c.monto.toFixed(2)}</td></tr>))}</tbody></table>
+        <div className="bg-[#12141d] rounded-2xl border border-white/10 overflow-auto">
+          {pagadosVista.length===0 ? (
+            <div className="p-12 text-center text-sm text-white/50">{pagados.length===0 ? "Aún no hay cobros registrados este periodo." : "Ningún cobro coincide con esa búsqueda."}</div>
+          ) : (
+          <table className="w-full text-[11px]"><thead className="bg-black/50 text-[10px] opacity-60"><tr><th className="p-3">Cliente</th><th className="p-3">Documento</th><th className="p-3">Fecha Pago Real</th><th className="p-3">Forma Recaudo Caja</th><th className="p-3">Monto</th></tr></thead><tbody>{pagadosVista.map(c=>(<tr key={c.id} className="border-t border-white/5"><td className="p-3">{c.cliente}</td><td className="p-3 font-mono">{c.documento}</td><td className="p-3 text-teal-300">{c.fechaPago}</td><td className="p-3">{c.formaRecaudo}</td><td className="p-3 font-black">${c.monto.toFixed(2)}</td></tr>))}</tbody></table>
+          )}
         </div>
       )}
 
