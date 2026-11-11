@@ -499,13 +499,10 @@ base.sucursales = datosReales.sucursales || base.sucursales || [];
     <div className="flex items-center gap-4">
       <GearFuturista size={52} active={tab === "AMBIENTE SRI"} onClick={() => setTab("AMBIENTE SRI")} />
       <h1 className="text-white font-black text-[14px] tracking-widest">
-        MEIJSAC POS - CENTRO DE CONTROL MODULAR SRI - <span className={`${cfg?.ambiente==='PRODUCCIÓN'? 'text-[#00ff5d]' : 'text-[#00f5d4]'}`}>{cfg?.ambiente || 'PRUEBAS'}</span>
+        MEIJSAC POS - CENTRO DE CONTROL MODULAR SRI
       </h1>
     </div>
     <button onClick={() => location.href = '/dashboard'} className="bg-white/10 px-4 py-2 rounded-xl text-xs">← Dashboard</button>
-</div>
-<div className={`mb-4 rounded-2xl border px-6 py-5 text-center text-[28px] font-black tracking-widest ${(cfg?.ambiente === "PRODUCCIÓN" || cfg?.ambiente === "2" || cfg?.firma?.ambiente === "2") ? "border-[#00ff5d] text-[#00ff5d]" : "border-[#00f5d4] text-[#00f5d4]"}`}>
-  AMBIENTE: {(cfg?.ambiente === "PRODUCCIÓN" || cfg?.ambiente === "2" || cfg?.firma?.ambiente === "2") ? "PRODUCCIÓN" : "PRUEBAS"}
 </div>
 
 
