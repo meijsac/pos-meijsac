@@ -20,7 +20,7 @@ const COMPROBANTES = [
   {
     title:"NOTA DE DÉBITO",
     desc:"Intereses y cargos",
-    href:"/dashboard/guia-remision-xml",
+    href:"/dashboard/nota-debito-xml",
     primary: false,
   },
   {
