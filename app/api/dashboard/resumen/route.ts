@@ -27,7 +27,7 @@ export async function GET(req: Request) {
   const ahora = new Date()
   const ventas = filas.filter((f) => {
     const payload = (f.payload || {}) as any
-    const textos = [f.estado, payload.estadoSRI, payload.estado].map((x) => String(x || "").toUpperCase())
+    const textos = [f.estado, f.sriStatus, payload.estadoSRI, payload.estado].map((x) => String(x || "").toUpperCase())
     if (textos.some((t) => t.includes("ANUL") || t.includes("BORRADOR"))) return false
     return textos.some((t) => esAutorizada(t))
   }).map((f) => {
@@ -39,7 +39,7 @@ export async function GET(req: Request) {
   })
   const porCobrar = filas.filter((f) => {
     const payload = (f.payload || {}) as any
-    const estado = String(f.estado || payload.estadoSRI || payload.estado || "").toUpperCase()
+    const estado = String(f.estado || f.sriStatus || payload.estadoSRI || payload.estado || "").toUpperCase()
     if (estado.includes("ANUL") || estado.includes("BORRADOR")) return false
     return pendiente(f.estadoPago || payload.estado_pago || "")
   }).map((f) => Number((f.payload as any)?.totales?.total || 0)).filter((n) => Number.isFinite(n))

@@ -71,11 +71,12 @@ export default function EmitidosPage(){
       secuencial: d.secuencial || d.numRetencion || `001-001-00000${i}`,
       claveAcceso: d.claveAcceso || d.clave || d.claveAccesoSustento || `000000000000000000000000${i}`,
       fechaEmision: d.fechaEmision || d.fecha || d.fechaGeneracion || new Date().toLocaleDateString('es-EC'),
+      fechaAutorizacion: d.fechaAutorizacion || "",
       fechaISO: d.fechaISO || d.fechaCreacion || new Date().toISOString(),
       receptorIdentificacion: d.receptorIdentificacion || d.ruc || d.rucProveedor || d.receptorRuc || "9999999999999",
       receptorNombre: d.receptorNombre || d.razon || d.proveedor || d.proveedorNombre || "CONSUMIDOR FINAL",
       valorTotal: Number(d.valorTotal ?? d.total ?? d.valorRetenido ?? 0),
-      estadoSRI: d.fechaAutorizacion ? "AUTORIZADO" : (d.estadoSRI || d.estado || "PENDIENTE"),
+      estadoSRI: String(d.estadoSRI || d.estado || "").toUpperCase().includes("ANUL") ? "ANULADO" : (d.fechaAutorizacion ? "AUTORIZADO" : (d.estadoSRI || d.estado || "PENDIENTE")),
       xmlContent: d.xmlContent || d.xml || "",
       motivoAnulacion: d.motivoAnulacion,
       fechaAnulacion: d.fechaAnulacion,
@@ -98,9 +99,14 @@ export default function EmitidosPage(){
 
     const map = new Map()
     unificados.filter((d) => esDelAmbiente(d, ambienteRef.current)).forEach(d=>{ 
-      const prev = map.get(d.secuencial)
-      if (!prev) map.set(d.secuencial, d)
-      else map.set(d.secuencial, { ...prev, ...d, tipo_cobro: d.tipo_cobro || prev.tipo_cobro, estado_pago: d.estado_pago || prev.estado_pago, facturaId: d.facturaId || prev.facturaId, fecha_vencimiento: d.fecha_vencimiento || prev.fecha_vencimiento })
+      const clave = String(d.claveAcceso || "").replace(/\D/g, "")
+      const llave = clave.length === 49 ? clave : d.secuencial
+      const prev = map.get(llave)
+      if (!prev) map.set(llave, d)
+      else {
+        const anulado = prev.estadoSRI === "ANULADO" || d.estadoSRI === "ANULADO"
+        map.set(llave, { ...prev, ...d, estadoSRI: anulado ? "ANULADO" : (d.estadoSRI || prev.estadoSRI), tipo_cobro: d.tipo_cobro || prev.tipo_cobro, estado_pago: d.estado_pago || prev.estado_pago, facturaId: d.facturaId || prev.facturaId, fecha_vencimiento: d.fecha_vencimiento || prev.fecha_vencimiento, fechaEmision: d.fechaEmision || prev.fechaEmision })
+      }
     })
     const todos = Array.from(map.values()).reverse()
     setDocs(todos)
@@ -198,13 +204,16 @@ export default function EmitidosPage(){
       const lista = JSON.parse(localStorage.getItem(k)||"[]")
       const nueva = lista.map((d:any)=>{
         const sec = d.secuencial || d.numRetencion
-        if(sec===showAnular.secuencial){
-          return {...d, estadoSRI:'ANULADO', estado:'ANULADO', motivoAnulacion:'Anulado en SRI en Linea', fechaAnulacion: new Date().toISOString(), valorTotal:0, total:0, valorRetenido:0}
+        if(sec===showAnular.secuencial || String(d.claveAcceso || d.clave || "").replace(/\D/g, "") === String(showAnular.claveAcceso || "").replace(/\D/g, "")){
+          return {...d, estadoSRI:'ANULADO', estado:'ANULADO', motivoAnulacion:'Anulado en SRI en Linea', fechaAnulacion: new Date().toISOString()}
         }
         return d
       })
       localStorage.setItem(k, JSON.stringify(nueva))
     })
+    if (showAnular.facturaId) {
+      await fetch("/api/facturas", { method: "PATCH", credentials: "same-origin", headers: { "Content-Type": "application/json", Authorization: `Bearer ${localStorage.getItem("meijsac_token") || ""}` }, body: JSON.stringify({ id: showAnular.facturaId, accion: "ANULAR" }) })
+    }
     setClaveAnular("")
     setShowAnular(null)
     cargar()
@@ -299,9 +308,10 @@ export default function EmitidosPage(){
 
       <div className="bg-[#111827] border border-slate-800/80 rounded-2xl overflow-hidden">
         <div className="grid grid-cols-12 px-4 py-3 text-[11px] uppercase tracking-wider text-slate-400 border-b border-slate-800">
-          <div className="col-span-2">Tipo</div>
+          <div className="col-span-1">Tipo</div>
           <div className="col-span-2">Secuencial</div>
-          <div className="col-span-2">Receptor</div>
+          <div className="col-span-2">Fecha</div>
+          <div className="col-span-1">Receptor</div>
           <div className="col-span-1 text-right">Total</div>
           <div className="col-span-1">Estado SRI</div>
           <div className="col-span-1">Cobro</div>
@@ -312,11 +322,12 @@ export default function EmitidosPage(){
           const pago = insigniaPago(d)
           return (
           <div key={i} className={`grid grid-cols-12 px-4 py-3 border-t border-slate-800/60 text-[11px] items-center hover:bg-slate-800/30 ${d.estadoSRI==='ANULADO'?'opacity-40':''}`}>
-            <div className="col-span-2"><span className="bg-slate-800 text-slate-300 border border-slate-700 px-2 py-1 rounded-lg text-[10px]">{nombreTipo(d.tipoComprobante)}</span></div>
+            <div className="col-span-1"><span className="bg-slate-800 text-slate-300 border border-slate-700 px-2 py-1 rounded-lg text-[10px]">{nombreTipo(d.tipoComprobante)}</span></div>
             <div className="col-span-2 font-mono text-slate-200">{d.secuencial}</div>
-            <div className="col-span-2 truncate"><span className="text-white">{d.receptorNombre}</span><span className="block text-[10px] text-slate-500 font-mono">{d.receptorIdentificacion}</span></div>
+            <div className="col-span-2 text-slate-300">{d.fechaEmision || "—"}</div>
+            <div className="col-span-1 truncate"><span className="text-white">{d.receptorNombre}</span><span className="block text-[10px] text-slate-500 font-mono">{d.receptorIdentificacion}</span></div>
             <div className="col-span-1 text-right font-mono text-white">${d.estadoSRI==='ANULADO'?'0.00':Number(d.valorTotal||0).toFixed(2)}</div>
-            <div className="col-span-1"><span className={`px-2 py-1 rounded-lg text-[10px] border ${d.estadoSRI==='AUTORIZADO'?'bg-teal-500/10 text-teal-300 border-teal-500/30': d.estadoSRI==='ANULADO'?'bg-slate-800 text-slate-400 border-slate-700':'bg-amber-500/10 text-amber-200 border-amber-500/30'}`}>{d.estadoSRI==='ANULADO'?'Anulado': String(d.estadoSRI).includes('PENDIENTE')?'Pendiente':'Autorizado'}</span></div>
+            <div className="col-span-1"><span className={`px-2 py-1 rounded-lg text-[10px] border ${d.estadoSRI==='AUTORIZADO'?'bg-teal-500/10 text-teal-300 border-teal-500/30': d.estadoSRI==='ANULADO'?'bg-slate-800 text-slate-400 border-slate-700':'bg-amber-500/10 text-amber-200 border-amber-500/30'}`}>{d.estadoSRI==='ANULADO'?'Anulado': d.estadoSRI==='AUTORIZADO'?'Autorizado': d.estadoSRI==='RECHAZADO'?'Rechazado':'Pendiente'}</span></div>
             <div className="col-span-1 text-[10px] text-slate-400">{d.tipo_cobro === "CREDITO" ? "Crédito" : d.tipo_cobro === "PENDIENTE_DE_PAGO" ? "Por cobrar" : "Contado"}</div>
             <div className="col-span-1"><button onClick={() => { if (pago.texto !== "Pagado") setPagoDoc(d) }} className={`px-2 py-1 rounded-lg text-[10px] ${pago.clase}`}>{pago.texto}</button></div>
             <div className="col-span-2 flex justify-end items-center gap-1.5 flex-nowrap">

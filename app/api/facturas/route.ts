@@ -202,7 +202,7 @@ export async function GET(req: Request) {
         receptorIdentificacion: p.cliente?.identificacion || "",
         receptorNombre: p.cliente?.razon || "",
         valorTotal: Number(p.totales?.total || 0),
-        estadoSRI: clasificarEstadoSri(p.estadoSRI || f.estado, p.fechaAutorizacion),
+        estadoSRI: String(p.estadoSRI || p.estado || f.estado || "").toUpperCase().includes("ANUL") ? "ANULADO" : clasificarEstadoSri(p.estadoSRI || f.estado, p.fechaAutorizacion),
         estadoCrudo: p.estadoSRI || f.estado,
         fechaAutorizacion: p.fechaAutorizacion || "",
         numeroAutorizacion: p.numeroAutorizacion || "",
@@ -237,6 +237,15 @@ export async function PATCH(req: Request) {
     if (body?.accion === "ANULAR" && !puede(sesion.usuario.rol, "anular")) return NextResponse.json({ error: "Tu rol no puede anular" }, { status: 403 })
     const actual = await prisma.facturaEmitida.findFirst({ where: { id, empresaId: sesion.empresa.id } })
     if (!actual) return NextResponse.json({ error: "Factura no encontrada" }, { status: 404 })
+    if (body?.accion === "ANULAR") {
+      const previo = (actual.payload || {}) as any
+      const payload = { ...previo, estadoSRI: "ANULADO", estado: "ANULADO", motivoAnulacion: "Anulado en SRI en Linea", fechaAnulacion: new Date().toISOString() }
+      const factura = await prisma.facturaEmitida.update({
+        where: { id },
+        data: { estado: "ANULADO", sriStatus: "ANULADO", payload },
+      })
+      return NextResponse.json({ id: factura.id, estadoSRI: "ANULADO" })
+    }
     const payload = { ...((actual.payload || {}) as any), estado_pago: "PAGADO", saldo_pendiente: 0 }
     const factura = await prisma.facturaEmitida.update({
       where: { id },
