@@ -11,6 +11,7 @@ interface ComprobanteHistorialSRI {
   secuencial: string;
   claveAcceso: string;
   fechaEmision: string;
+  fechaAutorizacion?: string;
   fechaISO?: string;
   receptorIdentificacion: string;
   receptorNombre: string;
@@ -219,6 +220,37 @@ export default function EmitidosPage(){
     cargar()
   }
 
+  const quitarCopiaLocal = (d: ComprobanteHistorialSRI) => {
+    const sec = d.secuencial
+    const clave = String(d.claveAcceso || "").replace(/\D/g, "")
+    const llaves = ["meijsac_comprobantes_sri","meijsac_comprobantes_emitidos","meijsac_documentos_emitidos","meijsac_facturas","meijsac_facturas_emitidas","meijsac_retenciones","meijsac_ventas_pos","meijsac_restaurante_facturas","meijsac_enviados_sri","meijsac_autorizados","meijsac_comprobantes_pendientes_sri"]
+    llaves.forEach((k) => {
+      const lista = JSON.parse(localStorage.getItem(k) || "[]")
+      if (!Array.isArray(lista)) return
+      const nueva = lista.filter((x: any) => {
+        const s = x?.secuencial || x?.numRetencion
+        const c = String(x?.claveAcceso || x?.clave || x?.claveAccesoSustento || "").replace(/\D/g, "")
+        if (sec && s === sec) return false
+        if (clave.length === 49 && c === clave) return false
+        return true
+      })
+      localStorage.setItem(k, JSON.stringify(nueva))
+    })
+  }
+
+  const eliminarNoReal = async (d: ComprobanteHistorialSRI) => {
+    if (String(d.fechaAutorizacion || "").trim()) return
+    if (!window.confirm(`¿Eliminar ${d.secuencial}? El SRI no autorizó este comprobante. Se borra del sistema y deja de contar como venta.`)) return
+    const res = await fetch("/api/facturas", { method: "DELETE", credentials: "same-origin", headers: { "Content-Type": "application/json", Authorization: `Bearer ${localStorage.getItem("meijsac_token") || ""}` }, body: JSON.stringify({ id: d.facturaId || "", secuencial: d.secuencial }) })
+    const data = await res.json().catch(() => ({}))
+    if (res.status === 409 || res.status === 403 || (res.status !== 404 && !res.ok)) {
+      alert(data?.error || "No se pudo eliminar")
+      return
+    }
+    quitarCopiaLocal(d)
+    cargar()
+  }
+
   const filtrados = useMemo(()=>docs.filter(d=> (d.secuencial.includes(filtro) || d.receptorNombre.toLowerCase().includes(filtro.toLowerCase())) && pasaFiltroCobro(d, filtroCobro)),[docs,filtro,filtroCobro])
   const registrarPago = async (doc: ComprobanteHistorialSRI) => {
     marcarPagadoLocal(doc)
@@ -333,6 +365,7 @@ export default function EmitidosPage(){
             <div className="col-span-2 flex justify-end items-center gap-1.5 flex-nowrap">
               <button onClick={()=>verImprimir(d)} className="bg-teal-400 text-slate-950 px-2.5 py-1 rounded-lg text-[10px] font-bold whitespace-nowrap">Ver / Imprimir</button>
               <button onClick={()=>descargarXML(d)} className="bg-slate-800 text-slate-200 border border-slate-700 px-2.5 py-1 rounded-lg text-[10px]">XML</button>
+              {!String(d.fechaAutorizacion || "").trim() && <button onClick={()=>eliminarNoReal(d)} className="text-rose-300 border border-rose-500/40 px-2 py-1 rounded-lg text-[10px] whitespace-nowrap">Eliminar</button>}
               <button onClick={()=>setShowAnular(d)} title="Anular" className="text-slate-500 hover:text-rose-400 px-1.5 py-1">✕</button>
             </div>
           </div>

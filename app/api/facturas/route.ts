@@ -256,3 +256,32 @@ export async function PATCH(req: Request) {
     return NextResponse.json({ error: e.message || "No se pudo registrar el pago" }, { status: 500 })
   }
 }
+
+export async function DELETE(req: Request) {
+  try {
+    const sesion = await usuarioConEmpresaDesdeRequest(req)
+    if ("error" in sesion) return NextResponse.json({ error: sesion.error }, { status: sesion.status })
+    if (!puede(sesion.usuario.rol, "eliminar")) return NextResponse.json({ error: "Tu rol no puede eliminar" }, { status: 403 })
+    const body = await req.json().catch(() => ({}))
+    const id = String(body?.id || "")
+    const secPedido = String(body?.secuencial || "")
+    if (!id && !secPedido) return NextResponse.json({ error: "Falta la factura" }, { status: 400 })
+    const filas = await prisma.facturaEmitida.findMany({
+      where: { empresaId: sesion.empresa.id },
+      orderBy: { createdAt: "desc" },
+      take: 400,
+    })
+    const visibles = (p: any) => (p?.establecimiento && p?.secuencial ? `${p.establecimiento}-${p.secuencial}` : String(p?.secuencial || ""))
+    const candidatas = filas.filter((f) => f.id === id || (secPedido && visibles(f.payload) === secPedido))
+    if (!candidatas.length) return NextResponse.json({ error: "Factura no encontrada" }, { status: 404 })
+    const reales = candidatas.filter((f) => String(((f.payload || {}) as any).fechaAutorizacion || "").trim())
+    if (reales.length === candidatas.length) {
+      return NextResponse.json({ error: "Este comprobante sí fue autorizado por el SRI. Anúlalo en el portal; aquí queda como Anulado." }, { status: 409 })
+    }
+    const borrar = candidatas.filter((f) => !String(((f.payload || {}) as any).fechaAutorizacion || "").trim())
+    await prisma.facturaEmitida.deleteMany({ where: { id: { in: borrar.map((f) => f.id) }, empresaId: sesion.empresa.id } })
+    return NextResponse.json({ ok: true, eliminadas: borrar.length })
+  } catch (e: any) {
+    return NextResponse.json({ error: e.message || "No se pudo eliminar" }, { status: 500 })
+  }
+}
