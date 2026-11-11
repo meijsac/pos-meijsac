@@ -1,175 +1,215 @@
-"use client";
-import { useState, useMemo } from "react";
+'use client'
+import { useState } from 'react'
+import Link from 'next/link'
 
-type Motivo = { id: string; razon: string; valor: number };
-type Factura = { secuencial:string, fechaEmision:string, razonSocial:string, identificacion:string, items:any[], importeTotal:number };
+interface ProductoDevolucion {
+  codigo: string
+  descripcion: string
+  cantidadOriginal: number
+  cantidadDevolver: number
+  precioUnitario: number
+  aplicaIva: boolean
+}
 
-export default function NotaDebitoPage(){
-  const [facturas] = useState<Factura[]>([
-    { secuencial:"001-002-000000147", fechaEmision:"05/10/2026", razonSocial:"IMPORTADORA ANDINA", identificacion:"1790000000001", items:[], importeTotal:3283.33 }
-  ]);
-  const [busqueda, setBusqueda] = useState("001-002-000000147");
-  const [sel, setSel] = useState<Factura>(facturas[0]);
-  const [motivos, setMotivos] = useState<Motivo[]>([{ id:"1", razon:"INTERESES POR MORA 30 DIAS", valor:50 }]);
-  const [ivaPorcentaje, setIvaPorcentaje] = useState(15);
-  const [estadoSRI, setEstadoSRI] = useState<"EN_BLANCO"|"EMITIDO"|"AUTORIZADO">("EN_BLANCO");
-  const [fechaAutorizacionSRI, setFechaAutorizacionSRI] = useState("");
-  const [claveAcceso, setClaveAcceso] = useState("05102026042200000000011234567810000000012");
+type Sustento = {
+  cliente: string
+  identificacion: string
+  tipoId: string
+  fecha: string
+  emisor: { razon: string; ruc: string; matriz: string; ambiente: string }
+}
 
-  const totalSinImpuestos = useMemo(()=> motivos.reduce((s,m)=>s+Number(m.valor||0),0), [motivos]);
-  const valorIva = totalSinImpuestos * (ivaPorcentaje/100);
-  const valorTotal = totalSinImpuestos + valorIva;
+export default function EmisionNotaCredito() {
+  const [facturaRef, setFacturaRef] = useState('')
+  const [motivoAnulacion, setMotivoAnulacion] = useState('')
+  const [cargando, setCargando] = useState(false)
+  const [aviso, setAviso] = useState('')
+  const [sustento, setSustento] = useState<Sustento | null>(null)
+  const [productos, setProductos] = useState<ProductoDevolucion[]>([])
 
-  // CORRECCIÓN SRI QUE ME PEDISTE - Análisis normativo
-  const codigoImpuesto = 2; // Siempre 2 para IVA
-  const codigoPorcentaje = ivaPorcentaje === 15? 4 : 0; // 4=15% vigente, 0=0%
+  const itemsActivos = productos.filter((p) => p.cantidadDevolver > 0)
+  const subtotal0 = itemsActivos.filter((p) => !p.aplicaIva).reduce((acc, p) => acc + p.cantidadDevolver * p.precioUnitario, 0)
+  const subtotal15 = itemsActivos.filter((p) => p.aplicaIva).reduce((acc, p) => acc + p.cantidadDevolver * p.precioUnitario, 0)
+  const iva15 = subtotal15 * 0.15
+  const totalDevolucion = subtotal0 + subtotal15 + iva15
 
-  const generarClave49 = () => {
-    const fecha = new Date().toISOString().slice(0,10).replace(/-/g,"");
-    const ruc = "2200000000001";
-    const ambiente = "1"; const serie = "001001";
-    const secuencial = String(Math.floor(Math.random()*999999999)).padStart(9,"0");
-    const codigo = String(Math.floor(Math.random()*99999999)).padStart(8,"0");
-    const tipo = "05"; // NOTA DEBITO
-    return `${fecha}${tipo}${ruc}${ambiente}${serie}${secuencial}${codigo}1`;
-  };
+  const actualizarCantidad = (index: number, nuevaCant: number) => {
+    const copia = [...productos]
+    const max = copia[index].cantidadOriginal
+    copia[index] = { ...copia[index], cantidadDevolver: Math.max(0, Math.min(nuevaCant, max)) }
+    setProductos(copia)
+  }
 
-  const cancelarEmision = () => {
-    if(!confirm("¿Cancelar la emisión de esta Nota de Débito?")) return;
-    nuevaNota();
-  };
+  const cargarFactura = async () => {
+    setAviso('')
+    setSustento(null)
+    setProductos([])
+    const res = await fetch(`/api/sri/nota-credito?numero=${encodeURIComponent(facturaRef.trim())}`, { credentials: 'same-origin' })
+    const data = await res.json().catch(() => ({}))
+    if (!res.ok) {
+      setAviso(data.mensaje || data.error || 'No encontré esa factura autorizada.')
+      return
+    }
+    setFacturaRef(data.numero)
+    setSustento({
+      cliente: data.cliente,
+      identificacion: data.identificacion,
+      tipoId: data.tipoId,
+      fecha: data.fecha,
+      emisor: data.emisor,
+    })
+    setProductos(Array.isArray(data.productos) ? data.productos : [])
+  }
 
-  const emitir = () => {
-    if(motivos.some(m=>m.razon.length<5)) return alert("Motivo obligatorio SRI (mín 5 letras)");
-    const clave = generarClave49();
-    const fechaSRI = new Date().toLocaleString('es-EC', { dateStyle:'short', timeStyle:'medium' });
-    setClaveAcceso(clave);
-    setFechaAutorizacionSRI(fechaSRI);
-    setEstadoSRI("EMITIDO");
-
-    const comprobante = {
-      tipo:"05", nombre:"NOTA DE DÉBITO", secuencial:"001-001-000000006",
-      claveAcceso: clave, fechaAutorizacionSRI: fechaSRI, fecha: new Date().toLocaleDateString(),
-      facturaModificada: sel.secuencial, cliente: sel.razonSocial,
-      motivos: motivos, totales: { totalSinImpuestos, valorIva, valorTotal, codigoImpuesto, codigoPorcentaje }, estado:"AUTORIZADO"
-    };
-    const emitidos = JSON.parse(localStorage.getItem("meijsac_emitidos")||"[]");
-    localStorage.setItem("meijsac_emitidos", JSON.stringify([...emitidos, comprobante]));
-
-    setTimeout(()=>{
-      setEstadoSRI("AUTORIZADO");
-      const autorizados = JSON.parse(localStorage.getItem("meijsac_autorizados")||"[]");
-      localStorage.setItem("meijsac_autorizados", JSON.stringify([...autorizados, comprobante]));
-      alert(`✓ AUTORIZADO SRI\nClave: ${clave}\nFecha: ${fechaSRI}\nXML: codigo ${codigoImpuesto} + codigoPorcentaje ${codigoPorcentaje}`);
-    }, 1500);
-  };
-
-  const nuevaNota = () => {
-    setBusqueda("");
-    setMotivos([{ id: Date.now().toString(), razon:"", valor:0 }]);
-    setEstadoSRI("EN_BLANCO");
-    setFechaAutorizacionSRI("");
-    setClaveAcceso(generarClave49());
-  };
+  const handleEmitirNotaCredito = async () => {
+    if (!sustento) return alert('Carga primero la factura autorizada.')
+    if (!motivoAnulacion.trim()) return alert('Escribe el motivo de la nota de crédito.')
+    if (itemsActivos.length === 0) return alert('Debes seleccionar al menos 1 producto para devolver.')
+    setCargando(true)
+    try {
+      const res = await fetch('/api/sri/nota-credito', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          numDocModificado: facturaRef,
+          fechaEmisionDocSustento: sustento.fecha,
+          motivo: motivoAnulacion,
+          clienteNombre: sustento.cliente,
+          clienteIdentificacion: sustento.identificacion,
+          clienteTipoId: sustento.tipoId,
+          productos: itemsActivos,
+          subtotal0,
+          subtotal15,
+          iva15,
+          total: totalDevolucion,
+        }),
+      })
+      const data = await res.json().catch(() => ({}))
+      if (data.autorizado && data.fechaAutorizacion && data.claveAcceso) {
+        window.location.href = `/dashboard/factura-xml/visor/${data.claveAcceso}`
+        return
+      }
+      alert(data.mensaje || data.error || 'El SRI no autorizó la nota de crédito.')
+    } catch {
+      alert('Error de conexión con el servidor.')
+    } finally {
+      setCargando(false)
+    }
+  }
 
   return (
-    <div className="min-h-screen bg-[#060608] text-white p-4">
-      <div className="flex justify-between mb-4">
-        <h1 className="font-black text-sm">NOTA DE DÉBITO <span className="text-[#00f5d4]">05 - RIDE</span></h1>
-        <button onClick={()=>location.href='/dashboard/comprobantes'} className="bg-white/10 px-4 py-2 rounded-xl text-xs">← Volver al Dashboard</button>
+    <div className="min-h-screen bg-[#0B0F19] text-slate-200 p-6 font-sans">
+      <div className="max-w-7xl mx-auto flex justify-between items-center mb-6 pb-4 border-b border-slate-800/80">
+        <div className="flex items-center gap-3">
+          <span className="w-2.5 h-2.5 rounded-full bg-teal-400"></span>
+          <h1 className="text-lg font-semibold text-white tracking-wide">Nueva Nota de Crédito</h1>
+          <span className="text-xs bg-slate-800 text-slate-400 px-2.5 py-0.5 rounded-md border border-slate-700">Comprobante 04 • Devolución / Anulación</span>
+        </div>
+        <Link href="/dashboard/comprobantes" className="text-xs text-slate-400 hover:text-white bg-slate-900 border border-slate-800 px-4 py-2 rounded-lg transition">← Volver al Panel</Link>
       </div>
 
-      <div className="grid md:grid-cols-12 gap-4">
-        {/* IZQUIERDA */}
-        <div className="md:col-span-5 bg-[#11131a] rounded-[20px] p-4 border border-white/5 h-fit space-y-3">
-          <label className="text-[10px] text-white/40">1. VÍNCULO OBLIGATORIO SUSTENTO</label>
-          <div className="flex gap-2">
-            <input value={busqueda} onChange={e=>setBusqueda(e.target.value)} className="w-full bg-black p-3 rounded-xl text-sm border border-white/10 font-mono"/>
-            <button onClick={()=>setSel(facturas[0])} className="bg-white text-black px-4 rounded-xl text-xs font-bold">Buscar</button>
-          </div>
-
-          <div className="p-3 bg-black rounded-xl border border-[#00f5d4]/20 text-[11px]">
-            <p className="text-[#00f5d4] font-bold text-[10px]">DATOS AMARRE SRI</p>
-            <p>codDocModificado: <b>01</b> | numDocModificado: <b>{sel.secuencial}</b></p>
-            <p>fechaEmisionDocSustento: <b>{sel.fechaEmision}</b></p>
-          </div>
-
-          <div className="border-t border-white/5 pt-3">
-            <div className="flex justify-between items-center">
-              <label className="text-[10px] text-[#ffbe0a]">2. MOTIVOS DEL CARGO EXTRA</label>
-              <button onClick={()=>setMotivos([...motivos,{id:Date.now().toString(), razon:"", valor:0}])} className="text-[9px] bg-[#ffbe0a]/10 text-[#ffbe0a] px-3 py-1 rounded-full border border-[#ffbe0a]/20 font-bold">+ AGREGAR</button>
+      <div className="max-w-7xl mx-auto grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+        <div className="lg:col-span-5 bg-[#111827] border border-slate-800/80 rounded-2xl p-6 space-y-5 shadow-xl">
+          <div>
+            <label className="block text-xs font-medium text-slate-400 uppercase tracking-wider mb-2">1. Factura original a modificar</label>
+            <div className="flex gap-2">
+              <input type="text" value={facturaRef} onChange={(e) => setFacturaRef(e.target.value)} placeholder="001-002-000000000" className="flex-1 bg-[#0B0F19] border border-slate-700/80 rounded-xl px-3.5 py-2 text-sm text-white font-mono focus:border-teal-400 outline-none" />
+              <button type="button" onClick={cargarFactura} className="bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-medium px-4 rounded-xl border border-slate-700 transition">Cargar</button>
             </div>
-            {motivos.map((m)=>(
-              <div key={m.id} className="flex gap-2 mt-2 bg-black p-2 rounded-xl border border-white/5">
-                <input value={m.razon} onChange={e=>setMotivos(motivos.map(x=>x.id===m.id?{...x, razon:e.target.value.toUpperCase()}:x))} placeholder="RAZON: INTERES, FLETE..." className="flex-1 bg-[#1e293b] rounded-lg px-3 py-2 text-xs uppercase outline-none"/>
-                <input type="number" value={m.valor} onChange={e=>setMotivos(motivos.map(x=>x.id===m.id?{...x, valor:parseFloat(e.target.value)||0}:x))} className="w-20 bg-[#1e293b] rounded-lg text-center text-xs font-mono"/>
-                <button onClick={()=>setMotivos(motivos.filter(x=>x.id!==m.id))} className="text-white/20 px-1">✕</button>
-              </div>
-            ))}
+            {aviso ? <p className="text-[11px] text-slate-400 mt-2">{aviso}</p> : null}
           </div>
 
-          <div className="bg-[#00f5d4]/10 p-3 rounded-xl text-xs border border-[#00f5d4]/20">
-            <p className="flex justify-between"><span>Total Sin Impuestos:</span> <b>${totalSinImpuestos.toFixed(2)}</b></p>
-            <p className="flex justify-between"><span>IVA {ivaPorcentaje}% (codigo 2 + codPorc {codigoPorcentaje}):</span> <b>${valorIva.toFixed(2)}</b></p>
-            <p className="flex justify-between font-black text-[#00f5d4] border-t border-[#00f5d4]/20 mt-1 pt-1"><span>VALOR TOTAL:</span> <b>${valorTotal.toFixed(2)}</b></p>
+          <div>
+            <label className="block text-xs font-medium text-slate-400 uppercase tracking-wider mb-2">2. Motivo de la nota de crédito</label>
+            <input type="text" value={motivoAnulacion} onChange={(e) => setMotivoAnulacion(e.target.value.toUpperCase())} placeholder="Ej: ANULACIÓN DE FACTURA / DEVOLUCIÓN" className="w-full bg-[#0B0F19] border border-slate-700/80 rounded-xl px-3.5 py-2 text-xs text-white focus:border-teal-400 outline-none" />
           </div>
 
-          <div className="mt-4 grid grid-cols-2 gap-2">
-            {estadoSRI!== "AUTORIZADO"? (
-              <>
-                <button onClick={cancelarEmision} className="border border-red-500/50 text-red-400 py-3 rounded-xl font-bold text-[11px]">CANCELAR EMISIÓN</button>
-                <button onClick={emitir} className="bg-[#00f5d4] text-black py-3 rounded-xl font-bold text-[11px]">GENERAR XML 05</button>
-              </>
-            ) : (
-              <button onClick={nuevaNota} className="col-span-2 bg-white text-black py-3 rounded-xl font-black text-xs">+ NUEVA NOTA DE DÉBITO</button>
-            )}
+          <div>
+            <div className="flex justify-between items-center mb-2">
+              <label className="text-xs font-medium text-slate-400 uppercase tracking-wider">3. Productos a devolver</label>
+              <span className="text-[11px] text-slate-500">Ajusta la cantidad</span>
+            </div>
+            <div className="space-y-2">
+              {productos.length === 0 ? <p className="text-[11px] text-slate-500">Carga una factura autorizada para ver sus productos.</p> : null}
+              {productos.map((prod, idx) => (
+                <div key={`${prod.codigo}-${idx}`} className="bg-[#0B0F19] border border-slate-800 rounded-xl p-3 flex items-center justify-between gap-3">
+                  <div className="flex-1 min-w-0">
+                    <p className="text-xs font-medium text-white truncate">{prod.descripcion}</p>
+                    <p className="text-[11px] text-slate-500 font-mono">Disponible: {prod.cantidadOriginal} • Unit: ${prod.precioUnitario.toFixed(2)}{prod.aplicaIva ? ' • IVA 15%' : ' • IVA 0%'}</p>
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    <button type="button" onClick={() => actualizarCantidad(idx, prod.cantidadDevolver - 1)} className="w-7 h-7 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold text-xs">-</button>
+                    <span className="w-8 text-center font-mono text-xs font-bold text-teal-400">{prod.cantidadDevolver}</span>
+                    <button type="button" onClick={() => actualizarCantidad(idx, prod.cantidadDevolver + 1)} className="w-7 h-7 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold text-xs">+</button>
+                  </div>
+                </div>
+              ))}
+            </div>
           </div>
+
+          <div className="bg-[#0B0F19] border border-slate-800 rounded-xl p-4 space-y-1.5 text-xs">
+            <div className="flex justify-between text-slate-400"><span>Subtotal 0%</span><span className="font-mono text-slate-200">${subtotal0.toFixed(2)}</span></div>
+            <div className="flex justify-between text-slate-400"><span>Subtotal 15%</span><span className="font-mono text-slate-200">${subtotal15.toFixed(2)}</span></div>
+            <div className="flex justify-between text-slate-400"><span>IVA 15%</span><span className="font-mono text-slate-200">${iva15.toFixed(2)}</span></div>
+            <div className="pt-2 border-t border-slate-800 flex justify-between items-center text-sm font-semibold"><span className="text-white">Total nota de crédito</span><span className="font-mono text-teal-400 text-base">${totalDevolucion.toFixed(2)}</span></div>
+          </div>
+
+          <button type="button" onClick={handleEmitirNotaCredito} disabled={cargando} className="w-full py-3 rounded-xl text-xs font-bold text-slate-950 bg-teal-400 hover:bg-teal-300 shadow-lg shadow-teal-500/10 transition disabled:opacity-50">{cargando ? 'Autorizando en SRI...' : 'Emitir Nota de Crédito'}</button>
         </div>
 
-        {/* DERECHA - RIDE */}
-        <div className="md:col-span-7 bg-white text-black rounded-[20px] p-6">
-          <div className="border-b-2 border-black pb-3 flex justify-between">
+        <div className="lg:col-span-7 bg-white text-slate-800 rounded-2xl p-8 shadow-2xl border border-slate-200 text-xs">
+          <div className="flex justify-between items-start pb-5 border-b border-slate-200">
             <div>
-              <h2 className="font-black text-lg">MEIJSAC POS</h2>
-              <p className="text-[10px]">RUC: 2200000000001 | Matriz: Coca - Orellana</p>
+              <h2 className="text-base font-bold text-slate-900">{sustento?.emisor.razon || 'Emisor'}</h2>
+              <p className="text-slate-500 mt-1">RUC: {sustento?.emisor.ruc || '—'}</p>
+              <p className="text-slate-500">Matriz: {sustento?.emisor.matriz || '—'}</p>
             </div>
-            <div className="text-right border border-black p-2 rounded-xl max-w-[180px]">
-              <p className="font-black text-xs">NOTA DE DÉBITO</p>
-              <p className="text-[10px]">No. 001-001-000000006</p>
-              <p className="text-[7px] font-mono break-all">{claveAcceso}</p>
-              {estadoSRI === "AUTORIZADO"? (
-                <div className="bg-green-600 text-white px-2 py-1 rounded text-[7px] font-bold mt-1">
-                  <p>AUTORIZADO</p><p>{fechaAutorizacionSRI}</p>
-                </div>
-              ) : (
-                <p className="text-[8px] mt-1 bg-black text-white px-1 rounded text-center">{estadoSRI}</p>
-              )}
+            <div className="border border-slate-200 rounded-xl p-3.5 bg-slate-50 text-right w-64">
+              <p className="font-bold text-slate-900 text-sm">NOTA DE CRÉDITO</p>
+              <p className="text-[10px] text-slate-400 mt-2">AMBIENTE: {sustento?.emisor.ambiente || '—'} • EMISIÓN: NORMAL</p>
             </div>
           </div>
-
-          <div className="mt-3 grid grid-cols-2 gap-4 text-[11px] border border-black/20 p-3 rounded-xl">
-            <div><p><b>Razón Social:</b> {sel.razonSocial}</p><p><b>RUC/CI:</b> {sel.identificacion}</p></div>
-            <div><p><b>Comprobante que modifica:</b> FACTURA {sel.secuencial}</p><p><b>Fecha Sustento:</b> {sel.fechaEmision}</p></div>
+          <div className="grid grid-cols-2 gap-4 py-4 border-b border-slate-200">
+            <div>
+              <p className="text-slate-400 text-[10px] uppercase">Cliente</p>
+              <p className="font-semibold text-slate-900">{sustento?.cliente || '—'}</p>
+              <p className="text-slate-600 font-mono mt-0.5">RUC/CI: {sustento?.identificacion || '—'}</p>
+            </div>
+            <div className="text-right">
+              <p className="text-slate-400 text-[10px] uppercase">Documento modificado</p>
+              <p className="font-semibold text-slate-900">FACTURA {facturaRef || '—'}</p>
+              <p className="text-slate-600 mt-0.5">Fecha original: {sustento?.fecha || '—'}</p>
+            </div>
           </div>
-
-          <table className="w-full mt-4 text-[11px] border">
-            <thead className="bg-black text-white"><tr><th className="p-2 text-left">Razon</th><th className="text-right">Valor</th></tr></thead>
-            <tbody>
-              {motivos.map((m,i)=><tr key={i} className="border-b"><td className="p-2 uppercase">{m.razon}</td><td className="text-right">{Number(m.valor).toFixed(2)}</td></tr>)}
-            </tbody>
-          </table>
-
-          <div className="mt-3 bg-black text-white p-3 rounded-xl text-[10px] font-mono">
-            <p className="text-[#00f5d4] font-bold">XML SRI - Cumple tu análisis:</p>
-            <p>{`<codigo>${codigoImpuesto}</codigo> <codigoPorcentaje>${codigoPorcentaje}</codigoPorcentaje>`}</p>
-            <p>{`<baseImponible>${totalSinImpuestos.toFixed(2)}</baseImponible> <valor>${valorIva.toFixed(2)}</valor>`}</p>
+          <div className="my-6 border border-slate-200 rounded-xl overflow-hidden">
+            <table className="w-full text-left">
+              <thead className="bg-slate-50 border-b border-slate-200 text-slate-600">
+                <tr>
+                  <th className="p-3 font-semibold">Descripción</th>
+                  <th className="p-3 font-semibold text-right">Cant.</th>
+                  <th className="p-3 font-semibold text-right">Valor</th>
+                </tr>
+              </thead>
+              <tbody>
+                {itemsActivos.map((prod, idx) => (
+                  <tr key={`${prod.codigo}-${idx}`} className="border-b border-slate-100">
+                    <td className="p-3">{prod.descripcion}</td>
+                    <td className="p-3 text-right font-mono">{prod.cantidadDevolver.toFixed(2)}</td>
+                    <td className="p-3 text-right font-mono">${(prod.cantidadDevolver * prod.precioUnitario).toFixed(2)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
-
-          <div className="flex justify-end mt-3">
-            <div className="w-48 text-[11px]"><div className="flex justify-between font-black border-t-2 border-black pt-1"><span>VALOR TOTAL:</span><b>${valorTotal.toFixed(2)}</b></div></div>
+          <div className="ml-auto w-64 space-y-1.5">
+            <div className="flex justify-between text-slate-500"><span>Subtotal 0%</span><span>${subtotal0.toFixed(2)}</span></div>
+            <div className="flex justify-between text-slate-500"><span>Subtotal 15%</span><span>${subtotal15.toFixed(2)}</span></div>
+            <div className="flex justify-between text-slate-500"><span>IVA 15%</span><span>${iva15.toFixed(2)}</span></div>
+            <div className="flex justify-between font-bold text-slate-900 pt-2 border-t border-slate-200"><span>Total</span><span>${totalDevolucion.toFixed(2)}</span></div>
+            {motivoAnulacion ? <p className="text-slate-500 pt-2">Motivo: {motivoAnulacion}</p> : null}
           </div>
         </div>
       </div>
     </div>
-  );
+  )
 }
