@@ -1,7 +1,9 @@
 "use client"
-import { useState, useEffect, useMemo } from "react"
+import { useState, useEffect, useMemo, useRef } from "react"
 import { useRouter } from "next/navigation"
 import { etiquetaCobro, marcarPagadoLocal, pasaFiltroCobro } from "@/lib/cobro-etiqueta"
+import { esDelAmbiente } from "@/lib/ambiente-datos"
+import { useAmbienteVivo } from "@/components/SelloAmbiente"
 
 interface ComprobanteHistorialSRI {
   id: string;
@@ -28,6 +30,9 @@ interface ComprobanteHistorialSRI {
 
 export default function EmitidosPage(){
   const router = useRouter()
+  const ambiente = useAmbienteVivo()
+  const ambienteRef = useRef(ambiente)
+  ambienteRef.current = ambiente
   const [docs,setDocs]=useState<ComprobanteHistorialSRI[]>([])
   const [filtro,setFiltro]=useState("")
   const [filtroCobro,setFiltroCobro]=useState("todos")
@@ -91,7 +96,7 @@ export default function EmitidosPage(){
     } catch {}
 
     const map = new Map()
-    unificados.forEach(d=>{ 
+    unificados.filter((d) => esDelAmbiente(d, ambienteRef.current)).forEach(d=>{ 
       const prev = map.get(d.secuencial)
       if (!prev) map.set(d.secuencial, d)
       else map.set(d.secuencial, { ...prev, ...d, tipo_cobro: d.tipo_cobro || prev.tipo_cobro, estado_pago: d.estado_pago || prev.estado_pago, facturaId: d.facturaId || prev.facturaId, fecha_vencimiento: d.fecha_vencimiento || prev.fecha_vencimiento })
@@ -99,7 +104,7 @@ export default function EmitidosPage(){
     const todos = Array.from(map.values()).reverse()
     setDocs(todos)
     setPendientes(todos.filter(d=> d.estadoSRI==='PENDIENTE_DE_AUTORIZAR' || d.estadoSRI==='PENDIENTE'))
-    setBorradores(get("meijsac_borradores_facturas"))
+    setBorradores(get("meijsac_borradores_facturas").filter((d: unknown) => esDelAmbiente(d, ambienteRef.current)))
     const autorizo = await reenviarPendientes(todos)
     if (autorizo && !refrescando) {
       refrescando = true
@@ -149,10 +154,11 @@ export default function EmitidosPage(){
   }
 
   useEffect(()=>{
+    if (ambiente !== "1" && ambiente !== "2") return
     cargar()
     window.addEventListener("online", cargar)
     return () => window.removeEventListener("online", cargar)
-  },[])
+  },[ambiente])
 
   const reenviarPruebas = async (p: ComprobanteHistorialSRI) => {
     await reenviarPendientes([p], true)

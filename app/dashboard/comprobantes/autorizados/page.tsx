@@ -1,5 +1,7 @@
 "use client"
-import { useState, useEffect, useMemo } from "react"
+import { useState, useEffect, useMemo, useRef } from "react"
+import { esDelAmbiente } from "@/lib/ambiente-datos"
+import { useAmbienteVivo } from "@/components/SelloAmbiente"
 import { useRouter } from "next/navigation"
 import { etiquetaCobro, marcarPagadoLocal, pasaFiltroCobro } from "@/lib/cobro-etiqueta"
 import { clasificarEstadoSri, estadoEnModal } from "@/lib/sri/estado-visible"
@@ -45,6 +47,9 @@ interface ComprobanteHistorialSRI {
 
 export default function EmitidosPage(){
   const router = useRouter()
+  const ambiente = useAmbienteVivo()
+  const ambienteRef = useRef(ambiente)
+  ambienteRef.current = ambiente
   const [docs,setDocs]=useState<ComprobanteHistorialSRI[]>([])
   const [filtro,setFiltro]=useState("")
   const [filtroCobro,setFiltroCobro]=useState("todos")
@@ -139,7 +144,7 @@ export default function EmitidosPage(){
         })
       }
     })
-    const lista = Array.from(map.values())
+    const lista = Array.from(map.values()).filter((d) => esDelAmbiente(d, ambienteRef.current))
     setDocs(lista.filter((d) => d.estadoSRI === "AUTORIZADO" && d.fechaAutorizacion).reverse())
     const autorizo = await reenviarPendientes(lista)
     if (autorizo && !refrescando) {
@@ -217,6 +222,7 @@ export default function EmitidosPage(){
   }
 
   useEffect(()=>{
+    if (ambiente !== "1" && ambiente !== "2") return
     cargar()
     const alVolver = () => { if (document.visibilityState === "visible") cargar() }
     window.addEventListener("focus", cargar)
@@ -227,7 +233,7 @@ export default function EmitidosPage(){
       window.removeEventListener("online", cargar)
       document.removeEventListener("visibilitychange", alVolver)
     }
-  },[])
+  },[ambiente])
 
   // 2. BOTONERA DE DESPACHO
   const abrirDocumentoReal = (doc: ComprobanteHistorialSRI, modo: "ride" | "ticket" | "xml") => {

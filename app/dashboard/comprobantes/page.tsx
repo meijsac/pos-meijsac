@@ -1,6 +1,8 @@
 "use client"
 import Link from "next/link"
 import { useEffect, useState } from "react"
+import { esDelAmbiente } from "@/lib/ambiente-datos"
+import { useAmbienteVivo } from "@/components/SelloAmbiente"
 
 function Icono({ d, className = "w-5 h-5" }: { d: string; className?: string }) {
   return (
@@ -31,8 +33,8 @@ const EMITIR = [
   { title: "Liquidación de Compra", desc: "Compras a proveedores informales sin RUC", href: "/dashboard/liquidacion-xml", codigo: "03", icono: BOLSA },
 ]
 
-function contar(clave: string) {
-  try { return JSON.parse(localStorage.getItem(clave) || "[]").length } catch { return 0 }
+function contar(clave: string, codigo: string) {
+  try { return JSON.parse(localStorage.getItem(clave) || "[]").filter((fila: unknown) => esDelAmbiente(fila, codigo)).length } catch { return 0 }
 }
 
 const tarjeta = "group bg-[#111827]/90 hover:bg-[#151E32] border border-slate-800/90 border-t-slate-700/50 hover:border-teal-500/40 rounded-2xl p-6 transition-all duration-300 hover:-translate-y-1 shadow-lg flex flex-col justify-between min-h-[165px]"
@@ -40,26 +42,25 @@ const tarjeta = "group bg-[#111827]/90 hover:bg-[#151E32] border border-slate-80
 export default function ComprobantesPage() {
   const [historial, setHistorial] = useState(0)
   const [compras, setCompras] = useState(0)
-  const [ambiente, setAmbiente] = useState("")
+  const codigoVivo = useAmbienteVivo()
   const [firmaVigente, setFirmaVigente] = useState<boolean | null>(null)
 
   useEffect(() => {
-    setHistorial(contar("meijsac_facturas") + contar("meijsac_retenciones") + contar("meijsac_comprobantes_emitidos") + contar("meijsac_documentos_emitidos"))
-    setCompras(contar("meijsac_compras_ats_v2") || contar("meijsac_compras_ats"))
+    if (codigoVivo !== "1" && codigoVivo !== "2") return
+    setHistorial(contar("meijsac_facturas", codigoVivo) + contar("meijsac_retenciones", codigoVivo) + contar("meijsac_comprobantes_emitidos", codigoVivo) + contar("meijsac_documentos_emitidos", codigoVivo))
+    setCompras(contar("meijsac_compras_ats_v2", codigoVivo) || contar("meijsac_compras_ats", codigoVivo))
     fetch("/api/empresa/mia", { credentials: "same-origin" })
       .then((r) => r.ok ? r.json() : null)
       .then((data) => {
         const empresa = data?.empresa
         if (!empresa) return
-        const texto = String(empresa.ambiente || "").toUpperCase()
-        setAmbiente(texto === "2" || texto.includes("PROD") ? "PRODUCCION" : "PRUEBAS")
         const vence = empresa.firmaExpira ? new Date(empresa.firmaExpira).getTime() : 0
         setFirmaVigente(vence > Date.now())
       })
       .catch(() => {})
-  }, [])
+  }, [codigoVivo])
 
-  const produccion = ambiente === "PRODUCCION"
+  const produccion = codigoVivo === "2"
 
   return (
     <div className="min-h-screen bg-[#090D16] text-slate-200 p-6 md:p-10 font-sans selection:bg-teal-500/30">
@@ -78,8 +79,7 @@ export default function ComprobantesPage() {
             </div>
           </div>
 
-          {ambiente && (
-            <div className="flex items-center gap-3 text-xs">
+          <div className="flex items-center gap-3 text-xs">
               <div className={`px-3.5 py-2 rounded-xl flex items-center gap-2 shadow-inner border ${produccion ? "bg-[#111827] border-teal-500/30 text-teal-300" : "bg-[#111827] border-amber-500/30 text-amber-300"}`}>
                 <span className={`w-2 h-2 rounded-full ${produccion ? "bg-teal-400" : "bg-amber-400 animate-pulse"}`} />
                 <span className="font-medium">{produccion ? "Ambiente Producción" : "Modo Pruebas"}</span>
@@ -89,7 +89,6 @@ export default function ComprobantesPage() {
                 <span className="font-medium">{firmaVigente ? "Firma activa" : "Firma caducada"}</span>
               </div>
             </div>
-          )}
         </div>
 
         <div className="space-y-4">

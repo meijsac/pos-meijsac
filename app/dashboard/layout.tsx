@@ -2,6 +2,7 @@
 import { useEffect } from 'react'
 import { useRouter, usePathname } from 'next/navigation'
 import { EsisaAvatar } from '@/components/EsisaAvatar'
+import { SelloAmbiente } from '@/components/SelloAmbiente'
 import { guardarEmpresaLocal } from '@/lib/sesion-cliente'
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
@@ -43,6 +44,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
   return (
     <div className="min-h-screen bg-[#0a0a0a] text-white">
+      <SelloAmbiente />
       {!isDashboard && (
         <div className="p-4"></div>
       )}

@@ -3,6 +3,7 @@ import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { useEffect, useState } from "react"
 import { cargarEmpresaSesion, cerrarSesionEnEsteEquipo } from "@/lib/sesion-cliente"
+import { useAmbienteVivo } from "@/components/SelloAmbiente"
 
 const CORPORATE = "#23AAB3"
 
@@ -107,6 +108,7 @@ export default function DashboardMeijsac(){
   const vacioSerie = { dia: [], semana: [], mes: [], año: [] }
   const [series, setSeries] = useState<Serie>(vacioSerie)
   const [metricas, setMetricas] = useState<Record<string, Metrica>>({})
+  const ambiente = useAmbienteVivo()
   const router = useRouter()
   const [bg, setBg] = useState<{type:'color'|'image', value:string}>({type:'color', value:'#090b11'})
   const [showBg, setShowBg] = useState(false)
@@ -158,17 +160,7 @@ export default function DashboardMeijsac(){
           clearTimeout(timer)
         }
         const headers = { Authorization: `Bearer ${localStorage.getItem("meijsac_token") || ""}` }
-        const [resumenRes, docsRes] = await Promise.all([
-          fetch("/api/dashboard/resumen", { headers }),
-          fetch("/api/documentos-legales", { headers }),
-        ])
-        if (!cancel && resumenRes.ok) {
-          const resumen = await resumenRes.json()
-          setVentas({ hoy: Number(resumen.ventasHoy || 0), mes: Number(resumen.ventasMes || 0), pedidosHoy: Number(resumen.pedidosHoy || 0), pedidosMes: Number(resumen.pedidosMes || 0) })
-          setPorCobrar(Number(resumen.cxc || 0))
-          if (resumen.series) setSeries(resumen.series)
-          if (resumen.metricas) setMetricas(resumen.metricas)
-        }
+        const docsRes = await fetch("/api/documentos-legales", { headers })
         if (!cancel && docsRes.ok) {
           const lista = await docsRes.json()
           if (Array.isArray(lista)) setDocsLegales(lista)
@@ -179,6 +171,27 @@ export default function DashboardMeijsac(){
     })()
     return () => { cancel = true }
   },[])
+
+  useEffect(() => {
+    if (ambiente !== "1" && ambiente !== "2") return
+    let cancel = false
+    setVentas({ hoy: 0, mes: 0, pedidosHoy: 0, pedidosMes: 0 })
+    setPorCobrar(0)
+    setSeries(vacioSerie)
+    setMetricas({})
+    const headers = { Authorization: `Bearer ${localStorage.getItem("meijsac_token") || ""}` }
+    fetch(`/api/dashboard/resumen?ambiente=${ambiente}`, { headers, cache: "no-store" })
+      .then((res) => res.ok ? res.json() : null)
+      .then((resumen) => {
+        if (cancel || !resumen) return
+        setVentas({ hoy: Number(resumen.ventasHoy || 0), mes: Number(resumen.ventasMes || 0), pedidosHoy: Number(resumen.pedidosHoy || 0), pedidosMes: Number(resumen.pedidosMes || 0) })
+        setPorCobrar(Number(resumen.cxc || 0))
+        if (resumen.series) setSeries(resumen.series)
+        if (resumen.metricas) setMetricas(resumen.metricas)
+      })
+      .catch(() => {})
+    return () => { cancel = true }
+  }, [ambiente])
 
   const saveBg = (newBg:any)=>{
     setBg(newBg)

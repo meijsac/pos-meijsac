@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
 import { usuarioConEmpresaDesdeRequest } from "@/lib/empresa-sesion"
+import { ambienteDeEmpresa, codigoAmbiente } from "@/lib/sri/ambiente"
+import { ambienteDeComprobante } from "@/lib/ambiente-datos"
 
 function esAutorizada(estado: string) {
   const e = estado.toUpperCase()
@@ -17,10 +19,11 @@ function pendiente(estadoPago: string | null) {
 export async function GET(req: Request) {
   const sesion = await usuarioConEmpresaDesdeRequest(req)
   if ("error" in sesion) return NextResponse.json({ error: sesion.error }, { status: sesion.status })
-  const filas = await prisma.facturaEmitida.findMany({
+  const ambiente = codigoAmbiente(new URL(req.url).searchParams.get("ambiente") || ambienteDeEmpresa(sesion.empresa))
+  const filas = (await prisma.facturaEmitida.findMany({
     where: { empresaId: sesion.empresa.id, OR: [{ sriStatus: "AUTORIZADO" }, { estado: "AUTORIZADO" }] },
     orderBy: { createdAt: "asc" },
-  })
+  })).filter((f) => ambienteDeComprobante(f.payload) === ambiente)
   const ahora = new Date()
   const ventas = filas.filter((f) => {
     const payload = (f.payload || {}) as any

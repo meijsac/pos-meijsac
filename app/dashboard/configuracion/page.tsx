@@ -2,6 +2,7 @@
 import { useState, useEffect } from "react";
 import { feriadosIvaReducido } from '@/lib/iva-feriados.config';
 import { cargarEmpresaSesion } from "@/lib/sesion-cliente";
+import { publicarAmbiente } from "@/components/SelloAmbiente";
 import { errorLogo } from "@/lib/logo-empresa";
 import DocumentosLegales from "./documentos-legales";
 
@@ -235,6 +236,25 @@ export default function ConfiguracionAvanzadaSRI() {
       const url = URL.createObjectURL(file)
       setAvisoLogo("")
       setCfg((p: any) => ({ ...p, logoPreview: url, logoFile: file, logoNombre: file.name }))
+    }
+
+    const elegirAmbiente = async (nombre: "PRUEBAS" | "PRODUCCIÓN") => {
+      const codigo = nombre === "PRODUCCIÓN" ? "2" : "1"
+      const anterior = cfg?.ambiente === "PRODUCCIÓN" ? "2" : "1"
+      setCfg((p: any) => ({ ...p, ambiente: nombre, firma: { ...p.firma, ambiente: codigo } }))
+      publicarAmbiente(codigo)
+      const res = await fetch("/api/configuracion", {
+        method: "POST",
+        credentials: "same-origin",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ambiente: nombre }),
+      }).catch(() => null)
+      if (!res?.ok) {
+        const nombreAnterior = anterior === "2" ? "PRODUCCIÓN" : "PRUEBAS"
+        setCfg((p: any) => ({ ...p, ambiente: nombreAnterior, firma: { ...p.firma, ambiente: anterior } }))
+        publicarAmbiente(anterior)
+        alert("No se pudo cambiar el ambiente")
+      }
     }
 
     const handleGuardar = async () => {
@@ -897,7 +917,7 @@ base.sucursales = datosReales.sucursales || base.sucursales || [];
 
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       <div
-                        onClick={()=> setCfg((p:any)=>({...p, ambiente:'PRUEBAS', firma:{...p.firma, ambiente:'1'}}))}
+                        onClick={()=> elegirAmbiente("PRUEBAS")}
                         className={`rounded-xl p-4 border-2 cursor-pointer transition-all ${
                           (cfg?.ambiente||'PRUEBAS')==='PRUEBAS'
                            ? 'bg-[#0f172a] border-[#00f5d4] shadow-[0_0_20px_rgba(0,245,212,0.3)] scale-[1.02]'
@@ -910,7 +930,7 @@ base.sucursales = datosReales.sucursales || base.sucursales || [];
                       </div>
 
                       <div
-                        onClick={() => setCfg((p:any)=>({...p, ambiente:"PRODUCCIÓN", firma:{...p.firma, ambiente:"2"}}))}
+                        onClick={() => elegirAmbiente("PRODUCCIÓN")}
                         className={`rounded-xl p-4 border-2 cursor-pointer transition-all ${
                           cfg?.ambiente==='PRODUCCIÓN'
                            ? 'bg-[#0f172a] border-[#00ff5d] shadow-[0_0_20px_rgba(0,255,93,0.4)] scale-[1.02]'

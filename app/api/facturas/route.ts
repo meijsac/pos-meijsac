@@ -11,6 +11,7 @@ import { clasificarEstadoSri } from "@/lib/sri/estado-visible"
 import { elegirSecuencial, serieDeAmbiente } from "@/lib/sri/punto-emision"
 import { validarEntradaFactura } from "@/lib/factura-entrada"
 import { archivarComprobante } from "@/lib/security/storage"
+import { ambienteDeComprobante } from "@/lib/ambiente-datos"
 
 export const maxDuration = 60
 
@@ -216,6 +217,7 @@ export async function GET(req: Request) {
         unidad_plazo: f.unidadPlazo || p.unidad_plazo || "",
         cuotas: f.cuotas ?? p.cuotas ?? null,
         fecha_vencimiento: f.fechaVencimiento ? f.fechaVencimiento.toLocaleDateString("es-EC") : p.fecha_vencimiento || "",
+        envioSri: ambienteDeComprobante(p) === "2" ? "PRODUCCION" : "PRUEBAS",
       }
     }))
   } catch (e: any) {
