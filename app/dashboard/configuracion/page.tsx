@@ -169,7 +169,7 @@ export default function ConfiguracionAvanzadaSRI() {
     const [tab, setTab] = useState("IDENTIDAD");
     useEffect(() => {
         const pedido = new URLSearchParams(window.location.search).get("tab");
-        if (pedido === "DOCUMENTOS") setTab("DOCUMENTOS");
+        if (pedido === "DOCUMENTOS" || pedido === "SECUENCIALES") setTab(pedido);
     }, []);
     useEffect(() => {
         if (tab !== "AMBIENTE SRI" && tab !== "FIRMA") return;

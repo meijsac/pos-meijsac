@@ -1,165 +1,125 @@
-"use client";
-import { useRouter } from "next/navigation";
-import { useState, useEffect } from "react";
+"use client"
+import Link from "next/link"
+import { useEffect, useState } from "react"
 
-const CORPORATE = "#23AAB3" // tu color
+const EMITIR = [
+  { title: "Factura", desc: "Venta de productos y servicios", href: "/dashboard/factura-xml", principal: true },
+  { title: "Nota de Crédito", desc: "Devoluciones, descuentos y anulaciones", href: "/dashboard/nota-credito-xml" },
+  { title: "Nota de Débito", desc: "Intereses por mora y cargos adicionales", href: "/dashboard/nota-debito-xml" },
+  { title: "Guía de Remisión", desc: "Sustento de traslado y transporte de carga", href: "/dashboard/guia-remision-xml" },
+  { title: "Retención", desc: "Retenciones a proveedores", href: "/dashboard/retencion-xml" },
+  { title: "Liquidación de Compra", desc: "Compras a proveedores informales sin RUC", href: "/dashboard/liquidacion-xml" },
+]
 
-const COMPROBANTES = [
-  {
-    title:"FACTURA",
-    desc:"FACTURADOR XML - Principal",
-    href:"/dashboard/factura-xml",
-    primary: true,
-  },
-  {
-    title:"NOTA DE CRÉDITO",
-    desc:"Anulaciones y descuentos",
-    href:"/dashboard/nota-credito-xml",
-    primary: false,
-  },
-  {
-    title:"NOTA DE DÉBITO",
-    desc:"Intereses y cargos",
-    href:"/dashboard/nota-debito-xml",
-    primary: false,
-  },
-  {
-    title:"GUÍA DE REMISIÓN",
-    desc:"Transporte de mercadería",
-    href:"/dashboard/guia-remision-xml",
-    primary: false,
-  },
-  {
-    title:"RETENCIÓN",
-    desc:"Comprobante de retención 07",
-    href:"/dashboard/retencion-xml",
-    primary: false,
-  },
-  {
-    title:"LIQUIDACIÓN",
-    desc:"Compra de bienes/servicios",
-    href:"/dashboard/liquidacion-xml",
-    primary: false,
-  },
-  {
-    title:"COMPROBANTES EMITIDOS",
-    desc:"Emitidos",
-    href:"/dashboard/comprobantes/emitidos",
-    isBottom: true,
-  },
-  {
-    title:"COMPROBANTES RECIBIDOS",
-    desc:"Registro de Compras - ATS 2.0 / Base para Retención",
-    href:"/dashboard/compras-recibidas",
-    isBottom: true,
-    badge:"NUEVO ATS"
-  },
-  {
-    title:"COMPROBANTES AUTORIZADOS",
-    desc:"Enviados al SRI",
-    href:"/dashboard/comprobantes/autorizados",
-    isBottom: true,
-  },
-];
+function contar(clave: string) {
+  try { return JSON.parse(localStorage.getItem(clave) || "[]").length } catch { return 0 }
+}
 
-export default function ComprobantesPage(){
-  const router = useRouter();
-  const [counts, setCounts] = useState({emitidos:0, autorizados:0, recibidos:0});
-  const [mounted, setMounted] = useState(false);
+export default function ComprobantesPage() {
+  const [historial, setHistorial] = useState(0)
+  const [compras, setCompras] = useState(0)
+  const [ambiente, setAmbiente] = useState("")
+  const [firmaVigente, setFirmaVigente] = useState<boolean | null>(null)
 
-  useEffect(()=>{
-    setMounted(true)
-    try{
-      const emitidos = JSON.parse(localStorage.getItem("meijsac_facturas")||"[]").length + JSON.parse(localStorage.getItem("meijsac_retenciones")||"[]").length + JSON.parse(localStorage.getItem("meijsac_comprobantes_emitidos")||"[]").length + JSON.parse(localStorage.getItem("meijsac_documentos_emitidos")||"[]").length
-      const autorizados = JSON.parse(localStorage.getItem("meijsac_enviados_sri")||"[]").length + JSON.parse(localStorage.getItem("meijsac_autorizados")||"[]").length + JSON.parse(localStorage.getItem("meijsac_retenciones")||"[]").length
-      const recibidos = JSON.parse(localStorage.getItem("meijsac_compras_ats_v2")||"[]").length || JSON.parse(localStorage.getItem("meijsac_compras_ats")||"[]").length
-      setCounts({emitidos: emitidos || 15, autorizados: autorizados || 7, recibidos: recibidos || 167})
-    }catch{}
-  },[]);
+  useEffect(() => {
+    setHistorial(contar("meijsac_facturas") + contar("meijsac_retenciones") + contar("meijsac_comprobantes_emitidos") + contar("meijsac_documentos_emitidos"))
+    setCompras(contar("meijsac_compras_ats_v2") || contar("meijsac_compras_ats"))
+    fetch("/api/empresa/mia", { credentials: "same-origin" })
+      .then((r) => r.ok ? r.json() : null)
+      .then((data) => {
+        const empresa = data?.empresa
+        if (!empresa) return
+        const texto = String(empresa.ambiente || "").toUpperCase()
+        setAmbiente(texto === "2" || texto.includes("PROD") ? "PRODUCCION" : "PRUEBAS")
+        const vence = empresa.firmaExpira ? new Date(empresa.firmaExpira).getTime() : 0
+        setFirmaVigente(vence > Date.now())
+      })
+      .catch(() => {})
+  }, [])
+
+  const produccion = ambiente === "PRODUCCION"
 
   return (
-    <div className="min-h-screen bg-[#07090a] text-white p-6 md:p-10">
-      <style>{`
-        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@500;700;800;900&display=swap');
-        *{font-family:'Inter', sans-serif}
-        .card{transition: all .6s cubic-bezier(.16,1,.3,1)}
-        .card:hover{transform: translateY(-5px)}
-        .card:hover .line{width:100%}
-        .card:hover .arrow{transform: translateX(4px)}
-      `}</style>
+    <div className="min-h-screen bg-[#0B0F19] text-slate-200 p-6 md:p-10 font-sans">
+      <div className="max-w-6xl mx-auto space-y-8">
+        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 pb-6 border-b border-slate-800/70">
+          <div className="flex items-center gap-4">
+            <Link href="/dashboard" className="text-xs font-medium text-slate-400 hover:text-white bg-[#111827] border border-slate-800 px-4 py-2 rounded-xl transition">
+              ← Dashboard
+            </Link>
+            <div>
+              <h1 className="text-xl font-semibold text-white tracking-tight">
+                Comprobantes <span className="text-teal-400">Electrónicos</span>
+              </h1>
+              <p className="text-xs text-slate-400 mt-0.5">Gestión y emisión de documentos electrónicos autorizados</p>
+            </div>
+          </div>
 
-      <div className="flex justify-between items-center mb-10 max-w-[1400px] mx-auto">
-        <button onClick={()=>router.push("/dashboard")} className="bg-white text-black px-4 py-2 rounded-full text-[11px] font-bold tracking-wide">← Volver al Dashboard</button>
-        <button onClick={()=>router.push("/dashboard")} className="bg-white/5 border border-white/10 px-4 py-2 rounded-full text-[11px]">← Volver</button>
-      </div>
+          {ambiente && (
+            <div className="flex items-center gap-2.5 text-[11px]">
+              <span className={`px-3 py-1.5 rounded-xl border font-medium flex items-center gap-1.5 ${produccion ? "bg-teal-950/30 text-teal-400 border-teal-500/30" : "bg-amber-950/30 text-amber-300 border-amber-500/30"}`}>
+                <span className={`w-1.5 h-1.5 rounded-full ${produccion ? "bg-teal-400" : "bg-amber-400"}`} />
+                {produccion ? "Ambiente Producción" : "Modo Pruebas"}
+              </span>
+              <span className={`px-3 py-1.5 rounded-xl border font-medium ${firmaVigente ? "bg-[#111827] text-slate-300 border-slate-800" : "bg-rose-950/30 text-rose-400 border-rose-500/30"}`}>
+                {firmaVigente ? "Firma activa" : "Firma caducada"}
+              </span>
+            </div>
+          )}
+        </div>
 
-      <div className="max-w-[1400px] mx-auto">
-        <h1 className="font-[900] text-[26px] tracking-[-0.03em]">COMPROBANTES <span style={{color: CORPORATE}}>ELECTRÓNICOS</span></h1>
-        <p className="text-[10px] tracking-[0.2em] opacity-30 font-bold mt-1">SISTEMA PRIVADO - SRI ECUADOR v2 1.0 - ATS 2.0</p>
-
-        <div className="grid md:grid-cols-3 gap-[14px] mt-8">
-          {COMPROBANTES.map((c,i)=>{
-            const isPrimary = (c as any).primary
-            const isBottom = (c as any).isBottom
-            const countValue = c.title==="COMPROBANTES EMITIDOS" ? counts.emitidos : c.title==="COMPROBANTES AUTORIZADOS" ? counts.autorizados : counts.recibidos
-            
-            return (
-              <button
-                key={c.title}
-                onClick={()=>router.push(c.href)}
-                className={`card text-left relative rounded-[20px] p-[1px] overflow-hidden h-[110px] group w-full`}
-                style={{opacity: mounted?1:0, transform: mounted? 'translateY(0)':'translateY(16px)', transitionDelay: `${i*30}ms`}}
+        <div className="space-y-3">
+          <h2 className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider px-1">Emitir nuevo documento</h2>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            {EMITIR.map((item) => (
+              <Link
+                key={item.href}
+                href={item.href}
+                className={`group rounded-2xl p-6 min-h-[145px] flex flex-col justify-between transition-all duration-200 ${item.principal ? "bg-gradient-to-br from-teal-950/40 via-[#111827] to-[#111827] border border-teal-500/30 hover:border-teal-400/70 shadow-lg" : "bg-[#111827] border border-slate-800/80 hover:border-slate-700"}`}
               >
-                {/* borde */}
-                <div className="absolute inset-0 rounded-[20px]" style={{
-                  background: isPrimary 
-                  ? `linear-gradient(135deg, ${CORPORATE}, #0f4a4f)` 
-                  : isBottom
-                  ? `linear-gradient(135deg, ${CORPORATE}33, rgba(255,255,255,0.08))`
-                  : `linear-gradient(135deg, rgba(255,255,255,0.12), rgba(255,255,255,0.02))`
-                }} />
-                
-                <div className="relative h-full w-full rounded-[19px] p-6 flex flex-col justify-between"
-                  style={isPrimary 
-                    ? {background: `radial-gradient(120% 120% at 0% 0%, ${CORPORATE} 0%, #0f4a4f 100%)`} 
-                    : isBottom
-                    ? {background: '#0e1011'}
-                    : {background: '#121416'}
-                  }
-                >
-                  {/* linea superior animada */}
-                  <div className="absolute top-0 left-6 right-6 h-[2px] overflow-hidden rounded-full">
-                    <div className="line h-full w-8 rounded-full transition-all duration-700" style={{background: isPrimary ? 'white' : CORPORATE}} />
-                  </div>
-
-                  {/* badges */}
-                  {isPrimary && <span className="absolute top-3 right-3 bg-white text-black text-[8px] font-black px-2 py-1 rounded-full tracking-widest">PRINCIPAL</span>}
-                  {(c as any).badge && !isBottom && <span className="absolute top-3 right-3 text-black text-[8px] font-black px-2 py-1 rounded-full" style={{background: CORPORATE}}>{(c as any).badge}</span>}
-                  
-                  {/* contadores bottom con tu teal */}
-                  {isBottom && countValue>0 && (
-                    <span className="absolute top-3 right-3 text-black text-[8px] font-black px-2.5 py-1 rounded-full" style={{background: CORPORATE}}>
-                      {countValue} {c.title.includes("EMITIDOS") ? "DOCS" : c.title.includes("AUTORIZADOS") ? "SRI" : "COMPRAS"}
-                    </span>
-                  )}
-                  {c.title==="COMPROBANTES RECIBIDOS" && (c as any).badge && (
-                    <span className="absolute bottom-3 right-3 bg-white/10 border border-white/10 text-white text-[8px] font-black px-2 py-1 rounded-full">{(c as any).badge}</span>
-                  )}
-
+                <div className="flex justify-between items-start gap-3">
                   <div>
-                    <p className="font-[800] text-[12.5px] tracking-[-0.01em]">{c.title}</p>
-                    <p className={`text-[11px] mt-1 ${isPrimary ? 'opacity-80' : 'opacity-50'}`}>{c.desc}</p>
+                    <h3 className="text-base font-semibold text-white group-hover:text-teal-300 transition">{item.title}</h3>
+                    <p className="text-xs text-slate-400 mt-1">{item.desc}</p>
                   </div>
-                  <span className="arrow text-[12px] opacity-60 transition-transform">→</span>
-
-                  {/* glow sutil */}
-                  <div className="absolute -right-6 -bottom-6 w-20 h-20 rounded-full blur-[20px] opacity-0 group-hover:opacity-20 transition-opacity" style={{background: CORPORATE}} />
+                  {item.principal && <span className="text-[10px] font-semibold uppercase tracking-wider bg-teal-400/10 text-teal-400 border border-teal-400/20 px-2.5 py-1 rounded-lg">Principal</span>}
                 </div>
-              </button>
-            )
-          })}
+                <div className={`flex items-center pt-4 ${item.principal ? "justify-between mt-2 border-t border-slate-800/60" : "justify-end"}`}>
+                  {item.principal && <span className="text-[11px] text-teal-400/80 font-medium">Abrir punto de venta</span>}
+                  <span className="text-slate-500 group-hover:text-teal-400 text-sm transform group-hover:translate-x-1 transition-all">→</span>
+                </div>
+              </Link>
+            ))}
+          </div>
+        </div>
+
+        <div className="space-y-3 pt-2">
+          <h2 className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider px-1">Control y configuración</h2>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <Link href="/dashboard/comprobantes/emitidos" className="group bg-[#111827] border border-slate-800/80 hover:border-slate-700 rounded-2xl p-6 min-h-[145px] flex flex-col justify-between">
+              <div>
+                <h3 className="text-base font-semibold text-white group-hover:text-teal-300 transition">Historial de Comprobantes</h3>
+                <p className="text-xs text-slate-400 mt-1">{historial} documentos, con la bandeja de pendientes del SRI</p>
+              </div>
+              <div className="flex justify-end pt-4"><span className="text-slate-500 group-hover:text-teal-400 text-sm transform group-hover:translate-x-1 transition-all">→</span></div>
+            </Link>
+            <Link href="/dashboard/compras-recibidas" className="group bg-[#111827] border border-slate-800/80 hover:border-slate-700 rounded-2xl p-6 min-h-[145px] flex flex-col justify-between">
+              <div>
+                <h3 className="text-base font-semibold text-white group-hover:text-teal-300 transition">Compras recibidas</h3>
+                <p className="text-xs text-slate-400 mt-1">{compras} compras para el ATS y la retención</p>
+              </div>
+              <div className="flex justify-end pt-4"><span className="text-slate-500 group-hover:text-teal-400 text-sm transform group-hover:translate-x-1 transition-all">→</span></div>
+            </Link>
+            <Link href="/dashboard/configuracion?tab=SECUENCIALES" className="group bg-[#111827] border border-slate-800/80 hover:border-slate-700 rounded-2xl p-6 min-h-[145px] flex flex-col justify-between">
+              <div>
+                <h3 className="text-base font-semibold text-white group-hover:text-teal-300 transition">Puntos de emisión</h3>
+                <p className="text-xs text-slate-400 mt-1">Secuenciales 01, 03, 04, 05, 06 y 07</p>
+              </div>
+              <div className="flex justify-end pt-4"><span className="text-slate-500 group-hover:text-teal-400 text-sm transform group-hover:translate-x-1 transition-all">→</span></div>
+            </Link>
+          </div>
         </div>
       </div>
     </div>
-  );
+  )
 }
