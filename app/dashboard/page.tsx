@@ -283,7 +283,9 @@ export default function DashboardMeijsac(){
 )}
         <div className="flex flex-col lg:flex-row lg:justify-between lg:items-center gap-3 mb-4 max-w-[1600px] mx-auto">
           <div className="flex items-center gap-3">
-            <div className="w-12 h-12 rounded-xl grid place-items-center font-black text-lg" style={{background: CORPORATE}}>M</div>
+            <div className="w-12 h-12 rounded-full bg-gradient-to-br from-[#00f5d4] to-[#ff00a8] p-[2px] shadow-[0_0_20px_#00f5d4] shrink-0">
+              <img src="/colibri.png" alt="MEIJSAC" className="w-full h-full rounded-full bg-[#020d14] object-cover" />
+            </div>
             <h1 className="text-[22px] font-black">MEIJSAC</h1>
           </div>
           <div className="flex items-center gap-3 min-w-0">
