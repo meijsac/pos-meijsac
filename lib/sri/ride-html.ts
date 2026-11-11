@@ -284,3 +284,114 @@ export function htmlTicket(data: Parameters<typeof htmlRide>[0]) {
 </body>
 </html>`
 }
+
+type DestinoGuia = {
+  identificacion?: string
+  razon?: string
+  direccion?: string
+  motivo?: string
+  documento?: string
+  numero?: string
+  fecha?: string
+  productos?: Array<{ codigo?: string; descripcion?: string; cantidad?: number }>
+}
+
+function bloquesGuia(destinos: DestinoGuia[]) {
+  return (destinos || []).map((dest, indice) => {
+    const filas = (dest.productos || []).map((item) => `<tr>
+      <td style="padding:6px;font-family:monospace">${esc(item.codigo || "")}</td>
+      <td style="padding:6px">${esc(item.descripcion || "")}</td>
+      <td style="padding:6px;text-align:right;font-family:monospace">${Number(item.cantidad || 0).toFixed(2)}</td>
+    </tr>`).join("")
+    return `<section style="border:1px solid #e2e8f0;border-radius:8px;margin-bottom:16px;overflow:hidden">
+      <div style="background:#f8fafc;padding:10px 12px">
+        <p style="margin:0;font-weight:700">Destinatario ${indice + 1}: ${esc(dest.razon || "")}</p>
+        <p style="margin:4px 0 0">Identificación: <span style="font-family:monospace">${esc(dest.identificacion || "")}</span></p>
+        <p style="margin:2px 0 0">Dirección: ${esc(dest.direccion || "")}</p>
+        <p style="margin:2px 0 0">Motivo: ${esc(dest.motivo || "")}</p>
+        <p style="margin:2px 0 0">Sustento ${esc(dest.documento || "Factura")}: <span style="font-family:monospace">${esc(dest.numero || "")}</span> · ${esc(dest.fecha || "")}</p>
+      </div>
+      <table>
+        <thead><tr><th>Código</th><th>Descripción</th><th style="text-align:right">Cantidad</th></tr></thead>
+        <tbody>${filas}</tbody>
+      </table>
+    </section>`
+  }).join("")
+}
+
+export function htmlGuiaRemision(data: {
+  razonSocial: string
+  nombreComercial: string
+  ruc: string
+  dirMatriz: string
+  obligado: string
+  regimen: string
+  numero: string
+  claveAcceso: string
+  fechaAutorizacion: string
+  ambiente: string
+  fechaEmision: string
+  transportista: string
+  identificacionTransportista: string
+  placa: string
+  partida: string
+  inicio: string
+  fin: string
+  destinatarios: DestinoGuia[]
+  xmlUrl?: string
+}) {
+  const texto = String(data.regimen || "").toUpperCase()
+  const leyenda = texto.includes("POPULAR")
+    ? "CONTRIBUYENTE RÉGIMEN RIMPE: NEGOCIO POPULAR"
+    : (texto.includes("RIMPE") || texto.includes("EMPRENDEDOR") ? "CONTRIBUYENTE RÉGIMEN RIMPE: EMPRENDEDOR" : "")
+  const clave = String(data.claveAcceso || "").replace(/\D/g, "")
+  return `<!DOCTYPE html><html lang="es"><head><meta charset="UTF-8"><title>Guía ${esc(data.numero)}</title>
+  <style>body{background:#fff;color:#1e293b;font-family:Arial,sans-serif;padding:24px;max-width:900px;margin:0 auto;font-size:12px}table{width:100%;border-collapse:collapse}th{background:#f1f5f9;text-align:left;padding:6px;border-bottom:1px solid #e2e8f0}@media print{.no-print{display:none}}</style></head><body>
+  <div class="no-print" style="margin-bottom:12px;display:flex;gap:8px"><button onclick="window.print()" style="background:#0f766e;color:#042f2e;border:0;border-radius:8px;padding:10px 16px;font-weight:700">Imprimir</button>${data.xmlUrl ? `<a href="${esc(data.xmlUrl)}" style="background:#0f172a;color:#fff;border-radius:8px;padding:10px 16px;font-weight:700;text-decoration:none">Descargar XML</a>` : ""}</div>
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px">
+    <div><h1 style="font-size:14px;margin:0 0 6px">${esc(data.razonSocial)}</h1><p style="margin:0">${esc(data.nombreComercial)}</p><p style="margin:4px 0"><b>Dirección matriz:</b> ${esc(data.dirMatriz)}</p><p style="margin:0"><b>Obligado a llevar contabilidad:</b> ${esc(data.obligado || "NO")}</p>${leyenda ? `<p style="margin:0"><b>${esc(leyenda)}</b></p>` : ""}</div>
+    <div style="border:1px solid #cbd5e1;border-radius:8px;padding:12px;background:#f8fafc"><p style="margin:0"><b>R.U.C.:</b> ${esc(data.ruc)}</p><h2 style="color:#0f766e;margin:6px 0">GUÍA DE REMISIÓN</h2><p style="margin:0"><b>No.</b> <span style="font-family:monospace">${esc(data.numero)}</span></p><p style="margin:8px 0 0"><b>Autorización:</b></p><p style="font-family:monospace;word-break:break-all;margin:0">${esc(clave)}</p>${barrasCode128(clave)}<p style="margin:6px 0 0"><b>Fecha de autorización:</b> ${esc(data.fechaAutorizacion || "—")}</p><p style="margin:0"><b>Ambiente:</b> ${esc(data.ambiente)}</p><p style="margin:0"><b>Emisión:</b> ${esc(data.fechaEmision)}</p></div>
+  </div>
+  <div style="border:1px solid #e2e8f0;border-radius:8px;padding:12px;margin-bottom:16px"><p style="margin:0"><b>Transportista:</b> ${esc(data.transportista)} · ${esc(data.identificacionTransportista)}</p><p style="margin:4px 0 0"><b>Placa:</b> ${esc(data.placa)}</p><p style="margin:4px 0 0"><b>Partida:</b> ${esc(data.partida)}</p><p style="margin:4px 0 0"><b>Traslado:</b> ${esc(data.inicio)} al ${esc(data.fin)}</p></div>
+  ${bloquesGuia(data.destinatarios)}
+  <p style="margin:16px 0 0"><b>Proveedor del sistema:</b> MEIJSAC S.A.S. RUC 1793243789001</p>
+  </body></html>`
+}
+
+export function htmlGuiaTicket(data: {
+  razonSocial: string
+  nombreComercial: string
+  ruc: string
+  numero: string
+  claveAcceso: string
+  fechaAutorizacion: string
+  ambiente: string
+  transportista: string
+  placa: string
+  inicio: string
+  fin: string
+  destinatarios: DestinoGuia[]
+}) {
+  const clave = String(data.claveAcceso || "").replace(/\D/g, "")
+  const destinos = (data.destinatarios || []).map((dest) => {
+    const lineas = (dest.productos || []).map((item) => `<p style="margin:1px 0">${esc(item.descripcion || "")} · ${Number(item.cantidad || 0).toFixed(2)}</p>`).join("")
+    return `<p style="margin:6px 0 0;font-weight:700">${esc(dest.razon || "")}</p><p style="margin:0">${esc(dest.numero || "")}</p>${lineas}`
+  }).join("")
+  return `<!DOCTYPE html><html lang="es"><head><meta charset="UTF-8"><title>Guía ${esc(data.numero)}</title></head>
+  <body style="font-family:Arial,sans-serif;width:80mm;margin:0 auto;font-size:11px;color:#000">
+  <p style="text-align:center;font-weight:700;margin:0">${esc(data.nombreComercial || data.razonSocial)}</p>
+  <p style="text-align:center;margin:2px 0">${esc(data.razonSocial)}</p>
+  <p style="text-align:center;margin:2px 0">RUC ${esc(data.ruc)}</p>
+  <p style="text-align:center;font-weight:700;margin:6px 0">GUÍA DE REMISIÓN</p>
+  <p style="text-align:center;font-family:monospace;margin:0">${esc(data.numero)}</p>
+  <p style="margin:6px 0 0"><b>Transportista:</b> ${esc(data.transportista)}</p>
+  <p style="margin:0"><b>Placa:</b> ${esc(data.placa)}</p>
+  <p style="margin:0"><b>Traslado:</b> ${esc(data.inicio)} al ${esc(data.fin)}</p>
+  ${destinos}
+  <p style="margin:8px 0 0;font-weight:700">AMBIENTE: ${esc(data.ambiente)}</p>
+  ${barrasCode128(clave)}
+  <p style="font-size:8px;word-break:break-all">${esc(clave)}</p>
+  <p style="margin:0">Autorización: ${esc(data.fechaAutorizacion || "—")}</p>
+  <p style="text-align:center;font-size:9px">Proveedor del sistema: MEIJSAC S.A.S. RUC 1793243789001</p>
+  </body></html>`
+}

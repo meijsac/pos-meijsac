@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
 import { usuarioConEmpresaDesdeRequest } from "@/lib/empresa-sesion"
-import { htmlRide, htmlTicket } from "@/lib/sri/ride-html"
+import { htmlGuiaRemision, htmlGuiaTicket, htmlRide, htmlTicket } from "@/lib/sri/ride-html"
 
 export const dynamic = "force-dynamic"
 
@@ -44,10 +44,53 @@ export async function GET(req: Request, context: { params: Promise<{ clave: stri
     return new NextResponse(xmlAutorizado, {
       headers: {
         "Content-Type": "text/xml; charset=utf-8",
-        "Content-Disposition": `attachment; filename="factura-${clave}.xml"`,
+        "Content-Disposition": `attachment; filename="${String(p.tipoComprobante || p.codDoc || "") === "06" ? "guia" : "factura"}-${clave}.xml"`,
         "Cache-Control": "no-store",
       },
     })
+  }
+  if (String(p.tipoComprobante || p.codDoc || "") === "06") {
+    const destinos = (Array.isArray(p.destinatarios) ? p.destinatarios : []).map((dest: Record<string, any>) => ({
+      identificacion: dest.identificacionDestinatario,
+      razon: dest.razonSocialDestinatario,
+      direccion: dest.dirDestinatario,
+      motivo: dest.motivoTraslado,
+      documento: dest.codDocSustento === "04" ? "Nota de crédito" : dest.codDocSustento === "03" ? "Liquidación" : "Factura",
+      numero: dest.numDocSustento,
+      fecha: dest.fechaEmisionDocSustento,
+      productos: (Array.isArray(dest.productos) ? dest.productos : []).map((item: Record<string, any>) => ({
+        codigo: item.codigoInterno || item.codigo,
+        descripcion: item.descripcion,
+        cantidad: Number(item.cantidad ?? item.cantidadEnviar ?? 0),
+      })),
+    }))
+    const guia = {
+      razonSocial: emisor.razon || "",
+      nombreComercial: emisor.comercial || "",
+      ruc: emisor.ruc || "",
+      numero,
+      claveAcceso: clave,
+      fechaAutorizacion: autorizado ? fecha : "",
+      ambiente: clave[23] === "2" ? "PRODUCCIÓN" : "PRUEBAS",
+      transportista: p.transportista?.razon || "",
+      placa: p.transportista?.placa || "",
+      inicio: p.fechaIniTransporte || "",
+      fin: p.fechaFinTransporte || "",
+      destinatarios: destinos,
+    }
+    const cuerpo = pedido.searchParams.get("ticket") === "1"
+      ? htmlGuiaTicket(guia)
+      : htmlGuiaRemision({
+        ...guia,
+        dirMatriz: emisor.matriz || "",
+        obligado: emisor.obligado || "",
+        regimen: emisor.regimen || "",
+        fechaEmision: p.fechaEmisionFormato || "",
+        identificacionTransportista: p.transportista?.identificacion || "",
+        partida: p.dirPartida || "",
+        xmlUrl: `/dashboard/factura-xml/pdf/${clave}?xml=1`,
+      })
+    return new NextResponse(cuerpo, { headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store" } })
   }
   const html = htmlRide({
     razonSocial: emisor.razon || "",
