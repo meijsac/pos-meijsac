@@ -25,7 +25,7 @@ async function turnstileValido(token: string, ip: string) {
 }
 
 async function limpiarIntentos(ip: string, ruc: string) {
-  await prisma.loginIntento.deleteMany({ where: { ip, correo: ruc, canal: "LOGIN", exitoso: false } }).catch(() => {})
+  await prisma.loginIntento.deleteMany({ where: { ip, correo: ruc, exitoso: false } }).catch(() => {})
   const url = process.env.UPSTASH_REDIS_REST_URL || ""
   const token = process.env.UPSTASH_REDIS_REST_TOKEN || ""
   if (!url || !token) return
@@ -38,14 +38,21 @@ export async function POST(req: Request) {
   try {
     const body = await req.json().catch(() => ({}))
     if (String(body.empresa_web || "").trim()) return responder({ error: MENSAJE }, 401)
+    const canal = body.canal === "POS" ? "POS" : "LOGIN"
     const ruc = String(body.ruc || "").trim()
+    const usuarioCaja = String(body.usuario || "").trim()
     const password = String(body.password || "")
     const ip = ipDe(req)
     const ua = navegadorDe(req)
     const ahora = Date.now()
-    if (!ruc || !password || ruc.length !== 13) return responder({ error: "Ingresa RUC y contraseña" }, 400)
+    const identificador = canal === "POS" ? usuarioCaja : ruc
+    if (canal === "POS") {
+      if (!usuarioCaja || !password) return responder({ error: "Ingresa usuario y contraseña" }, 400)
+    } else if (!ruc || !password || ruc.length !== 13) {
+      return responder({ error: "Ingresa RUC y contraseña" }, 400)
+    }
 
-    const marca = ruc.slice(0, 80)
+    const marca = identificador.slice(0, 80)
     const bloqueo = await prisma.seguridadLog.findFirst({
       where: { accion: "LOGIN_BLOQUEO", ip, usuario: marca, fecha: { gte: new Date(ahora - 60 * 60 * 1000) } },
       orderBy: { fecha: "desc" },
@@ -59,7 +66,7 @@ export async function POST(req: Request) {
     }
 
     const fallos = await prisma.loginIntento.count({
-      where: { ip, correo: ruc, canal: "LOGIN", exitoso: false, fecha: { gte: new Date(ahora - VENTANA_MS) } },
+      where: { ip, correo: identificador, canal, exitoso: false, fecha: { gte: new Date(ahora - VENTANA_MS) } },
     }).catch(() => 0)
     if (fallos >= 5) {
       const previo = await prisma.seguridadLog.count({
@@ -74,25 +81,37 @@ export async function POST(req: Request) {
       return responder({ error: "Resuelve el captcha para entrar", requiereCaptcha: true }, 401)
     }
 
-    const usuarios = await prisma.usuario.findMany({ where: { empresa: { ruc } }, include: { empresa: true } })
+    const usuarios = canal === "POS"
+      ? await prisma.usuario.findMany({
+          where: {
+            OR: [
+              { nombre: { equals: usuarioCaja, mode: "insensitive" } },
+              { email: { equals: usuarioCaja, mode: "insensitive" } },
+            ],
+          },
+          include: { empresa: true },
+        })
+      : await prisma.usuario.findMany({ where: { empresa: { ruc } }, include: { empresa: true } })
+    const rolesCaja = new Set(["CAJERO", "VENDEDOR"])
     let usuario = null as (typeof usuarios)[number] | null
     for (const candidato of usuarios) {
+      if (canal === "POS" && !rolesCaja.has(String(candidato.rol || "").toUpperCase())) continue
       if (await bcrypt.compare(password, candidato.password)) usuario = candidato
     }
     if (!usuario?.empresa || !usuario.empresaId) {
-      prisma.loginIntento.create({ data: { correo: ruc, ip, exitoso: false, canal: "LOGIN" } }).catch(() => {})
+      prisma.loginIntento.create({ data: { correo: identificador, ip, exitoso: false, canal } }).catch(() => {})
       prisma.seguridadLog.create({ data: { ip, usuario: marca, accion: "LOGIN_FALLO", dispositivo: ua, detalle: "CREDENCIALES" } }).catch(() => {})
       const url = process.env.UPSTASH_REDIS_REST_URL || ""
       const token = process.env.UPSTASH_REDIS_REST_TOKEN || ""
       if (url && token) {
         const { Redis } = await import("@upstash/redis")
         const redis = new Redis({ url, token })
-        await redis.incr(`intentos:${ip}:${ruc}`).catch(() => {})
+        await redis.incr(`intentos:${ip}:${identificador}`).catch(() => {})
       }
       return responder({ error: MENSAJE, requiereCaptcha: fallos + 1 >= 3 }, 401)
     }
 
-    await limpiarIntentos(ip, ruc)
+    await limpiarIntentos(ip, identificador)
     prisma.seguridadLog.create({ data: { empresaId: usuario.empresaId, usuario: usuario.nombre, ip, accion: "LOGIN_OK", dispositivo: ua, detalle: ruc } }).catch(() => {})
     const sid = randomBytes(16).toString("hex")
     abrirSesion(sid)
@@ -108,11 +127,10 @@ export async function POST(req: Request) {
       })
     } catch { /* la cookie firmada igual entra; la siguiente visita recompone la fila */ }
     const empresa = empresaParaCliente(usuario.empresa, usuario)
-    const rol = String(usuario.rol || "").toUpperCase()
     return responder({
       usuario: { nombre: usuario.nombre, empresa: empresa.razonSocial, rol: usuario.rol, ruc: empresa.ruc, empresaId: usuario.empresaId },
       empresa,
-      destino: rol === "CAJERO" || rol === "VENDEDOR" ? "/dashboard/pos-ticket" : "/dashboard",
+      destino: canal === "POS" ? "/dashboard/factura-xml" : "/dashboard",
     }, 200, cookiesSesion(acceso, refresh, segundos))
   } catch (e: unknown) {
     const mensaje = e instanceof Error ? e.message : "No se pudo entrar"

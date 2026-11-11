@@ -7,7 +7,9 @@ import { Turnstile, type TurnstileHandle } from "@/components/auth/Turnstile"
 
 export function AuthCard({ dark, setDark, onOpenRegister }: { dark: boolean; setDark: (v: boolean) => void; onOpenRegister: () => void }) {
   const router = useRouter()
+  const [tab, setTab] = useState<"USUARIO" | "CAJA">("USUARIO")
   const [ruc, setRuc] = useState("")
+  const [usuarioCaja, setUsuarioCaja] = useState("")
   const [clave, setClave] = useState("")
   const [error, setError] = useState("")
   const [recordarme, setRecordarme] = useState(false)
@@ -46,11 +48,16 @@ export function AuthCard({ dark, setDark, onOpenRegister }: { dark: boolean; set
   async function enviar(e?: FormEvent) {
     e?.preventDefault()
     const rucValue = ruc.trim()
-    if (!rucValue || !clave) {
+    const caja = tab === "CAJA"
+    if (caja) {
+      if (!usuarioCaja.trim() || !clave) {
+        setError("Ingresa usuario y contraseña")
+        return
+      }
+    } else if (!rucValue || !clave) {
       setError("Ingresa RUC y contraseña")
       return
-    }
-    if (rucValue.length !== 13 || !/^[0-9]+$/.test(rucValue)) {
+    } else if (rucValue.length !== 13 || !/^[0-9]+$/.test(rucValue)) {
       setError("Ingresa el RUC de 13 dígitos y la contraseña")
       return
     }
@@ -62,7 +69,15 @@ export function AuthCard({ dark, setDark, onOpenRegister }: { dark: boolean; set
         method: "POST",
         headers: { "Content-Type": "application/json" },
         credentials: "same-origin",
-        body: JSON.stringify({ ruc: rucValue, password: clave, recordarme, captcha, empresa_web: trampa }),
+        body: JSON.stringify({
+          ruc: caja ? "" : rucValue,
+          usuario: caja ? usuarioCaja.trim() : "",
+          password: clave,
+          canal: caja ? "POS" : "LOGIN",
+          recordarme,
+          captcha,
+          empresa_web: trampa,
+        }),
       })
       const data = await res.json()
       if (data.requiereCaptcha) setPideCaptcha(true)
@@ -97,16 +112,29 @@ export function AuthCard({ dark, setDark, onOpenRegister }: { dark: boolean; set
         </button>
       </div>
 
+      <div className="flex bg-black/60 p-1 rounded-2xl mb-6">
+        <button type="button" onClick={() => setTab("USUARIO")} className={`flex-1 py-3 rounded-xl text-xs font-black transition ${tab === "USUARIO" ? "bg-[#00f5d4] text-black" : "text-white/40"}`}>
+          USUARIO
+        </button>
+        <button type="button" onClick={() => setTab("CAJA")} className={`flex-1 py-3 rounded-xl text-xs font-black transition ${tab === "CAJA" ? "bg-[#00f5d4] text-black" : "text-white/40"}`}>
+          CAJERO / VENDEDOR
+        </button>
+      </div>
+
       <form className="space-y-4" onSubmit={enviar}>
         <input name="empresa_web" value={trampa} onChange={(e) => setTrampa(e.target.value)} tabIndex={-1} autoComplete="off" aria-hidden="true" className="absolute -left-[9999px] h-0 w-0 opacity-0" />
         <div>
           <label className={`text-[10px] font-bold tracking-widest ${dark ? "text-white/60" : "text-black/60"}`}>
-            RUC / USUARIO EMPRESA (13 DÍGITOS)
+            {tab === "USUARIO" ? "RUC / USUARIO EMPRESA (13 DÍGITOS)" : "USUARIO DE CAJERO O VENDEDOR"}
           </label>
-          <input id="ruc" maxLength={13} value={ruc} onChange={(e) => setRuc(e.target.value)} className={`w-full mt-2 p-4 rounded-2xl border outline-none text-sm tracking-widest ${dark ? "bg-black/60 border-white/10 text-white focus:border-[#00f5d4]" : "bg-gray-100 border-black/10 text-black focus:border-[#00f5d4]"}`} />
+          {tab === "USUARIO" ? (
+            <input id="ruc" maxLength={13} value={ruc} onChange={(e) => setRuc(e.target.value)} className={`w-full mt-2 p-4 rounded-2xl border outline-none text-sm tracking-widest ${dark ? "bg-black/60 border-white/10 text-white focus:border-[#00f5d4]" : "bg-gray-100 border-black/10 text-black focus:border-[#00f5d4]"}`} />
+          ) : (
+            <input id="usuario" value={usuarioCaja} onChange={(e) => setUsuarioCaja(e.target.value)} className={`w-full mt-2 p-4 rounded-2xl border outline-none text-sm ${dark ? "bg-black/60 border-white/10 text-white focus:border-[#00f5d4]" : "bg-gray-100 border-black/10 text-black focus:border-[#00f5d4]"}`} />
+          )}
         </div>
         <div>
-          <label className={`text-[10px] font-bold tracking-widest ${dark ? "text-white/60" : "text-black/60"}`}>CONTRASEÑA PRINCIPAL</label>
+          <label className={`text-[10px] font-bold tracking-widest ${dark ? "text-white/60" : "text-black/60"}`}>{tab === "USUARIO" ? "CONTRASEÑA PRINCIPAL" : "CLAVE DEL CAJERO O VENDEDOR"}</label>
           <input id="clave" type="password" value={clave} onChange={(e) => setClave(e.target.value)} className={`w-full mt-2 p-4 rounded-2xl border outline-none text-sm ${dark ? "bg-black/60 border-white/10 text-white focus:border-[#ff00a8]" : "bg-gray-100 border-black/10 text-black focus:border-[#ff00a8]"}`} />
         </div>
         {pideCaptcha && (
