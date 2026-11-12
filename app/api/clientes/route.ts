@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { usuarioConEmpresaDesdeRequest } from "@/lib/empresa-sesion";
 
 export async function POST(req: NextRequest) {
   try {
@@ -64,6 +65,46 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: `Ya existe un cliente con esa identificación en esta empresa` }, { status: 400 });
     }
     return NextResponse.json({ error: "Error al guardar en DB: " + error.message }, { status: 500 });
+  }
+}
+
+export async function PUT(req: NextRequest) {
+  try {
+    const sesion = await usuarioConEmpresaDesdeRequest(req);
+    if ("error" in sesion) return NextResponse.json({ error: sesion.error }, { status: sesion.status });
+    const body = await req.json();
+    const id = String(body?.id || "");
+    const identificacion = String(body?.identificacion || "").trim();
+    const razonSocial = String(body?.razonSocial || "").trim();
+    if (!id) return NextResponse.json({ error: "Falta el cliente" }, { status: 400 });
+    if (!identificacion || !razonSocial) return NextResponse.json({ error: "Falta identificación o razón social" }, { status: 400 });
+    const existe = await prisma.cliente.findFirst({ where: { id, empresaId: sesion.empresa.id } });
+    if (!existe) return NextResponse.json({ error: "No encontré este cliente" }, { status: 404 });
+    const cliente = await prisma.cliente.update({
+      where: { id },
+      data: {
+        tipoId: String(body.tipoId || "05"),
+        identificacion,
+        razonSocial,
+        nombreComercial: String(body.nombreComercial || "").trim() || null,
+        tipoCliente: String(body.tipoCliente || "DETALLISTA"),
+        email: String(body.email || "").trim() || null,
+        telefono: String(body.telefono || "").trim() || null,
+        direccion: String(body.direccion || "").trim() || null,
+        provincia: String(body.provincia || "PICHINCHA"),
+        ciudad: String(body.ciudad || "QUITO"),
+        diasCredito: Number(body.diasCredito) || 0,
+        limiteCredito: Number(body.limiteCredito) || 0,
+        categoria: String(body.categoria || "DETALLISTA"),
+        descuento: Number(body.descuento) || 0,
+      },
+    });
+    return NextResponse.json({ success: true, cliente });
+  } catch (error: any) {
+    if (error.code === "P2002") {
+      return NextResponse.json({ error: "Ya existe un cliente con esa identificación en esta empresa" }, { status: 400 });
+    }
+    return NextResponse.json({ error: "Error al guardar en DB: " + (error.message || "No se pudo actualizar") }, { status: 500 });
   }
 }
 
