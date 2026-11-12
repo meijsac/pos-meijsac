@@ -323,22 +323,25 @@ export default function FacturadorXMLReal(){
       if (vivo) setProductos(lista)
       try {
         const clientes = await fetch("/api/clientes").then((r) => r.json())
-        const cf = Array.isArray(clientes) ? clientes.find((c: any) => String(c.identificacion) === "9999999999999") : null
+        const cf = Array.isArray(clientes) ? clientes.find((c: any) => String(c.identificacion || "").replace(/\D/g, "") === "9999999999999") : null
         if (vivo && cf) {
-          setCliente((prev: any) => ({
-            ...prev,
-            tipoDoc: "07",
-            identificacion: "9999999999999",
-            razon: cf.razonSocial,
-            direccion: cf.direccion || "QUITO",
-            email: cf.email || "",
-            telefono: cf.telefono || "",
-            celular: cf.telefono || "",
-            provincia: cf.provincia || "",
-            ciudad: cf.ciudad || "",
-            tipoCliente: cf.tipoCliente || "",
-            regimen: cf.regimen || "",
-          }))
+          setCliente((prev: any) => {
+            if (String(prev.identificacion || "").replace(/\D/g, "") !== "9999999999999") return prev
+            return {
+              ...prev,
+              tipoDoc: "07",
+              identificacion: "9999999999999",
+              razon: cf.razonSocial || "CONSUMIDOR FINAL",
+              direccion: cf.direccion || "QUITO",
+              email: cf.email || "",
+              telefono: cf.telefono || "",
+              celular: cf.telefono || "",
+              provincia: cf.provincia || "Pichincha",
+              ciudad: cf.ciudad || "Quito",
+              tipoCliente: cf.tipoCliente || "",
+              regimen: cf.regimen || "",
+            }
+          })
         }
       } catch {}
     }
@@ -1083,58 +1086,64 @@ const total = subtotalSin + iva15 + ivaDiferenciado + valorICE + valorIRBPNR + p
     }
   }
       const buscarEnClientesDB = async () => {
-    if (!cliente.identificacion) return alert("Pon RUC/Cédula");
+    const idTexto = String(cliente.identificacion || "").trim()
+    const nombreTexto = String(cliente.razon || "").trim()
+    const idDigitos = idTexto.replace(/\D/g, "")
+    const nombreBusqueda = nombreTexto.toUpperCase() === "CONSUMIDOR FINAL" ? "" : nombreTexto
+    const idBusqueda = idDigitos === "9999999999999" ? "" : idDigitos
+    const nombreEnCaja = !idBusqueda && idTexto && idDigitos !== idTexto ? idTexto : ""
+    const consultaNombre = (nombreBusqueda || nombreEnCaja).toLowerCase()
+    if (!idBusqueda && !consultaNombre) return alert("Pon cédula, RUC o nombre")
     const empresaId = localStorage.getItem("empresaId") || localStorage.getItem("empresa_id") || "meijsac-default";
+    const volverConsumidor = (f: any) => ({
+      ...f,
+      tipoDoc: "07",
+      identificacion: "9999999999999",
+      razon: "CONSUMIDOR FINAL",
+      direccion: "QUITO",
+      provincia: "Pichincha",
+      ciudad: "Quito",
+      email: "",
+      telefono: "",
+      celular: "",
+      tipoCliente: "",
+      regimen: "",
+    })
     try {
-      const rucLimpio = cliente.identificacion.trim().replace(/\D/g, ""); // solo números
-      const ruc10 = rucLimpio.substring(0, 10); // cédula sin 001
+      const res = await fetch(`/api/clientes?empresaId=${empresaId}&q=${encodeURIComponent(idBusqueda || consultaNombre)}`)
+      const data = await res.json()
+      const lista = Array.isArray(data) ? data : []
+      const c = lista.find((x: any) => {
+        const id = String(x.identificacion || "").replace(/\D/g, "")
+        if (!id || id === "9999999999999") return false
+        const razon = String(x.razonSocial || "").toLowerCase()
+        const porNombre = consultaNombre ? razon.includes(consultaNombre) : false
+        const porId = idBusqueda ? (id === idBusqueda || (idBusqueda.length === 10 && id === `${idBusqueda}001`) || (idBusqueda.length === 13 && id === idBusqueda.slice(0, 10))) : false
+        if (consultaNombre && idBusqueda) return porNombre && porId
+        return porNombre || porId
+      })
 
-      let res = await fetch(`/api/clientes?empresaId=${empresaId}&q=${rucLimpio}`);
-      let data = await res.json();
-      
-      // Si no encuentra con 13 dígitos, prueba con 10
-      if (!Array.isArray(data) || data.length === 0) {
-        console.log("No con 13, probando con 10:", ruc10);
-        res = await fetch(`/api/clientes?empresaId=${empresaId}&q=${ruc10}`);
-        data = await res.json();
+      if (!c) {
+        setCliente(volverConsumidor)
+        return
       }
-
-      console.log("Clientes encontrados:", data);
-
-      if (Array.isArray(data) && data.length > 0) {
-        // Búsqueda flexible, no exacta
-        const c = data.find((x:any) => 
-          x.identificacion?.includes(rucLimpio) || 
-          rucLimpio.includes(x.identificacion) ||
-          x.identificacion?.includes(ruc10)
-        ) || data[0];
-
-        const idCliente = String(c.identificacion || "").replace(/\D/g, "")
-        const tipoCliente = idCliente === "9999999999999" || /^9{13,}$/.test(idCliente) ? "07" : idCliente.length === 13 ? "04" : idCliente.length === 10 ? "05" : (c.tipoId || "06")
-        setCliente((f:any) => ({
-          ...f,
-          tipoDoc: tipoCliente,
-          identificacion: tipoCliente === "07" ? "9999999999999" : idCliente,
-          razon: tipoCliente === "07" ? "CONSUMIDOR FINAL" : c.razonSocial,
-          direccion: c.direccion || (String(c.identificacion) === "9999999999999" ? "QUITO" : ""),
-          provincia: c.provincia || "",
-          ciudad: c.ciudad || "",
-          email: c.email || "",
-          telefono: c.telefono || "",
-          celular: c.telefono || "",
-          tipoCliente: c.tipoCliente || "",
-          regimen: c.regimen || "",
-        }));
-
-        // NUEVO - Carga sucursales de ese cliente
-        if(c.id) {
-          console.log("Cargando sucursales para:", c.id);
-          await cargarSucursalesFactura(c.id);
-        }
-      } else {
-        alert("No está en DB, buscando en SRI...");
-        manejarConsultaSRIExpress();
-      }
+      const idCliente = String(c.identificacion || "").replace(/\D/g, "")
+      const tipoCliente = idCliente.length === 13 ? "04" : idCliente.length === 10 ? "05" : (c.tipoId || "06")
+      setCliente((f:any) => ({
+        ...f,
+        tipoDoc: tipoCliente,
+        identificacion: idCliente,
+        razon: c.razonSocial || "",
+        direccion: c.direccion || "",
+        provincia: c.provincia || "",
+        ciudad: c.ciudad || "",
+        email: c.email || "",
+        telefono: c.telefono || "",
+        celular: c.telefono || "",
+        tipoCliente: c.tipoCliente || "",
+        regimen: c.regimen || "",
+      }))
+      if (c.id) await cargarSucursalesFactura(c.id)
     } catch (e) {
       console.error(e);
       alert("Error DB");
@@ -1147,7 +1156,11 @@ const total = subtotalSin + iva15 + ivaDiferenciado + valorICE + valorIRBPNR + p
     {/* PEGALO AQUÍ ARRIBA DE TODO */}
     <div className="max-w-7xl mx-auto flex gap-2 mb-4 print:hidden">
       <a href="/dashboard/restaurante" className="bg-[#1e293b] border border-white/10 px-4 py-2 rounded-full text-[11px] font-bold">← Volver a Restaurante</a>
-      <a href="/dashboard" className="bg-white text-black px-4 py-2 rounded-full text-[11px] font-black">← MEIJSAC POS</a><button onClick={toggleTema} className="bg-white text-black px-3 py-2 rounded-full text-[10px] font-black ml-auto">{isDark?"☀️ CLARO":"🌙 OSCURO"}</button>
+      <a href="/dashboard" className="bg-white text-black px-4 py-2 rounded-full text-[11px] font-black">← MEIJSAC POS</a>
+      <a href="/dashboard/comprobantes/emitidos" className="bg-[#1e293b] border border-white/10 px-4 py-2 rounded-full text-[11px] font-bold">Historial</a>
+      <a href="/dashboard/productos" className="bg-[#1e293b] border border-white/10 px-4 py-2 rounded-full text-[11px] font-bold">Inventario</a>
+      <a href="/dashboard/clientes" className="bg-[#1e293b] border border-white/10 px-4 py-2 rounded-full text-[11px] font-bold">Clientes</a>
+      <button onClick={toggleTema} className="bg-white text-black px-3 py-2 rounded-full text-[10px] font-black ml-auto">{isDark?"☀️ CLARO":"🌙 OSCURO"}</button>
     </div>
 
     {/* TU CÓDIGO ORIGINAL SIGUE ABAJO */}
@@ -1196,7 +1209,7 @@ const total = subtotalSin + iva15 + ivaDiferenciado + valorICE + valorIRBPNR + p
     const digitos = identificacion.replace(/\D/g, "")
     const tipoDoc = digitos === "9999999999999" || /^9{13,}$/.test(digitos) ? "07" : digitos.length === 13 ? "04" : digitos.length === 10 ? "05" : cliente.tipoDoc
     setCliente({ ...cliente, identificacion, tipoDoc, razon: tipoDoc === "07" ? "CONSUMIDOR FINAL" : cliente.razon })
-  }} placeholder="RUC o cédula" className="flex-1 min-w-0 bg-transparent py-2 text-white text-[11px] outline-none" />
+  }} placeholder="Cédula, RUC o nombre" className="flex-1 min-w-0 bg-transparent py-2 text-white text-[11px] outline-none" />
   <button
     type="button"
     disabled={buscandoSRI}
