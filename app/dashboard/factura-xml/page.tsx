@@ -750,6 +750,18 @@ const total = subtotalSin + iva15 + ivaDiferenciado + valorICE + valorIRBPNR + p
     if (!Number.isFinite(n)) console.error("Pago NaN", campo, texto)
     setPagos((prev: any) => ({ ...prev, [campo]: Number.isFinite(n) && n > 0 ? n : 0 }))
   }
+  const alimentarFormaCobro = () => {
+    let tarjeta = plata(abonos.tarjeta)
+    let transfer = plata(abonos.transfer)
+    if (tipoCobro === "tarjeta" && tarjeta <= 0) tarjeta = plata(total)
+    if (tipoCobro === "transfer" && transfer <= 0) transfer = plata(total)
+    if (tipoCobro === "efectivo" && tarjeta <= 0 && transfer <= 0) {
+      tarjeta = 0
+      transfer = 0
+    }
+    if (tipoCobro === "tarjeta") setTarjetaData((d) => ({ ...d, tipoSRI: "19" }))
+    setPagos((prev: any) => ({ ...prev, tarjeta, redBancaria: transfer, debito: 0 }))
+  }
   const totalPagado = pagosReales.efectivo + sumaOtrosPagos
   const vuelto = totalPagado - total
   const saldoPendiente = total - totalPagado
@@ -1740,6 +1752,7 @@ const total = subtotalSin + iva15 + ivaDiferenciado + valorICE + valorIRBPNR + p
               <button type="button" disabled={bloqueoConsumidorFinal} onClick={()=>{
                 if (bloqueoConsumidorFinal) return
                 const cambio = diff
+                alimentarFormaCobro()
                 setPagoRealizado(true); setCajaAbierta(false)
               }} className="bg-[#00f5d4] text-black p-4 rounded-xl font-black text-[11px] shadow-[0_0_20px_rgba(0,245,212,0.6)] disabled:opacity-40">
                 ✓ ENTREGAR VUELTO ${diff.toFixed(2)}
@@ -1749,6 +1762,7 @@ const total = subtotalSin + iva15 + ivaDiferenciado + valorICE + valorIRBPNR + p
           return (
             <button type="button" disabled={bloqueoConsumidorFinal} onClick={()=>{
               if (bloqueoConsumidorFinal) return
+              alimentarFormaCobro()
               setPagoRealizado(true); setCajaAbierta(false)
             }} className="bg-[#00f5d4] text-black p-4 rounded-xl font-black disabled:opacity-40">
               ✓ CONFIRMAR PAGO MIXTO
