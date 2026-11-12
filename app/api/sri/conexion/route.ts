@@ -13,6 +13,7 @@ export async function GET(req: Request) {
     : {}
   const ambiente = ambienteSri(extra.ambiente || extra.ambienteCodigo)
   const firma = await prisma.firmaElectronica.findUnique({ where: { empresaId: sesion.empresa.id } })
+  const certificado = await prisma.certificadoSri.findUnique({ where: { empresaId: sesion.empresa.id }, select: { claveCifrada: true } })
   const obligado = String(extra.obligadoConta || extra.obligado || "").trim().toUpperCase()
   const faltantes: string[] = []
   if (!firma) faltantes.push("Falta el archivo .p12")
@@ -30,7 +31,7 @@ export async function GET(req: Request) {
     firmaCargada: Boolean(firma),
     firmaNombre: firma?.nombre || "",
     firmaExpira: firma?.expira || sesion.empresa.firmaExpira,
-    claveGuardada: false,
+    claveGuardada: Boolean(certificado?.claveCifrada),
     faltantes,
   })
 }

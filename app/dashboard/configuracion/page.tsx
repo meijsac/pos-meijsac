@@ -6,6 +6,22 @@ import { publicarAmbiente } from "@/components/SelloAmbiente";
 import { errorLogo } from "@/lib/logo-empresa";
 import DocumentosLegales from "./documentos-legales";
 
+function recordarFirmaLocal(firma: { nombre?: string; expira?: string }) {
+  try {
+    const prev = JSON.parse(localStorage.getItem("meijsac_config_pro") || "{}")
+    const base = prev && typeof prev === "object" ? prev : {}
+    const actual = base.firma && typeof base.firma === "object" ? base.firma : {}
+    base.firma = {
+      ...actual,
+      nombre: firma.nombre || actual.nombre || "firma.p12",
+      expira: firma.expira || actual.expira || "",
+      clave: "",
+      enServidor: true,
+    }
+    localStorage.setItem("meijsac_config_pro", JSON.stringify(base))
+  } catch {}
+}
+
 const SRI_URLS = {
     "1": { nombre: "PRUEBAS", url: "https://celcer.sri.gob.ec/comprobantes-electronicos-ws/RecepcionComprobantesOffline?wsdl", auth: "https://celcer.sri.gob.ec/comprobantes-electronicos-ws/AutorizacionComprobantesOffline?wsdl" },
     "2": { nombre: "PRODUCCION", url: "https://cel.sri.gob.ec/comprobantes-electronicos-ws/RecepcionComprobantesOffline?wsdl", auth: "https://cel.sri.gob.ec/comprobantes-electronicos-ws/AutorizacionComprobantesOffline?wsdl" }
@@ -168,9 +184,11 @@ export default function ConfiguracionAvanzadaSRI() {
         if (tab !== "AMBIENTE SRI" && tab !== "FIRMA") return;
         let vivo = true;
         if (tab === "FIRMA") {
-          fetch("/api/sri/clave-firma").then(r => r.json()).then(data => {
+          fetch("/api/sri/clave-firma", { credentials: "same-origin" }).then(r => r.json()).then(data => {
             if (!vivo || !data?.guardada) return
-            setCfg((p: any) => ({ ...p, firma: { ...p?.firma, clave: "" } }))
+            const firma = { nombre: data.nombre || "firma.p12", expira: data.expira || "", clave: "", enServidor: true }
+            setCfg((p: any) => ({ ...p, firma: { ...p?.firma, ...firma } }))
+            recordarFirmaLocal(firma)
           }).catch(() => {});
           return () => { vivo = false };
         }
@@ -213,7 +231,9 @@ export default function ConfiguracionAvanzadaSRI() {
 
   if(data.ok){
     // CLAVE CORRECTA: SÍ se guarda
-    setCfg((prev:any)=>({...prev, firma:{...prev.firma, clave: prev.firma?.clave || "", archivo: file, nombre: file.name, expira: data.fechaExpiracion, diasRestantes: data.diasRestantes, rucDetectado: data.rucEnFirma, guardada: data.guardada}}));
+    const firma = { clave: "", archivo: null, nombre: file.name, expira: data.fechaExpiracion, diasRestantes: data.diasRestantes, rucDetectado: data.rucEnFirma, guardada: true, enServidor: true }
+    setCfg((prev:any)=>({...prev, firma:{...prev.firma, ...firma}}));
+    recordarFirmaLocal(firma)
   } else {
     // CLAVE INCORRECTA: NO SE GUARDA NADA
     alert("❌ Clave incorrecta. La firma NO se guardó.");
@@ -309,15 +329,37 @@ export default function ConfiguracionAvanzadaSRI() {
           if (!guardada.ok) throw new Error(dataClave.error || "No se pudo guardar la contraseña de la firma");
         }
 
+        const cuerpo = {
+          ruc: payload.ruc,
+          razonSocial: payload.razonSocial,
+          nombreComercial: payload.nombreComercial,
+          dirMatriz: payload.dirMatriz,
+          direccion: payload.direccion,
+          dirEstablecimiento: payload.dirEstablecimiento,
+          telefono: payload.telefono,
+          email: payload.email,
+          ambiente: payload.ambiente,
+          regimen: payload.regimen,
+          obligadoConta: payload.obligadoConta,
+          sucursales: payload.sucursales,
+          logo_url: payload.logo_url,
+          logoUrl: payload.logoUrl,
+          provincia: payload.provincia,
+          ciudad: payload.ciudad,
+          actividad: payload.actividad,
+          modo_negocio: payload.modo_negocio,
+        }
         const res = await fetch("/api/configuracion", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(payload),
+          body: JSON.stringify(cuerpo),
         });
 
         if (!res.ok) throw new Error(`Error ${res.status}`);
         try { localStorage.setItem("meijsac_config_pro", JSON.stringify({ ...payload, logoPreview: undefined })) } catch {}
-        const empresa = await cargarEmpresaSesion()
+        const empresaPendiente = cargarEmpresaSesion()
+        if (!logoGuardado) alert("Configuración guardada")
+        const empresa = await empresaPendiente
         const logo = empresa.logo_url || empresa.logoUrl || empresa.marca_ride || payload.logo_url || ""
         setCfg((p: any) => ({ ...p, ...payload, firma: { ...p?.firma, ...payload.firma, clave: claveFirma || p?.firma?.clave || "" }, logoFile: null, logo_url: logo, logoUrl: logo, marca_ride: logo, logoPreview: logo || p?.logoPreview || "" }))
         setAvisoLogo(logoGuardado ? "Logotipo guardado correctamente" : "")
@@ -427,6 +469,14 @@ base.sucursales = datosReales.sucursales || base.sucursales || [];
           base.marca_ride = logoGuardado;
           base.logoPreview = logoGuardado;
         }
+        try {
+          const firmaRes = await fetch("/api/sri/clave-firma", { credentials: "same-origin" })
+          const firmaData = firmaRes.ok ? await firmaRes.json() : null
+          if (firmaData?.guardada) {
+            base.firma = { ...(base.firma || {}), nombre: firmaData.nombre || base.firma?.nombre || "firma.p12", expira: firmaData.expira || base.firma?.expira || "", clave: "", enServidor: true }
+            recordarFirmaLocal(base.firma)
+          }
+        } catch {}
         setCfg(base);
         setLogs(JSON.parse(localStorage.getItem("meijsac_logs") || "[]"));
       })()
@@ -613,7 +663,10 @@ base.sucursales = datosReales.sucursales || base.sucursales || [];
                       <p className="text-[9px] text-white/40 mb-3">Arrastra tu.p12 aquí o selecciona</p>
                       <input type="file" accept=".p12" onChange={(e:any)=>{ const f=e.target.files?.[0]; if(f){ if(!f.name.toLowerCase().endsWith('.p12')){ alert('Solo se permite archivo.p12'); return; } setCfg((p:any)=>({...p, firma:{...p?.firma, nombre:f.name}})); handleFirmaChange(e); } }} className="mt-3 text-xs mx-auto block text-white" />
                       {cfg?.firma?.nombre && <p className="mt-3 text-[11px] text-[#00f5d4]">Archivo cargado: {cfg.firma.nombre}</p>}
-                      {!infoFirma && cfg?.firma?.nombre && (
+                      {cfg?.firma?.enServidor && (
+                        <p className="mt-2 text-[12px] font-bold text-green-400">Firma guardada en la empresa. Queda lista en cualquier computador, navegador o red.</p>
+                      )}
+                      {!infoFirma && cfg?.firma?.nombre && !cfg?.firma?.enServidor && (
                         <p className="mt-2 text-[12px] font-bold text-green-400">Firma cargada. Guarda para dejar el .p12 y la clave cifrados.</p>
                       )}
                     </div>
@@ -946,7 +999,7 @@ base.sucursales = datosReales.sucursales || base.sucursales || [];
                     <div className="bg-black border border-white/10 rounded-xl p-3 text-[10px] space-y-1 break-all">
                       <p className="text-white font-bold">Recepción: {SRI_URLS[((cfg?.ambiente==='PRODUCCIÓN' || cfg?.firma?.ambiente==='2') ? '2' : '1')].url}</p>
                       <p className="text-white font-bold">Autorización: {SRI_URLS[((cfg?.ambiente==='PRODUCCIÓN' || cfg?.firma?.ambiente==='2') ? '2' : '1')].auth}</p>
-                      {sriConexion?.faltantes?.length ? <p className="text-red-400">{sriConexion.faltantes.join(". ")}</p> : sriConexion ? <p className="text-[#00f5d4]">Datos del emisor y certificado listos. La contraseña no está guardada: se pide al firmar.</p> : null}
+                      {sriConexion?.faltantes?.length ? <p className="text-red-400">{sriConexion.faltantes.join(". ")}</p> : sriConexion ? <p className="text-[#00f5d4]">{sriConexion.claveGuardada ? "Certificado y clave guardados en la empresa. Se usan desde cualquier computador." : "Datos del emisor listos. Falta guardar la clave de la firma."}</p> : null}
                     </div>
                   </div>
                 )}
@@ -961,7 +1014,7 @@ base.sucursales = datosReales.sucursales || base.sucursales || [];
                        : 'bg-[#00f5d4] text-black shadow-[0_0_15px_rgba(0,245,212,0.3)] hover:bg-[#00f5d4]/90'
                     }`}
                   >
-                    {cfg?.ambiente==='PRODUCCIÓN'? '✓ GUARDAR EN PRODUCCIÓN REAL' : '✓ GUARDAR PRUEBAS'}
+                    {guardando ? "Guardando..." : cfg?.ambiente==='PRODUCCIÓN'? '✓ GUARDAR EN PRODUCCIÓN REAL' : '✓ GUARDAR PRUEBAS'}
                   </button>
                 </div>
             </div>

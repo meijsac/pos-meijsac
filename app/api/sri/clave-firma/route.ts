@@ -9,8 +9,16 @@ export const dynamic = "force-dynamic"
 export async function GET(req: Request) {
   const sesion = await usuarioConEmpresaDesdeRequest(req)
   if ("error" in sesion) return NextResponse.json({ error: sesion.error }, { status: sesion.status })
-  const firma = await prisma.certificadoSri.findUnique({ where: { empresaId: sesion.empresa.id }, select: { empresaId: true } })
-  return NextResponse.json({ guardada: Boolean(firma), clave: "" })
+  const firma = await prisma.certificadoSri.findUnique({
+    where: { empresaId: sesion.empresa.id },
+    select: { nombre: true, expira: true, claveCifrada: true },
+  })
+  return NextResponse.json({
+    guardada: Boolean(firma?.claveCifrada),
+    nombre: firma?.nombre || "",
+    expira: firma?.expira ? firma.expira.toISOString() : "",
+    clave: "",
+  })
 }
 
 export async function POST(req: Request) {

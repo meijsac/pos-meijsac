@@ -159,11 +159,18 @@ export default function DashboardMeijsac(){
     setMounted(true)
     const savedBg = localStorage.getItem('meijsac_bg')
     if(savedBg){ try{ setBg(JSON.parse(savedBg)) }catch{} }
-    const firmaGuardada = localStorage.getItem('meijsac_firma') || localStorage.getItem('meijsac_config_pro')
-    const cfgPro = firmaGuardada ? JSON.parse(firmaGuardada) : null
-    if(localStorage.getItem('meijsac_firma') || cfgPro?.firma?.nombre){
+    let cfgPro: any = null
+    try {
+      const firmaGuardada = localStorage.getItem('meijsac_firma') || localStorage.getItem('meijsac_config_pro')
+      cfgPro = firmaGuardada ? JSON.parse(firmaGuardada) : null
+    } catch { cfgPro = null }
+    if(localStorage.getItem('meijsac_firma') || cfgPro?.firma?.nombre || cfgPro?.firma?.enServidor){
       setFirmaSubida(true)
     }
+    void fetch("/api/sri/clave-firma", { credentials: "same-origin" })
+      .then((r) => r.ok ? r.json() : null)
+      .then((firma) => { if (firma?.guardada) setFirmaSubida(true) })
+      .catch(() => {})
 
     try {
       const local = JSON.parse(localStorage.getItem("meijsac_empresa") || "{}")
