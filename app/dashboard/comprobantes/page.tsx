@@ -71,6 +71,10 @@ export default function ComprobantesPage() {
               <span className="text-slate-400 group-hover:text-teal-400 transition">←</span>
               Dashboard
             </Link>
+            <Link href="/dashboard/factura-xml" className="group text-xs font-medium text-slate-300 hover:text-white bg-[#111827] hover:bg-slate-800 border border-slate-800 px-4 py-2.5 rounded-xl transition flex items-center gap-2 shadow-sm">
+              <span className="text-teal-400"><Icono d={DOC} className="w-4 h-4" /></span>
+              Facturador
+            </Link>
             <div>
               <h1 className="text-xl font-bold text-white tracking-tight">
                 Comprobantes <span className="text-teal-400">Electrónicos</span>

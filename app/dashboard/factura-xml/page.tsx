@@ -1172,6 +1172,7 @@ const total = subtotalSin + iva15 + ivaDiferenciado + valorICE + valorIRBPNR + p
       <a href="/dashboard/comprobantes/emitidos" className="bg-[#1e293b] border border-white/10 px-4 py-2 rounded-full text-[11px] font-bold">Historial</a>
       <a href="/dashboard/productos" className="bg-[#1e293b] border border-white/10 px-4 py-2 rounded-full text-[11px] font-bold">Inventario</a>
       <a href="/dashboard/clientes" className="bg-[#1e293b] border border-white/10 px-4 py-2 rounded-full text-[11px] font-bold">Clientes</a>
+      <a href="/dashboard/comprobantes" className="bg-[#1e293b] border border-white/10 px-4 py-2 rounded-full text-[11px] font-bold">Comprobantes</a>
       <button onClick={toggleTema} className="bg-white text-black px-3 py-2 rounded-full text-[10px] font-black ml-auto">{isDark?"☀️ CLARO":"🌙 OSCURO"}</button>
     </div>
 
