@@ -55,21 +55,28 @@ export function evaluarSuscripcion(e: EmpresaPlan, now = new Date()) {
   let limiteComprobantes = PRUEBA_COMPROBANTES
   let planNombre = "PLAN DE PRUEBA"
   let modulos: string[] | null = null
+  const planVigente = tienePlan && e.planEstado === "ACTIVO" && !vencio
 
-  if (manual || (tienePlan && vencio) || (!tienePlan && pruebaVencida)) {
+  if (planVigente) {
+    estado = "ACTIVO"
+    vence = e.planFin
+    limiteComprobantes = limite
+    planNombre = e.plan!.nombre
+    modulos = String(e.plan!.modulos || "").split(",").map((m) => m.trim()).filter(Boolean)
+  } else if (manual || (tienePlan && vencio) || (!tienePlan && pruebaVencida)) {
     estado = "BLOQUEADO"
     vence = tienePlan ? e.planFin : trialEnd
     if (e.plan) {
       planNombre = e.plan.nombre
       limiteComprobantes = limite
-      modulos = e.plan.modulos.split(",").map((m) => m.trim()).filter(Boolean)
+      modulos = String(e.plan.modulos || "").split(",").map((m) => m.trim()).filter(Boolean)
     }
   } else if (tienePlan && e.planEstado === "ACTIVO" && now.getTime() >= e.planInicio!.getTime()) {
     estado = "ACTIVO"
     vence = e.planFin
     limiteComprobantes = limite
     planNombre = e.plan!.nombre
-    modulos = e.plan!.modulos.split(",").map((m) => m.trim()).filter(Boolean)
+    modulos = String(e.plan!.modulos || "").split(",").map((m) => m.trim()).filter(Boolean)
   } else if (pruebaVigente || !pruebaVencida) {
     estado = "PRUEBA"
     vence = trialEnd

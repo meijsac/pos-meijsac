@@ -188,7 +188,7 @@ export default function DashboardMeijsac(){
         const ctrl = new AbortController()
         const timer = setTimeout(() => ctrl.abort(), 8000)
         try {
-          const res = await fetch(`/api/empresa/estado?ruc=${encodeURIComponent(e.ruc)}`, { signal: ctrl.signal })
+          const res = await fetch(`/api/empresa/estado?ruc=${encodeURIComponent(e.ruc)}`, { signal: ctrl.signal, cache: "no-store", credentials: "same-origin" })
           const data = res.ok ? await res.json() : null
           if (!cancel && data) {
             setAccesoPlan(data)
@@ -256,7 +256,7 @@ export default function DashboardMeijsac(){
     if (dias <= 30) return { clase: "text-amber-300", texto: `POR VENCER - Faltan ${dias} días` }
     return { clase: "inline-block mt-1 text-teal-200 bg-teal-400/15 border border-teal-400/30 rounded-full px-2 py-0.5", texto: `AL DÍA - Vence en ${dias} días` }
   }
-  const estaBloqueado = accesoPlan ? accesoPlan.estado === "BLOQUEADO" : miSuscripcion?.estado === "BLOQUEADO"
+  const estaBloqueado = accesoPlan?.planEstado === "ACTIVO" ? false : accesoPlan ? accesoPlan.estado === "BLOQUEADO" : miSuscripcion?.estado === "BLOQUEADO"
   const estaPorVencer = accesoPlan ? false : miSuscripcion?.estado === "POR VENCER"
 
   return (

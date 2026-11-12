@@ -173,7 +173,7 @@ export default function AdminModuladorCompleto() {
       setAviso(data.error || "No se pudo actualizar el cliente")
       return
     }
-    setAviso("Cliente actualizado. Al recargar el dashboard sale del bloqueo si el plan quedó activo.")
+    setAviso("Plan cargado. El cliente queda activo y puede entrar al sistema.")
     await cargar()
   }
 

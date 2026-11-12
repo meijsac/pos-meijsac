@@ -1,9 +1,10 @@
 export async function emisionBloqueada(ruc: string) {
   if (!ruc) return null
   try {
-    const res = await fetch(`/api/empresa/estado?ruc=${encodeURIComponent(ruc)}`)
+    const res = await fetch(`/api/empresa/estado?ruc=${encodeURIComponent(ruc)}`, { cache: "no-store", credentials: "same-origin" })
     if (!res.ok) return null
     const data = await res.json()
+    if (data.planEstado === "ACTIVO") return null
     if (data.estado === "BLOQUEADO") return data.mensaje || "Plan bloqueado"
     return null
   } catch {
