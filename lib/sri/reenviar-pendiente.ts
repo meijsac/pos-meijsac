@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/prisma"
 import { ambienteDeEmpresa } from "@/lib/sri/ambiente"
+import { facturaPorClave } from "@/lib/sri/buscar-comprobante"
 import { enviarAlSri } from "@/lib/sri/cliente-sri"
 import { guardarRespuestaSri } from "@/lib/sri/guardar-respuesta"
 
@@ -8,12 +9,7 @@ export async function reenviarClaveSri(empresaId: string, claveEntrada: string) 
   if (!empresaId || clave.length !== 49) return { ok: false as const, status: 400, error: "Falta la clave de acceso" }
   const empresa = await prisma.empresa.findUnique({ where: { id: empresaId } })
   if (!empresa) return { ok: false as const, status: 404, error: "No encontré la empresa" }
-  const filas = await prisma.facturaEmitida.findMany({
-    where: { empresaId },
-    orderBy: { createdAt: "desc" },
-    take: 80,
-  })
-  const factura = filas.find((fila) => String((fila.payload as { claveAcceso?: string } | null)?.claveAcceso || "").replace(/\D/g, "") === clave)
+  const factura = await facturaPorClave(empresaId, clave)
   if (!factura) return { ok: false as const, status: 404, error: "No encontré la factura" }
   const body = (factura.payload || {}) as Record<string, any>
   if (String(body.fechaAutorizacion || "").trim() && String(factura.sriStatus || factura.estado) === "AUTORIZADO") {

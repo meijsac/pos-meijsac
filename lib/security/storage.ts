@@ -48,10 +48,34 @@ export async function descargarFirmaCifrada(ruta: string) {
   return descargarPrivado(FIRMA, ruta)
 }
 
-export async function archivarComprobante(empresaId: string, clave: string, xmlFirmado: string, respuesta: unknown) {
+export async function archivarComprobante(
+  empresaId: string,
+  clave: string,
+  xmlFirmado: string,
+  respuesta: unknown,
+  archivos?: { pdf?: Buffer; html?: string; conservarHasta?: string },
+) {
   const limpia = String(clave || "").replace(/\D/g, "")
-  if (limpia.length !== 49 || !xmlFirmado) return
+  if (limpia.length !== 49 || !xmlFirmado) throw new Error("El comprobante no tiene clave o XML para archivar")
   const base = `${empresaId}/${limpia}`
+  const meta = {
+    ...(respuesta && typeof respuesta === "object" ? respuesta as Record<string, unknown> : { respuesta }),
+    conservarHasta: archivos?.conservarHasta || "",
+    ridePdf: Boolean(archivos?.pdf?.length),
+    rideHtml: Boolean(archivos?.html),
+  }
   await subirPrivado(COMPROBANTES, `${base}.xml`, Buffer.from(xmlFirmado, "utf8"), "application/xml")
-  await subirPrivado(COMPROBANTES, `${base}.json`, Buffer.from(JSON.stringify(respuesta ?? {}), "utf8"), "application/json")
+  await subirPrivado(COMPROBANTES, `${base}.json`, Buffer.from(JSON.stringify(meta), "utf8"), "application/json")
+  if (archivos?.pdf?.length) await subirPrivado(COMPROBANTES, `${base}.pdf`, archivos.pdf, "application/pdf")
+  if (archivos?.html) await subirPrivado(COMPROBANTES, `${base}.html`, Buffer.from(archivos.html, "utf8"), "text/html")
+}
+
+export async function leerComprobanteArchivado(empresaId: string, clave: string, ext: "xml" | "pdf" | "html" | "json") {
+  const limpia = String(clave || "").replace(/\D/g, "")
+  if (!empresaId || limpia.length !== 49) return null
+  try {
+    return await descargarPrivado(COMPROBANTES, `${empresaId}/${limpia}.${ext}`)
+  } catch {
+    return null
+  }
 }

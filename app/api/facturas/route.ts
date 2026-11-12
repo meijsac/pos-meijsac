@@ -4,13 +4,14 @@ import { usuarioConEmpresaDesdeRequest } from "@/lib/empresa-sesion"
 import { accesoEmpresa, ipDe, navegadorDe, puede, sanitizarTexto } from "@/lib/seguridad"
 import { anotarFacturaCaja } from "@/lib/login-memoria"
 import { FaltanDatosSri, armarXmlFactura } from "@/lib/sri/xml-factura"
+import { validarEsquemaSri } from "@/lib/sri/validar-xsd"
+import { guardarRespaldo } from "@/lib/sri/respaldo"
 import { firmarXmlEmpresa } from "@/lib/sri/firmar"
 import { ambienteDeEmpresa } from "@/lib/sri/ambiente"
 import { enviarComprobante } from "@/lib/sri/soap"
 import { clasificarEstadoSri } from "@/lib/sri/estado-visible"
 import { elegirSecuencial, serieDeAmbiente } from "@/lib/sri/punto-emision"
 import { validarEntradaFactura } from "@/lib/factura-entrada"
-import { archivarComprobante } from "@/lib/security/storage"
 import { ambienteDeComprobante } from "@/lib/ambiente-datos"
 
 export const maxDuration = 60
@@ -58,6 +59,8 @@ export async function POST(req: Request) {
       if (e instanceof FaltanDatosSri) return NextResponse.json({ error: e.message, faltantes: e.faltantes }, { status: 400 })
       throw e
     }
+    const esquema = validarEsquemaSri(armado.xml)
+    if (esquema) return NextResponse.json({ error: esquema }, { status: 400 })
     const ambiente = ambienteDeEmpresa(sesion.empresa)
     let xml = armado.xml
     let firmado = false
@@ -125,7 +128,10 @@ export async function POST(req: Request) {
     body.mensajesSri = resultado.mensajes
     body.numeroAutorizacion = fechaSri ? (resultado.numeroAutorizacion || "") : ""
     body.fechaAutorizacion = fechaSri
-    archivarComprobante(sesion.empresa.id, armado.claveAcceso, xml, { estado: estadoGuardado, fechaAutorizacion: fechaSri, numeroAutorizacion: body.numeroAutorizacion || "" }).catch(() => {})
+    const respaldo = await guardarRespaldo(sesion.empresa.id, armado.claveAcceso, xml, { estado: estadoGuardado, fechaAutorizacion: fechaSri, numeroAutorizacion: body.numeroAutorizacion || "" }, body)
+    body.respaldoOk = respaldo.respaldoOk
+    body.respaldoError = respaldo.respaldoError
+    body.conservarHasta = respaldo.conservarHasta
     body.estadoRecepcion = resultado.estadoRecepcion || ""
     body.mensajeRecepcion = resultado.mensajeRecepcion || ""
     body.fechaRecepcion = resultado.fechaRecepcion || ""
@@ -162,6 +168,9 @@ export async function POST(req: Request) {
       status: resultado.estado === "DEVUELTA" || resultado.estadoRecepcion === "DEVUELTA" ? "DEVUELTA" : estadoGuardado,
       sriRecepcion: resultado.recepcionSri || null,
       sriAutorizacion: resultado.autorizacionSri || null,
+      respaldoOk: respaldo.respaldoOk,
+      respaldoError: respaldo.respaldoError,
+      conservarHasta: respaldo.conservarHasta,
     })
   } catch (e: any) {
     const code = String(e?.cause?.code || e?.code || e?.codigo || "")

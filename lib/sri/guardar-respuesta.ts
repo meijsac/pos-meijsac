@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/prisma"
 import { clasificarEstadoSri } from "@/lib/sri/estado-visible"
-import { archivarComprobante } from "@/lib/security/storage"
+import { guardarRespaldo } from "@/lib/sri/respaldo"
+import type { ResultadoConexion } from "@/lib/sri/cliente-sri"
 
 export function sriStatusDe(estado: string, fecha: string) {
   if (estado === "BORRADOR") return "BORRADOR"
@@ -44,14 +45,21 @@ export async function guardarRespuestaSri(facturaId: string, body: any, real: Re
     data: { estado: estadoGuardado, sriStatus, payload: body },
   })
   const dueña = await prisma.facturaEmitida.findUnique({ where: { id: facturaId }, select: { empresaId: true } })
-  if (dueña?.empresaId) {
-    archivarComprobante(dueña.empresaId, String(body.claveAcceso || ""), String(body.xmlContent || ""), {
+  const respaldo = dueña?.empresaId
+    ? await guardarRespaldo(dueña.empresaId, String(body.claveAcceso || ""), String(body.xmlContent || ""), {
       estado: estadoGuardado,
       fechaAutorizacion: fechaSri,
       numeroAutorizacion: body.numeroAutorizacion || "",
       mensajes: resultado.mensajes,
-    }).catch(() => {})
-  }
+    }, body)
+    : { respaldoOk: false, respaldoError: "No se pudo guardar el XML y el RIDE. El comprobante sigue en el sistema, pero el archivo no quedó en el depósito.", conservarHasta: "" }
+  body.respaldoOk = respaldo.respaldoOk
+  body.respaldoError = respaldo.respaldoError
+  body.conservarHasta = respaldo.conservarHasta
+  await prisma.facturaEmitida.update({
+    where: { id: facturaId },
+    data: { payload: body },
+  }).catch(() => {})
   return {
     estado: estadoGuardado,
     sriStatus,
@@ -65,5 +73,8 @@ export async function guardarRespuestaSri(facturaId: string, body: any, real: Re
     status: resultado.statusSri === "ERROR_SRI" || resultado.statusSri === "DEVUELTA" ? resultado.statusSri : (resultado.estado === "DEVUELTA" || resultado.estadoRecepcion === "DEVUELTA" ? "DEVUELTA" : estadoGuardado),
     sriRecepcion: resultado.recepcionSri || null,
     sriAutorizacion: resultado.autorizacionSri || null,
+    respaldoOk: respaldo.respaldoOk,
+    respaldoError: respaldo.respaldoError,
+    conservarHasta: respaldo.conservarHasta,
   }
 }

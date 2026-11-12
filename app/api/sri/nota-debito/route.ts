@@ -7,7 +7,8 @@ import { enviarAlSri } from "@/lib/sri/cliente-sri"
 import { firmarXmlEmpresa } from "@/lib/sri/firmar"
 import { sanitizarTextoXml as xml } from "@/lib/sri/sanitizar"
 import { ipDe } from "@/lib/seguridad"
-import { archivarComprobante } from "@/lib/security/storage"
+import { validarEsquemaSri } from "@/lib/sri/validar-xsd"
+import { guardarRespaldo } from "@/lib/sri/respaldo"
 
 export function obtenerFechaEcuador(): string {
   const ahora = new Date()
@@ -102,6 +103,8 @@ export async function POST(req: Request) {
     ${motivos.map((m: { razon?: string; valor?: number }) => `<motivo><razon>${xml(m.razon)}</razon><valor>${Number(m.valor).toFixed(2)}</valor></motivo>`).join("")}
   </motivos>
 </notaDebito>`
+    const esquema = validarEsquemaSri(xmlSinFirmar)
+    if (esquema) return NextResponse.json({ autorizado: false, mensaje: esquema }, { status: 400 })
     let firmado = ""
     try {
       firmado = await firmarXmlEmpresa(sesion.empresa.id, xmlSinFirmar)
@@ -112,13 +115,24 @@ export async function POST(req: Request) {
     const urls = SRI_AMBIENTES[ambiente]
     const real = await enviarAlSri({ xmlFirmado: firmado, claveAcceso, ambiente, recepcionUrl: urls.recepcion, autorizacionUrl: urls.autorizacion })
     const fechaSri = String(real.fechaAutorizacion || "").trim()
-    archivarComprobante(sesion.empresa.id, claveAcceso, firmado, real).catch(() => {})
+    const respaldo = await guardarRespaldo(sesion.empresa.id, claveAcceso, firmado, real, {
+      claveAcceso,
+      fechaAutorizacion: fechaSri,
+      establecimiento: `${estab || "001"}-${pto || "001"}`,
+      secuencial,
+      fechaEmisionFormato: fecha,
+      configEmisor: { razon: sesion.empresa.razonSocial, ruc },
+      cliente: { razon: body.cliente, identificacion: id },
+      items: motivos.map((m: { razon?: string; valor?: number }) => ({ descripcion: m.razon, total: Number(m.valor) })),
+      totales: { total },
+    })
     prisma.seguridadLog.create({ data: { empresaId: sesion.empresa.id, usuario: sesion.usuario.nombre, ip: ipDe(req), accion: fechaSri ? "NOTA_DEBITO_AUTORIZADA" : "NOTA_DEBITO_PENDIENTE", detalle: claveAcceso } }).catch(() => {})
     return NextResponse.json({
       autorizado: Boolean(fechaSri),
       fechaAutorizacion: fechaSri,
       claveAcceso,
-      mensaje: fechaSri ? "Nota de débito autorizada por el SRI." : (real.mensajes.filter(Boolean).join(" ") || real.error || "El SRI no devolvió fecha de autorización."),
+      mensaje: `${fechaSri ? "Nota de débito autorizada por el SRI." : (real.mensajes.filter(Boolean).join(" ") || real.error || "El SRI no devolvió fecha de autorización.")}${respaldo.respaldoOk ? "" : ` ${respaldo.respaldoError}`}`,
+      respaldoOk: respaldo.respaldoOk,
     })
   } catch (error: unknown) {
     const mensaje = error instanceof Error ? error.message : "No se pudo enviar la nota de débito."

@@ -1,7 +1,10 @@
 import { NextResponse } from "next/server"
-import { prisma } from "@/lib/prisma"
 import { usuarioConEmpresaDesdeRequest } from "@/lib/empresa-sesion"
 import { htmlGuiaRemision, htmlGuiaTicket, htmlRide, htmlTicket } from "@/lib/sri/ride-html"
+import { facturaPorClave } from "@/lib/sri/buscar-comprobante"
+import { pdfRide } from "@/lib/sri/ride-archivo"
+import { leerComprobanteArchivado } from "@/lib/security/storage"
+import { guardarRespaldo } from "@/lib/sri/respaldo"
 
 export const dynamic = "force-dynamic"
 
@@ -16,20 +19,17 @@ export async function GET(req: Request, context: { params: Promise<{ clave: stri
   if (clave.length !== 49) return pagina("Comprobante", "La clave de acceso no tiene 49 dígitos.", 400)
   const sesion = await usuarioConEmpresaDesdeRequest(req)
   if ("error" in sesion) return pagina("Sesión", "Vuelve a entrar para ver el comprobante.", 401)
-  const filas = await prisma.facturaEmitida.findMany({
-    where: { empresaId: sesion.empresa.id },
-    orderBy: { createdAt: "desc" },
-    take: 300,
-    select: { payload: true, estado: true },
-  })
-  const fila = filas.find((f) => String((f.payload as { claveAcceso?: string } | null)?.claveAcceso || "").replace(/\D/g, "") === clave)
-  if (!fila) return pagina("Comprobante", "No encontré esta factura.", 404)
-  const p = (fila.payload || {}) as Record<string, any>
+  const fila = await facturaPorClave(sesion.empresa.id, clave)
+  const xmlGuardado = await leerComprobanteArchivado(sesion.empresa.id, clave, "xml")
+  const htmlGuardado = await leerComprobanteArchivado(sesion.empresa.id, clave, "html")
+  const pdfGuardado = await leerComprobanteArchivado(sesion.empresa.id, clave, "pdf")
+  if (!fila && !xmlGuardado && !htmlGuardado && !pdfGuardado) return pagina("Comprobante", "No encontré esta factura.", 404)
+  const p = ((fila?.payload || {}) as Record<string, any>)
   const emisor = p.configEmisor || {}
   const cliente = p.cliente || {}
   const t = p.totales || {}
   const fecha = String(p.fechaAutorizacion || "").trim()
-  const autorizado = String(fila.estado || p.estadoSRI || "").toUpperCase() === "AUTORIZADO" && fecha.length > 0
+  const autorizado = String(fila?.estado || p.estadoSRI || "").toUpperCase() === "AUTORIZADO" && fecha.length > 0
   const numero = [p.establecimiento, p.secuencial].filter(Boolean).join("-")
   const xmlAutorizado = (() => {
     const aut = p.sriAutorizacion?.RespuestaAutorizacionComprobante?.autorizaciones?.autorizacion
@@ -40,14 +40,32 @@ export async function GET(req: Request, context: { params: Promise<{ clave: stri
   const vuelto = Number(p.pagos?.vuelto || p.vuelto || 0)
   const recibido = Number(p.pagos?.efectivoRecibido || p.efectivoRecibido || p.pagos?.entregado || 0)
   if (pedido.searchParams.get("xml") === "1") {
-    if (!xmlAutorizado) return pagina("XML", "Esta factura no tiene XML.", 404)
-    return new NextResponse(xmlAutorizado, {
+    const cuerpo = xmlAutorizado || xmlGuardado?.toString("utf8") || ""
+    if (!cuerpo) return pagina("XML", "Esta factura no tiene XML.", 404)
+    return new NextResponse(cuerpo, {
       headers: {
         "Content-Type": "text/xml; charset=utf-8",
         "Content-Disposition": `attachment; filename="${String(p.tipoComprobante || p.codDoc || "") === "06" ? "guia" : "factura"}-${clave}.xml"`,
         "Cache-Control": "no-store",
       },
     })
+  }
+  if (pedido.searchParams.get("pdf") === "1") {
+    const archivo = pdfGuardado || (fila ? pdfRide(p, fecha) : null)
+    if (!archivo) return pagina("RIDE", "Este comprobante no tiene el PDF guardado.", 404)
+    return new NextResponse(new Uint8Array(archivo), {
+      headers: {
+        "Content-Type": "application/pdf",
+        "Content-Disposition": `attachment; filename="ride-${clave}.pdf"`,
+        "Cache-Control": "no-store",
+      },
+    })
+  }
+  if (autorizado && !htmlGuardado && (xmlAutorizado || p.xmlContent)) {
+    void guardarRespaldo(sesion.empresa.id, clave, xmlAutorizado || String(p.xmlContent || ""), { estado: "AUTORIZADO", fechaAutorizacion: fecha }, p)
+  }
+  if (pedido.searchParams.get("ticket") !== "1" && htmlGuardado) {
+    return new NextResponse(htmlGuardado.toString("utf8"), { headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store" } })
   }
   if (String(p.tipoComprobante || p.codDoc || "") === "06") {
     const destinos = (Array.isArray(p.destinatarios) ? p.destinatarios : []).map((dest: Record<string, any>) => ({

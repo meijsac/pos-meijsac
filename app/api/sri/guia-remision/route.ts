@@ -7,7 +7,8 @@ import { enviarAlSri } from "@/lib/sri/cliente-sri"
 import { firmarXmlEmpresa } from "@/lib/sri/firmar"
 import { sanitizarTextoXml as xml } from "@/lib/sri/sanitizar"
 import { ipDe } from "@/lib/seguridad"
-import { archivarComprobante } from "@/lib/security/storage"
+import { validarEsquemaSri } from "@/lib/sri/validar-xsd"
+import { guardarRespaldo } from "@/lib/sri/respaldo"
 import { puntoActivoFactura } from "@/lib/sri/punto-emision"
 
 function obtenerFechaEcuador() {
@@ -298,11 +299,13 @@ export async function POST(req: Request) {
       <numAutDocSustento>${dest.numAutDocSustento}</numAutDocSustento>
       <fechaEmisionDocSustento>${dest.fechaEmisionDocSustento}</fechaEmisionDocSustento>
       <detalles>
-        ${dest.productos.map((prod) => `<detalle><codigoInterno>${xml(prod.codigoInterno)}</codigoInterno><descripcion>${xml(prod.descripcion)}</descripcion><cantidad>${prod.cantidad.toFixed(2)}</cantidad></detalle>`).join("")}
+        ${dest.productos.map((prod: { codigoInterno: string; descripcion: string; cantidad: number }) => `<detalle><codigoInterno>${xml(prod.codigoInterno)}</codigoInterno><descripcion>${xml(prod.descripcion)}</descripcion><cantidad>${prod.cantidad.toFixed(2)}</cantidad></detalle>`).join("")}
       </detalles>
     </destinatario>`).join("")}
   </destinatarios>
 </guiaRemision>`
+    const esquema = validarEsquemaSri(xmlSinFirmar)
+    if (esquema) return NextResponse.json({ autorizado: false, mensaje: esquema }, { status: 400 })
     let firmado = ""
     try {
       firmado = await firmarXmlEmpresa(sesion.empresa.id, xmlSinFirmar)
@@ -313,39 +316,40 @@ export async function POST(req: Request) {
     const urls = SRI_AMBIENTES[ambiente]
     const real = await enviarAlSri({ xmlFirmado: firmado, claveAcceso, ambiente, recepcionUrl: urls.recepcion, autorizacionUrl: urls.autorizacion })
     const fechaSri = String(real.fechaAutorizacion || "").trim()
-    archivarComprobante(sesion.empresa.id, claveAcceso, firmado, real).catch(() => {})
+    const payload = {
+      tipoComprobante: "06",
+      codDoc: "06",
+      claveAcceso,
+      establecimiento: `${estab}-${pto}`,
+      secuencial,
+      fechaEmisionFormato: fechaHoy,
+      fechaIniTransporte: inicio,
+      fechaFinTransporte: fin,
+      dirPartida: partida,
+      transportista: { razon: transportista, tipoId, identificacion: idTransporte, placa },
+      destinatarios: limpios,
+      configEmisor: {
+        razon: sesion.empresa.razonSocial,
+        comercial: sesion.empresa.nombreComercial || sesion.empresa.nombre || "",
+        ruc,
+        matriz: direccion,
+        sucursal,
+        obligado,
+        regimen: String(extra.regimen || ""),
+        ambiente: ambiente === "2" ? "PRODUCCIÓN" : "PRUEBAS",
+      },
+      xmlContent: firmado,
+      fechaAutorizacion: fechaSri,
+      estadoSRI: fechaSri ? "AUTORIZADO" : "PENDIENTE",
+      sriAutorizacion: real.autorizacion,
+    }
+    const respaldo = await guardarRespaldo(sesion.empresa.id, claveAcceso, firmado, real, payload)
     await prisma.facturaEmitida.create({
       data: {
         empresaId: sesion.empresa.id,
         estado: fechaSri ? "AUTORIZADO" : "PENDIENTE",
         sriStatus: fechaSri ? "AUTORIZADO" : "PENDIENTE",
-        payload: {
-          tipoComprobante: "06",
-          codDoc: "06",
-          claveAcceso,
-          establecimiento: `${estab}-${pto}`,
-          secuencial,
-          fechaEmisionFormato: fechaHoy,
-          fechaIniTransporte: inicio,
-          fechaFinTransporte: fin,
-          dirPartida: partida,
-          transportista: { razon: transportista, tipoId, identificacion: idTransporte, placa },
-          destinatarios: limpios,
-          configEmisor: {
-            razon: sesion.empresa.razonSocial,
-            comercial: sesion.empresa.nombreComercial || sesion.empresa.nombre || "",
-            ruc,
-            matriz: direccion,
-            sucursal,
-            obligado,
-            regimen: String(extra.regimen || ""),
-            ambiente: ambiente === "2" ? "PRODUCCIÓN" : "PRUEBAS",
-          },
-          xmlContent: firmado,
-          fechaAutorizacion: fechaSri,
-          estadoSRI: fechaSri ? "AUTORIZADO" : "PENDIENTE",
-          sriAutorizacion: real.autorizacion,
-        },
+        payload: payload as object,
       },
     })
     if (fechaSri) {
@@ -359,7 +363,8 @@ export async function POST(req: Request) {
       autorizado: Boolean(fechaSri),
       fechaAutorizacion: fechaSri,
       claveAcceso,
-      mensaje: fechaSri ? "Guía de remisión autorizada por el SRI." : (real.mensajes.filter(Boolean).join(" ") || real.error || "El SRI no devolvió fecha de autorización."),
+      mensaje: `${fechaSri ? "Guía de remisión autorizada por el SRI." : (real.mensajes.filter(Boolean).join(" ") || real.error || "El SRI no devolvió fecha de autorización.")}${respaldo.respaldoOk ? "" : ` ${respaldo.respaldoError}`}`,
+      respaldoOk: respaldo.respaldoOk,
     })
   } catch (error: unknown) {
     const mensaje = error instanceof Error ? error.message : "No se pudo enviar la guía de remisión."

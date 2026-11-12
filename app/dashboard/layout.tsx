@@ -43,6 +43,12 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   }, [router])
 
   useEffect(() => {
+    if (sessionStorage.getItem("meijsac_sri_reintento")) return
+    sessionStorage.setItem("meijsac_sri_reintento", "1")
+    fetch("/api/sri/reintentar", { method: "POST", credentials: "same-origin" }).catch(() => {})
+  }, [])
+
+  useEffect(() => {
     let timer = 0
     const armar = () => {
       window.clearTimeout(timer)

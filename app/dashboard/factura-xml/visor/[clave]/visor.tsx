@@ -19,6 +19,7 @@ export function VisorComprobante({ clave, soloLectura = false }: { clave: string
   const marco = useRef<HTMLIFrameElement>(null)
   const [ticket, setTicket] = useState(false)
   const [estado, setEstado] = useState(soloLectura ? "Documento guardado" : "Enviando al SRI…")
+  const [avisoArchivo, setAvisoArchivo] = useState("")
   const [marca, setMarca] = useState(0)
   const src = `/dashboard/factura-xml/pdf/${clave}${ticket ? "?ticket=1" : ""}${ticket ? "&" : "?"}v=${marca}`
 
@@ -43,6 +44,7 @@ export function VisorComprobante({ clave, soloLectura = false }: { clave: string
       if (!vivo) return
       const fecha = String(data.fechaAutorizacion || "").trim()
       setEstado(fecha ? `Autorizado ${fecha}` : (data.mensaje || data.error || "Pendiente de autorización"))
+      setAvisoArchivo(data.respaldoOk === false ? String(data.respaldoError || "No se pudo guardar el XML y el RIDE.") : "")
       setMarca((n) => n + 1)
       const token = localStorage.getItem("meijsac_token") || ""
       const remotas = await fetch("/api/facturas", { headers: { Authorization: `Bearer ${token}` } }).then((r) => r.ok ? r.json() : []).catch(() => [])
@@ -82,8 +84,10 @@ export function VisorComprobante({ clave, soloLectura = false }: { clave: string
           <button type="button" onClick={() => marco.current?.contentWindow?.print()} className="bg-sky-600 hover:bg-sky-500 px-4 py-1.5 rounded text-xs font-bold">Imprimir documento</button>
           <button type="button" onClick={() => setTicket((v) => !v)} className="bg-slate-700 hover:bg-slate-600 px-3 py-1.5 rounded text-xs font-medium">{ticket ? "Ver RIDE" : "Ticket 80mm"}</button>
           <a href={`/dashboard/factura-xml/pdf/${clave}?xml=1`} className="bg-emerald-600 hover:bg-emerald-500 px-3 py-1.5 rounded text-xs font-medium">Descargar XML</a>
+          <a href={`/dashboard/factura-xml/pdf/${clave}?pdf=1`} className="bg-emerald-800 hover:bg-emerald-700 px-3 py-1.5 rounded text-xs font-medium">Descargar RIDE</a>
         </div>
       </div>
+      {avisoArchivo ? <p className="print:hidden bg-amber-100 text-amber-950 px-4 py-2 text-sm">{avisoArchivo}</p> : null}
       <div className="flex-1 p-4 md:p-8 flex justify-center items-start overflow-y-auto">
         <div className={`bg-white shadow-lg border border-slate-200 rounded-lg print:shadow-none print:border-none ${ticket ? "w-[80mm] p-0" : "max-w-4xl w-full p-4"}`}>
           <iframe ref={marco} key={src} src={src} title="Comprobante" className={`w-full border-none ${ticket ? "h-[70vh]" : "h-[75vh]"}`} />

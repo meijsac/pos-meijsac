@@ -4,6 +4,7 @@ import { usuarioConEmpresaDesdeRequest } from "@/lib/empresa-sesion"
 import { accesoEmpresa, ipDe, navegadorDe, puede, sanitizarTexto } from "@/lib/seguridad"
 import { anotarFacturaCaja } from "@/lib/login-memoria"
 import { FaltanDatosSri, armarXmlFactura } from "@/lib/sri/xml-factura"
+import { validarEsquemaSri } from "@/lib/sri/validar-xsd"
 import { firmarXmlEmpresa } from "@/lib/sri/firmar"
 import { ambienteDeEmpresa } from "@/lib/sri/ambiente"
 import { enviarAlSri } from "@/lib/sri/cliente-sri"
@@ -59,6 +60,8 @@ export async function POST(req: Request) {
       if (e instanceof FaltanDatosSri) return NextResponse.json({ error: e.message, faltantes: e.faltantes }, { status: 400 })
       throw e
     }
+    const esquema = validarEsquemaSri(armado.xml)
+    if (esquema) return NextResponse.json({ error: esquema }, { status: 400 })
     const ambiente = ambienteDeEmpresa(sesion.empresa)
     let xml = armado.xml
     let firmado = false

@@ -1,9 +1,6 @@
 import { claveAcceso49 } from "@/lib/sri/clave"
 import { codigoAmbiente } from "@/lib/sri/ambiente"
-
-const TARIFAS: Record<string, number> = {
-  "0": 0, "2": 12, "3": 14, "4": 15, "5": 5, "6": 0, "7": 0, "8": 8, "10": 13,
-}
+import { TARIFAS_IVA as TARIFAS } from "@/lib/sri/validar-xsd"
 
 export class FaltanDatosSri extends Error {
   faltantes: string[]

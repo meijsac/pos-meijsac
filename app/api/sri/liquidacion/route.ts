@@ -7,7 +7,8 @@ import { enviarAlSri } from "@/lib/sri/cliente-sri"
 import { firmarXmlEmpresa } from "@/lib/sri/firmar"
 import { sanitizarTextoXml as xml } from "@/lib/sri/sanitizar"
 import { ipDe } from "@/lib/seguridad"
-import { archivarComprobante } from "@/lib/security/storage"
+import { validarEsquemaSri } from "@/lib/sri/validar-xsd"
+import { guardarRespaldo } from "@/lib/sri/respaldo"
 function dinero(valor: number) {
   return (Number.isFinite(valor) ? valor : 0).toFixed(2)
 }
@@ -118,6 +119,8 @@ export async function POST(req: Request) {
   <infoLiquidacionCompra><fechaEmision>${fechaHoy}</fechaEmision><dirEstablecimiento>${xml(sucursal)}</dirEstablecimiento><obligadoContabilidad>${obligado}</obligadoContabilidad><tipoIdentificacionProveedor>${tipoId}</tipoIdentificacionProveedor><razonSocialProveedor>${xml(nombre)}</razonSocialProveedor><identificacionProveedor>${xml(tipoId === "05" ? digitos : identificacion)}</identificacionProveedor><direccionProveedor>${xml(direccionProveedor)}</direccionProveedor><totalSinImpuestos>${dinero(subtotal15 + subtotal0)}</totalSinImpuestos><totalDescuento>0.00</totalDescuento><totalConImpuestos>${impuestos}</totalConImpuestos><importeTotal>${dinero(total)}</importeTotal><moneda>DOLAR</moneda><pagos><pago><formaPago>${formaPago}</formaPago><total>${dinero(total)}</total></pago></pagos></infoLiquidacionCompra>
   <detalles>${lineas.map((l: { codigo: string; descripcion: string; cantidad: number; precio: number; base: number; aplica: boolean; iva: number }) => `<detalle><codigoPrincipal>${xml(l.codigo)}</codigoPrincipal><descripcion>${xml(l.descripcion)}</descripcion><cantidad>${dinero(l.cantidad)}</cantidad><precioUnitario>${dinero(l.precio)}</precioUnitario><descuento>0.00</descuento><precioTotalSinImpuesto>${dinero(l.base)}</precioTotalSinImpuesto><impuestos><impuesto><codigo>2</codigo><codigoPorcentaje>${l.aplica ? "4" : "0"}</codigoPorcentaje><tarifa>${l.aplica ? "15.00" : "0.00"}</tarifa><baseImponible>${dinero(l.base)}</baseImponible><valor>${dinero(l.iva)}</valor></impuesto></impuestos></detalle>`).join("")}</detalles>
 </liquidacionCompra>`
+    const esquema = validarEsquemaSri(xmlLiquidacion)
+    if (esquema) return NextResponse.json({ autorizado: false, mensaje: esquema }, { status: 400 })
     let firmado = ""
     try {
       firmado = await firmarXmlEmpresa(sesion.empresa.id, xmlLiquidacion)
@@ -136,8 +139,8 @@ export async function POST(req: Request) {
       configEmisor: { razon: sesion.empresa.razonSocial, comercial: sesion.empresa.nombreComercial || "", ruc, matriz: direccion, sucursal, obligado, regimen: String(extra.regimen || ""), ambiente: ambiente === "2" ? "PRODUCCIÓN" : "PRUEBAS" },
       xmlContent: firmado, fechaAutorizacion: fechaSri, estadoSRI: fechaSri ? "AUTORIZADO" : "PENDIENTE", sriAutorizacion: real.autorizacion,
     }
-    await prisma.facturaEmitida.create({ data: { empresaId: sesion.empresa.id, estado: fechaSri ? "AUTORIZADO" : "PENDIENTE", sriStatus: fechaSri ? "AUTORIZADO" : "PENDIENTE", payload: payloadBase } })
-    archivarComprobante(sesion.empresa.id, claveLiquidacion, firmado, real).catch(() => {})
+    await prisma.facturaEmitida.create({ data: { empresaId: sesion.empresa.id, estado: fechaSri ? "AUTORIZADO" : "PENDIENTE", sriStatus: fechaSri ? "AUTORIZADO" : "PENDIENTE", payload: payloadBase as object } })
+    const respaldo = await guardarRespaldo(sesion.empresa.id, claveLiquidacion, firmado, real, payloadBase)
     let mensajeRetencion = ""
     let claveRetencion = ""
     let sec07 = ""
@@ -153,19 +156,29 @@ export async function POST(req: Request) {
       const clave07 = claveAcceso49({ fecha: fechaHoy.replace(/\D/g, ""), tipoComprobante: "07", ruc, ambiente, establecimiento: puntoRetencion.estab, puntoEmision: puntoRetencion.pto, secuencial: sec07 })
       const numDoc = `${punto.estab}${punto.pto}${secuencial}`
       const xmlRetencion = `<?xml version="1.0" encoding="UTF-8"?><comprobanteRetencion id="comprobante" version="2.0.0"><infoTributaria><ambiente>${ambiente}</ambiente><tipoEmision>1</tipoEmision><razonSocial>${xml(sesion.empresa.razonSocial)}</razonSocial><ruc>${ruc}</ruc><claveAcceso>${clave07}</claveAcceso><codDoc>07</codDoc><estab>${puntoRetencion.estab}</estab><ptoEmi>${puntoRetencion.pto}</ptoEmi><secuencial>${sec07}</secuencial><dirMatriz>${xml(direccion)}</dirMatriz></infoTributaria><infoCompRetencion><fechaEmision>${fechaHoy}</fechaEmision><dirEstablecimiento>${xml(sucursal)}</dirEstablecimiento><obligadoContabilidad>${obligado}</obligadoContabilidad><tipoIdentificacionSujetoRetenido>${tipoId}</tipoIdentificacionSujetoRetenido><parteRel>NO</parteRel><razonSocialSujetoRetenido>${xml(nombre)}</razonSocialSujetoRetenido><identificacionSujetoRetenido>${xml(tipoId === "05" ? digitos : identificacion)}</identificacionSujetoRetenido><periodoFiscal>${fechaHoy.slice(3)}</periodoFiscal></infoCompRetencion><docsSustento><docSustento><codSustento>01</codSustento><codDocSustento>03</codDocSustento><numDocSustento>${numDoc}</numDocSustento><fechaEmisionDocSustento>${fechaHoy}</fechaEmisionDocSustento><numAutDocSustento>${claveLiquidacion}</numAutDocSustento><pagoLocExt>01</pagoLocExt><totalSinImpuestos>${dinero(base)}</totalSinImpuestos><importeTotal>${dinero(total)}</importeTotal><impuestosDocSustento>${subtotal15 > 0 ? `<impuestoDocSustento><codImpuestoDocSustento>2</codImpuestoDocSustento><codigoPorcentaje>4</codigoPorcentaje><baseImponible>${dinero(subtotal15)}</baseImponible><tarifa>15.00</tarifa><valorImpuesto>${dinero(iva15)}</valorImpuesto></impuestoDocSustento>` : ""}${subtotal0 > 0 ? `<impuestoDocSustento><codImpuestoDocSustento>2</codImpuestoDocSustento><codigoPorcentaje>0</codigoPorcentaje><baseImponible>${dinero(subtotal0)}</baseImponible><tarifa>0.00</tarifa><valorImpuesto>0.00</valorImpuesto></impuestoDocSustento>` : ""}</impuestosDocSustento><retenciones><retencion><codigo>1</codigo><codigoRetencion>${codigoRenta}</codigoRetencion><baseImponible>${dinero(base)}</baseImponible><porcentajeRetener>${dinero(porcentaje)}</porcentajeRetener><valorRetenido>${dinero(valorRenta)}</valorRetenido></retencion>${iva15 > 0 ? `<retencion><codigo>2</codigo><codigoRetencion>3</codigoRetencion><baseImponible>${dinero(iva15)}</baseImponible><porcentajeRetener>100.00</porcentajeRetener><valorRetenido>${dinero(iva15)}</valorRetenido></retencion>` : ""}</retenciones><pagos><pago><formaPago>${formaPago}</formaPago><total>${dinero(total)}</total></pago></pagos></docSustento></docsSustento></comprobanteRetencion>`
-      const firmado07 = await firmarXmlEmpresa(sesion.empresa.id, xmlRetencion)
-      const real07 = await enviarAlSri({ xmlFirmado: firmado07, claveAcceso: clave07, ambiente, recepcionUrl: urls.recepcion, autorizacionUrl: urls.autorizacion })
-      const fecha07 = String(real07.fechaAutorizacion || "").trim()
-      claveRetencion = clave07
-      await prisma.facturaEmitida.create({
-        data: {
-          empresaId: sesion.empresa.id,
-          estado: fecha07 ? "AUTORIZADO" : "PENDIENTE",
-          sriStatus: fecha07 ? "AUTORIZADO" : "PENDIENTE",
-          payload: { tipoComprobante: "07", codDoc: "07", claveAcceso: clave07, establecimiento: serie07, secuencial: sec07, numDocSustento: numDoc, fechaEmisionDocSustento: fechaHoy, periodoFiscal: fechaHoy.slice(3), fechaEmisionFormato: fechaHoy, cliente: payloadBase.cliente, configEmisor: payloadBase.configEmisor, xmlContent: firmado07, fechaAutorizacion: fecha07, estadoSRI: fecha07 ? "AUTORIZADO" : "PENDIENTE", sriAutorizacion: real07.autorizacion },
-        },
-      })
-      archivarComprobante(sesion.empresa.id, clave07, firmado07, real07).catch(() => {})
+      const esquema07 = validarEsquemaSri(xmlRetencion)
+      let fecha07 = ""
+      if (esquema07) {
+        mensajeRetencion = esquema07
+      } else {
+        const firmado07 = await firmarXmlEmpresa(sesion.empresa.id, xmlRetencion)
+        const real07 = await enviarAlSri({ xmlFirmado: firmado07, claveAcceso: clave07, ambiente, recepcionUrl: urls.recepcion, autorizacionUrl: urls.autorizacion })
+        fecha07 = String(real07.fechaAutorizacion || "").trim()
+        claveRetencion = clave07
+        const payload07 = { tipoComprobante: "07", codDoc: "07", claveAcceso: clave07, establecimiento: serie07, secuencial: sec07, numDocSustento: numDoc, fechaEmisionDocSustento: fechaHoy, periodoFiscal: fechaHoy.slice(3), fechaEmisionFormato: fechaHoy, cliente: payloadBase.cliente, configEmisor: payloadBase.configEmisor, xmlContent: firmado07, fechaAutorizacion: fecha07, estadoSRI: fecha07 ? "AUTORIZADO" : "PENDIENTE", sriAutorizacion: real07.autorizacion }
+        await prisma.facturaEmitida.create({
+          data: {
+            empresaId: sesion.empresa.id,
+            estado: fecha07 ? "AUTORIZADO" : "PENDIENTE",
+            sriStatus: fecha07 ? "AUTORIZADO" : "PENDIENTE",
+            payload: payload07 as object,
+          },
+        })
+        const respaldo07 = await guardarRespaldo(sesion.empresa.id, clave07, firmado07, real07, payload07)
+        mensajeRetencion = fecha07
+          ? (respaldo07.respaldoOk ? "" : respaldo07.respaldoError)
+          : (real07.mensajes.filter(Boolean).join(" ") || real07.error || "La liquidación se autorizó. La retención quedó pendiente.")
+      }
       const listaPuntos = Array.isArray(extra.secuenciales) ? extra.secuenciales.map((fila) => ({ ...(fila as object) })) : []
       if (listaPuntos[punto.indice]) (listaPuntos[punto.indice] as { ultimo?: string }).ultimo = secuencial
       if (fecha07 && listaPuntos[puntoRetencion.indice]) (listaPuntos[puntoRetencion.indice] as { ultimo?: string }).ultimo = sec07
@@ -180,7 +193,6 @@ export async function POST(req: Request) {
           },
         },
       })
-      mensajeRetencion = fecha07 ? "" : (real07.mensajes.filter(Boolean).join(" ") || real07.error || "La liquidación se autorizó. La retención quedó pendiente.")
     }
     prisma.seguridadLog.create({ data: { empresaId: sesion.empresa.id, usuario: sesion.usuario.nombre, ip: ipDe(req), accion: fechaSri ? "LIQUIDACION_AUTORIZADA" : "LIQUIDACION_PENDIENTE", detalle: claveLiquidacion } }).catch(() => {})
     return NextResponse.json({
@@ -188,7 +200,8 @@ export async function POST(req: Request) {
       fechaAutorizacion: fechaSri,
       claveAccesoLiquidacion: claveLiquidacion,
       claveAccesoRetencion: claveRetencion,
-      mensaje: fechaSri ? (mensajeRetencion || "Liquidación autorizada por el SRI.") : (real.mensajes.filter(Boolean).join(" ") || real.error || "El SRI no devolvió fecha de autorización."),
+      mensaje: `${fechaSri ? (mensajeRetencion || "Liquidación autorizada por el SRI.") : (real.mensajes.filter(Boolean).join(" ") || real.error || "El SRI no devolvió fecha de autorización.")}${respaldo.respaldoOk ? "" : ` ${respaldo.respaldoError}`}`,
+      respaldoOk: respaldo.respaldoOk,
       mensajeRetencion,
     })
   } catch (error: unknown) {

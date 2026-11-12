@@ -7,7 +7,8 @@ import { enviarAlSri } from "@/lib/sri/cliente-sri"
 import { firmarXmlEmpresa } from "@/lib/sri/firmar"
 import { sanitizarTextoXml as xml } from "@/lib/sri/sanitizar"
 import { ipDe } from "@/lib/seguridad"
-import { archivarComprobante } from "@/lib/security/storage"
+import { validarEsquemaSri } from "@/lib/sri/validar-xsd"
+import { guardarRespaldo } from "@/lib/sri/respaldo"
 import { puntoActivoFactura } from "@/lib/sri/punto-emision"
 
 function dinero(valor: unknown) {
@@ -164,6 +165,8 @@ export async function POST(req: Request) {
     </docSustento>
   </docsSustento>
 </comprobanteRetencion>`
+    const esquema = validarEsquemaSri(xmlSinFirmar)
+    if (esquema) return NextResponse.json({ autorizado: false, mensaje: esquema }, { status: 400 })
     let firmado = ""
     try {
       firmado = await firmarXmlEmpresa(sesion.empresa.id, xmlSinFirmar)
@@ -174,29 +177,30 @@ export async function POST(req: Request) {
     const urls = SRI_AMBIENTES[ambiente]
     const real = await enviarAlSri({ xmlFirmado: firmado, claveAcceso, ambiente, recepcionUrl: urls.recepcion, autorizacionUrl: urls.autorizacion })
     const fechaSri = String(real.fechaAutorizacion || "").trim()
-    archivarComprobante(sesion.empresa.id, claveAcceso, firmado, real).catch(() => {})
+    const payload = {
+      tipoComprobante: "07",
+      codDoc: "07",
+      claveAcceso,
+      establecimiento: `${estab}-${pto}`,
+      secuencial,
+      numDocSustento: numDoc,
+      fechaEmisionDocSustento: fechaDoc,
+      periodoFiscal: periodo,
+      fechaEmisionFormato: fechaHoy,
+      cliente: { razon: proveedor.razonSocial, identificacion, tipoDoc: tipoId },
+      configEmisor: { razon: sesion.empresa.razonSocial, comercial, ruc, matriz: direccion, sucursal, obligado, regimen, ambiente: ambiente === "2" ? "PRODUCCIÓN" : "PRUEBAS" },
+      xmlContent: firmado,
+      fechaAutorizacion: fechaSri,
+      estadoSRI: fechaSri ? "AUTORIZADO" : "PENDIENTE",
+      sriAutorizacion: real.autorizacion,
+    }
+    const respaldo = await guardarRespaldo(sesion.empresa.id, claveAcceso, firmado, real, payload)
     await prisma.facturaEmitida.create({
       data: {
         empresaId: sesion.empresa.id,
         estado: fechaSri ? "AUTORIZADO" : "PENDIENTE",
         sriStatus: fechaSri ? "AUTORIZADO" : "PENDIENTE",
-        payload: {
-          tipoComprobante: "07",
-          codDoc: "07",
-          claveAcceso,
-          establecimiento: `${estab}-${pto}`,
-          secuencial,
-          numDocSustento: numDoc,
-          fechaEmisionDocSustento: fechaDoc,
-          periodoFiscal: periodo,
-          fechaEmisionFormato: fechaHoy,
-          cliente: { razon: proveedor.razonSocial, identificacion, tipoDoc: tipoId },
-          configEmisor: { razon: sesion.empresa.razonSocial, comercial, ruc, matriz: direccion, sucursal, obligado, regimen, ambiente: ambiente === "2" ? "PRODUCCIÓN" : "PRUEBAS" },
-          xmlContent: firmado,
-          fechaAutorizacion: fechaSri,
-          estadoSRI: fechaSri ? "AUTORIZADO" : "PENDIENTE",
-          sriAutorizacion: real.autorizacion,
-        },
+        payload: payload as object,
       },
     })
     if (fechaSri) {
@@ -211,7 +215,8 @@ export async function POST(req: Request) {
       fechaAutorizacion: fechaSri,
       claveAcceso,
       numero: `${estab}-${pto}-${secuencial}`,
-      mensaje: fechaSri ? "Retención autorizada por el SRI." : (real.mensajes.filter(Boolean).join(" ") || real.error || "El SRI no devolvió fecha de autorización."),
+      mensaje: `${fechaSri ? "Retención autorizada por el SRI." : (real.mensajes.filter(Boolean).join(" ") || real.error || "El SRI no devolvió fecha de autorización.")}${respaldo.respaldoOk ? "" : ` ${respaldo.respaldoError}`}`,
+      respaldoOk: respaldo.respaldoOk,
     })
   } catch (error: unknown) {
     const mensaje = error instanceof Error ? error.message : "No se pudo enviar la retención."
