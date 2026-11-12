@@ -145,7 +145,8 @@ export default function FacturadorXMLReal(){
     let empresaLocal: any = {}
     try { empresaLocal = JSON.parse(localStorage.getItem("meijsac_empresa") || "{}") } catch { empresaLocal = {} }
     const conFactura = (lista: unknown) => puntoActivoFactura(lista, "").punto.serie ? lista : null
-    let lista: any[] = (conFactura(cfg.secuenciales) || conFactura(empresaLocal.secuenciales) || SECUENCIALES_VISIBLES).map((s: any) => ({ ...s }))
+    const guardada = conFactura(cfg.secuenciales) || conFactura(empresaLocal.secuenciales)
+    let lista: any[] = (guardada || SECUENCIALES_VISIBLES).map((s: any) => ({ ...s }))
     const aplicar = (filas: any[]) => {
       cfg.secuenciales = filas
       try {
@@ -154,7 +155,7 @@ export default function FacturadorXMLReal(){
         localStorage.setItem("meijsac_empresa", JSON.stringify(empresaLocal))
       } catch {}
     }
-    aplicar(lista)
+    if (guardada) aplicar(lista)
     const pintar = (filas: any[]) => {
       const leido = puntoActivoFactura(filas, cfg.ambiente, estabElegido)
       const usados = new Set<string>()
@@ -193,13 +194,6 @@ export default function FacturadorXMLReal(){
         lista = remotas.map((s: any) => ({ ...s }))
         aplicar(lista)
         pintar(lista)
-      } else if (res.ok && remotas.length === 0) {
-        void fetch("/api/configuracion", {
-          method: "POST",
-          credentials: "same-origin",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ secuenciales: lista.map((s) => ({ ...s, actualizadoEn: s.actualizadoEn || new Date().toISOString() })) }),
-        }).catch(() => {})
       }
     } catch {}
   }

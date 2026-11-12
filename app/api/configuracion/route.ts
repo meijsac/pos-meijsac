@@ -37,13 +37,14 @@ export async function POST(request: Request) {
   const empresa = sesion.empresa
   const prev = datosRegistroDe(empresa.datosRegistro)
   const secuenciales = limpiarSecuenciales(datos.secuenciales)
+  const listaGuardada = secuenciales && secuenciales.length ? secuenciales : undefined
   if (sesion.usuario.rol !== "ADMIN") {
-    if (!puede(sesion.usuario.rol, "facturar") || !secuenciales) return NextResponse.json({ error: "Solo el administrador cambia la empresa" }, { status: 403 })
+    if (!puede(sesion.usuario.rol, "facturar") || !listaGuardada) return NextResponse.json({ error: "Solo el administrador cambia la empresa" }, { status: 403 })
     await prisma.empresa.update({
       where: { id: empresa.id },
-      data: { datosRegistro: { ...prev, secuenciales } as any },
+      data: { datosRegistro: { ...prev, secuenciales: listaGuardada } as any },
     })
-    return NextResponse.json({ ok: true, secuenciales })
+    return NextResponse.json({ ok: true, secuenciales: listaGuardada })
   }
   const ambienteSri = codigoAmbiente(datos.ambiente ?? prev.ambiente ?? empresa.ambienteSri)
   await prisma.empresa.update({
@@ -70,9 +71,9 @@ export async function POST(request: Request) {
         ciudad: datos.ciudad ?? prev.ciudad ?? "",
         actividad: datos.actividad ?? prev.actividad ?? "",
         modo_negocio: datos.modo_negocio ?? prev.modo_negocio ?? "",
-        ...(secuenciales ? { secuenciales } : {}),
+        ...(listaGuardada ? { secuenciales: listaGuardada } : {}),
       } as any,
     },
   })
-  return NextResponse.json({ ok: true, secuenciales: secuenciales || prev.secuenciales || [] })
+  return NextResponse.json({ ok: true, secuenciales: listaGuardada || prev.secuenciales || [] })
 }

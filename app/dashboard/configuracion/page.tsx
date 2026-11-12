@@ -2,6 +2,7 @@
 import { useState, useEffect } from "react";
 import { feriadosIvaReducido } from '@/lib/iva-feriados.config';
 import { cargarEmpresaSesion } from "@/lib/sesion-cliente";
+import { SECUENCIALES_VISIBLES } from "@/lib/sri/punto-emision";
 import { publicarAmbiente } from "@/components/SelloAmbiente";
 import { errorLogo } from "@/lib/logo-empresa";
 import DocumentosLegales from "./documentos-legales";
@@ -491,6 +492,9 @@ base.sucursales = datosReales.sucursales || base.sucursales || [];
             base.secuenciales = miaData.empresa.secuenciales
           }
         } catch {}
+        if (!Array.isArray(base.secuenciales) || !base.secuenciales.length) {
+          base.secuenciales = SECUENCIALES_VISIBLES.map((s) => ({ ...s }))
+        }
         try {
           const firmaRes = await fetch("/api/sri/clave-firma", { credentials: "same-origin" })
           const firmaData = firmaRes.ok ? await firmaRes.json() : null
@@ -723,12 +727,15 @@ base.sucursales = datosReales.sucursales || base.sucursales || [];
                           <tr><th className="p-2 text-left">Estab.</th><th>Pto.</th><th className="text-left">Tipo Comprobante SRI</th><th>Último Secuencial</th><th>Estado</th><th>X</th></tr>
                         </thead>
                         <tbody>
-                          {cfg.secuenciales.map((s:any,i:number)=>(
+                          {(Array.isArray(cfg.secuenciales) ? cfg.secuenciales : []).map((s:any,i:number)=>{
+                            const ultimo = String(s?.ultimo ?? "")
+                            const alerta = Number(ultimo.slice(-3)) > 950
+                            return (
                             <tr key={i} className="border-b border-white/5">
-                              <td className="p-1"><input value={s.estab} maxLength={3} onChange={e=>{const a=[...cfg.secuenciales]; a[i].estab=e.target.value.replace(/[^0-9]/g,""); setCfg({...cfg, secuenciales:a})}} className="bg-[#11131a] p-1 rounded w-12 text-center border border-white/10 font-bold" /></td>
-                              <td className="p-1"><input value={s.pto} maxLength={3} onChange={e=>{const a=[...cfg.secuenciales]; a[i].pto=e.target.value.replace(/[^0-9]/g,""); setCfg({...cfg, secuenciales:a})}} className="bg-[#11131a] p-1 rounded w-12 text-center border border-white/10 font-bold" /></td>
+                              <td className="p-1"><input value={s.estab || ""} maxLength={3} onChange={e=>{const a=[...(cfg.secuenciales || [])]; a[i].estab=e.target.value.replace(/[^0-9]/g,""); setCfg({...cfg, secuenciales:a})}} className="bg-[#11131a] p-1 rounded w-12 text-center border border-white/10 font-bold" /></td>
+                              <td className="p-1"><input value={s.pto || ""} maxLength={3} onChange={e=>{const a=[...(cfg.secuenciales || [])]; a[i].pto=e.target.value.replace(/[^0-9]/g,""); setCfg({...cfg, secuenciales:a})}} className="bg-[#11131a] p-1 rounded w-12 text-center border border-white/10 font-bold" /></td>
                               <td className="p-1">
-                                <select value={s.codigo||"01"} onChange={e=>{const a=[...cfg.secuenciales]; a[i].codigo=e.target.value; a[i].tipo={ "01":"01 FACTURA", "04":"04 NOTA CRÉDITO", "03":"03 LIQ. COMPRA", "07":"07 RETENCIÓN", "06":"06 GUÍA REMISIÓN"}[e.target.value]; setCfg({...cfg, secuenciales:a})}} className="bg-[#11131a] p-1 rounded w-full border border-white/10 text-[10px]">
+                                <select value={s.codigo||"01"} onChange={e=>{const a=[...(cfg.secuenciales || [])]; a[i].codigo=e.target.value; a[i].tipo={ "01":"01 FACTURA", "04":"04 NOTA CRÉDITO", "03":"03 LIQ. COMPRA", "07":"07 RETENCIÓN", "06":"06 GUÍA REMISIÓN"}[e.target.value]; setCfg({...cfg, secuenciales:a})}} className="bg-[#11131a] p-1 rounded w-full border border-white/10 text-[10px]">
                                   <option value="01">01 FACTURA</option>
                                   <option value="04">04 NOTA DE CRÉDITO</option>
                                   <option value="03">03 LIQUIDACIÓN COMPRA</option>
@@ -736,21 +743,22 @@ base.sucursales = datosReales.sucursales || base.sucursales || [];
                                   <option value="06">06 GUÍA DE REMISIÓN</option>
                                 </select>
                               </td>
-                              <td className="p-1"><input value={s.ultimo} onChange={e=>{const a=[...cfg.secuenciales]; a[i].ultimo=e.target.value; setCfg({...cfg, secuenciales:a})}} className="bg-[#11131a] p-1 rounded w-24 text-center border border-white/10" /></td>
-                              <td className="text-center"><span className={`px-2 py-0.5 rounded text-[9px] ${Number(s.ultimo.slice(-3))>950?"bg-red-600 animate-pulse":"bg-green-600"}`}>{Number(s.ultimo.slice(-3))>950?"¡ALERTA 50!":"ACTIVO"}</span></td>
-                              <td className="text-center"><button onClick={()=>setCfg({...cfg, secuenciales:cfg.secuenciales.filter((_:any,idx:number)=>idx!==i)})} className="text-red-400">X</button></td>
+                              <td className="p-1"><input value={ultimo} onChange={e=>{const a=[...(cfg.secuenciales || [])]; a[i].ultimo=e.target.value; setCfg({...cfg, secuenciales:a})}} className="bg-[#11131a] p-1 rounded w-24 text-center border border-white/10" /></td>
+                              <td className="text-center"><span className={`px-2 py-0.5 rounded text-[9px] ${alerta?"bg-red-600 animate-pulse":"bg-green-600"}`}>{alerta?"¡ALERTA 50!":"ACTIVO"}</span></td>
+                              <td className="text-center"><button onClick={()=>setCfg({...cfg, secuenciales:(cfg.secuenciales || []).filter((_:any,idx:number)=>idx!==i)})} className="text-red-400">X</button></td>
                             </tr>
-                          ))}
+                            )
+                          })}
                         </tbody>
                       </table>
                     </div>
 
                     <div className="flex gap-2 flex-wrap">
-                      <button onClick={()=>setCfg({...cfg, secuenciales:[...cfg.secuenciales, {estab:"001", pto:"001", codigo:"01", tipo:"01 FACTURA", ultimo:"000000001"}]})} className="bg-[#00f5d4] text-black px-3 py-2 rounded-xl text-[10px] font-bold">+ Factura 001-001</button>
-                      <button onClick={()=>setCfg({...cfg, secuenciales:[...cfg.secuenciales, {estab:"001", pto:"001", codigo:"04", tipo:"04 NOTA CRÉDITO", ultimo:"000000001"}]})} className="bg-white text-black px-3 py-2 rounded-xl text-[10px] font-bold">+ NC 001-001</button>
-                      <button onClick={()=>setCfg({...cfg, secuenciales:[...cfg.secuenciales, {estab:"001", pto:"001", codigo:"07", tipo:"07 RETENCIÓN", ultimo:"000000001"}]})} className="bg-white/10 border border-white/10 px-3 py-2 rounded-xl text-[10px]">+ Retención 001-001</button>
-                      <button onClick={()=>setCfg({...cfg, secuenciales:[...cfg.secuenciales, {estab:"001", pto:"002", codigo:"01", tipo:"01 FACTURA", ultimo:"000000001"}]})} className="bg-white/10 border border-white/10 px-3 py-2 rounded-xl text-[10px]">+ Caja 2 (001-002)</button>
-                      <button onClick={()=>setCfg({...cfg, secuenciales:[...cfg.secuenciales, {estab:"002", pto:"001", codigo:"01", tipo:"01 FACTURA", ultimo:"000000001"}]})} className="bg-white/10 border border-white/10 px-3 py-2 rounded-xl text-[10px]">+ Sucursal Loreto 002-001</button>
+                      <button onClick={()=>setCfg({...cfg, secuenciales:[...(cfg.secuenciales || []), {estab:"001", pto:"001", codigo:"01", tipo:"01 FACTURA", ultimo:"000000001"}]})} className="bg-[#00f5d4] text-black px-3 py-2 rounded-xl text-[10px] font-bold">+ Factura 001-001</button>
+                      <button onClick={()=>setCfg({...cfg, secuenciales:[...(cfg.secuenciales || []), {estab:"001", pto:"001", codigo:"04", tipo:"04 NOTA CRÉDITO", ultimo:"000000001"}]})} className="bg-white text-black px-3 py-2 rounded-xl text-[10px] font-bold">+ NC 001-001</button>
+                      <button onClick={()=>setCfg({...cfg, secuenciales:[...(cfg.secuenciales || []), {estab:"001", pto:"001", codigo:"07", tipo:"07 RETENCIÓN", ultimo:"000000001"}]})} className="bg-white/10 border border-white/10 px-3 py-2 rounded-xl text-[10px]">+ Retención 001-001</button>
+                      <button onClick={()=>setCfg({...cfg, secuenciales:[...(cfg.secuenciales || []), {estab:"001", pto:"002", codigo:"01", tipo:"01 FACTURA", ultimo:"000000001"}]})} className="bg-white/10 border border-white/10 px-3 py-2 rounded-xl text-[10px]">+ Caja 2 (001-002)</button>
+                      <button onClick={()=>setCfg({...cfg, secuenciales:[...(cfg.secuenciales || []), {estab:"002", pto:"001", codigo:"01", tipo:"01 FACTURA", ultimo:"000000001"}]})} className="bg-white/10 border border-white/10 px-3 py-2 rounded-xl text-[10px]">+ Sucursal Loreto 002-001</button>
                     </div>
 
                     <div className="bg-[#11131a] border border-[#00f5d4]/20 rounded-xl p-3 space-y-2">
