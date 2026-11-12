@@ -11,6 +11,7 @@ export function AuthCard({ dark, setDark, onOpenRegister }: { dark: boolean; set
   const [ruc, setRuc] = useState("")
   const [usuarioCaja, setUsuarioCaja] = useState("")
   const [clave, setClave] = useState("")
+  const [verClave, setVerClave] = useState(false)
   const [error, setError] = useState("")
   const [recordarme, setRecordarme] = useState(false)
   const [trampa, setTrampa] = useState("")
@@ -135,7 +136,16 @@ export function AuthCard({ dark, setDark, onOpenRegister }: { dark: boolean; set
         </div>
         <div>
           <label className={`text-[10px] font-bold tracking-widest ${dark ? "text-white/60" : "text-black/60"}`}>{tab === "USUARIO" ? "CONTRASEÑA PRINCIPAL" : "CLAVE DEL CAJERO O VENDEDOR"}</label>
-          <input id="clave" type="password" value={clave} onChange={(e) => setClave(e.target.value)} className={`w-full mt-2 p-4 rounded-2xl border outline-none text-sm ${dark ? "bg-black/60 border-white/10 text-white focus:border-[#ff00a8]" : "bg-gray-100 border-black/10 text-black focus:border-[#ff00a8]"}`} />
+          <div className="relative mt-2">
+            <input id="clave" type={verClave ? "text" : "password"} value={clave} onChange={(e) => setClave(e.target.value)} className={`w-full p-4 pr-12 rounded-2xl border outline-none text-sm ${dark ? "bg-black/60 border-white/10 text-white focus:border-[#ff00a8]" : "bg-gray-100 border-black/10 text-black focus:border-[#ff00a8]"}`} />
+            <button type="button" onClick={() => setVerClave((v) => !v)} aria-label={verClave ? "Ocultar clave" : "Ver clave"} className={`absolute right-3 top-1/2 -translate-y-1/2 p-1 ${dark ? "text-white/50 hover:text-white" : "text-black/40 hover:text-black"}`}>
+              {verClave ? (
+                <svg viewBox="0 0 24 24" className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M3 3 l18 18" /><path d="M10.6 10.6 a2 2 0 0 0 2.8 2.8" /><path d="M9.9 5.1 A10.8 10.8 0 0 1 12 5 c5 0 9.3 3.1 11 7 a11.7 11.7 0 0 1-4.2 5.1" /><path d="M6.1 6.1 A11.6 11.6 0 0 0 1 12 c1.7 3.9 6 7 11 7 a10.8 10.8 0 0 0 4.1-.8" /></svg>
+              ) : (
+                <svg viewBox="0 0 24 24" className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M1 12 s4-7 11-7 s11 7 11 7 s-4 7-11 7 S1 12 1 12 z" /><circle cx="12" cy="12" r="3" /></svg>
+              )}
+            </button>
+          </div>
         </div>
         {pideCaptcha && (
           <Turnstile
