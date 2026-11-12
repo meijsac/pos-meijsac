@@ -11,6 +11,21 @@ export function EsisaAvatar() {
   const [hablando, setHablando] = useState(false)
   const [escuchando, setEscuchando] = useState(false)
   const listRef = useRef<HTMLDivElement>(null)
+  const [pos, setPos] = useState<{ x: number; y: number } | null>(null)
+  const posRef = useRef<{ x: number; y: number } | null>(null)
+  const drag = useRef<{ dx: number; dy: number; sx: number; sy: number; moved: boolean } | null>(null)
+
+  useEffect(() => {
+    const guardada = localStorage.getItem("esisa_pos")
+    if (!guardada) return
+    try {
+      const p = JSON.parse(guardada)
+      if (Number.isFinite(p?.x) && Number.isFinite(p?.y)) {
+        posRef.current = p
+        setPos(p)
+      }
+    } catch {}
+  }, [])
 
   // --- INICIO ARREGLO ESISA + DEMO vs REAL ---
   useEffect(() => {
@@ -129,10 +144,13 @@ export function EsisaAvatar() {
     listRef.current?.scrollTo(0, listRef.current.scrollHeight)
   },[msgs])
 
+  const panelArriba = !pos || pos.y > 520
+  const panelDerecha = !!pos && typeof window !== "undefined" && pos.x > window.innerWidth - 380
+
   return (
-    <div className="fixed bottom-5 right-5 z-[9999] flex flex-col items-end gap-2">
+    <div className={`fixed z-[9999] ${pos ? "" : "bottom-5 left-5"}`} style={pos ? { left: pos.x, top: pos.y } : undefined}>
       {abierto && (
-        <div className="w-[360px] h-[480px] rounded-[24px] border border-violet-200 bg-white shadow-[0_20px_60px_rgba(0,0,0,0.3)] flex flex-col overflow-hidden text-slate-900">
+        <div className={`absolute w-[360px] h-[480px] rounded-[24px] border border-violet-200 bg-white shadow-[0_20px_60px_rgba(0,0,0,0.3)] flex flex-col overflow-hidden text-slate-900 ${panelArriba ? "bottom-full mb-2" : "top-full mt-2"} ${panelDerecha ? "right-0" : "left-0"}`}>
           <div className="p-4 bg-gradient-to-r from-violet-600 to-fuchsia-600 text-white flex justify-between items-center">
             <div className="flex items-center gap-3">
               <div className="w-10 h-10 rounded-full bg-white text-violet-600 grid place-items-center font-black">E</div>
@@ -169,7 +187,37 @@ export function EsisaAvatar() {
         </div>
       )}
 
-      <button onClick={()=>setAbierto(!abierto)} className={`w-16 h-16 rounded-full grid place-items-center shadow-2xl border-2 bg-white transition-all hover:scale-110 ${sri?.estado==="CAIDO"?"border-red-400":"border-violet-200"}`}>
+      <button
+        type="button"
+        onPointerDown={(e) => {
+          const rect = e.currentTarget.getBoundingClientRect()
+          drag.current = { dx: e.clientX - rect.left, dy: e.clientY - rect.top, sx: e.clientX, sy: e.clientY, moved: false }
+          const inicio = { x: rect.left, y: rect.top }
+          posRef.current = inicio
+          setPos(inicio)
+          e.currentTarget.setPointerCapture(e.pointerId)
+        }}
+        onPointerMove={(e) => {
+          if (!drag.current) return
+          if (Math.hypot(e.clientX - drag.current.sx, e.clientY - drag.current.sy) > 4) drag.current.moved = true
+          const next = {
+            x: Math.min(Math.max(8, e.clientX - drag.current.dx), window.innerWidth - 72),
+            y: Math.min(Math.max(8, e.clientY - drag.current.dy), window.innerHeight - 72),
+          }
+          posRef.current = next
+          setPos(next)
+        }}
+        onPointerUp={() => {
+          const movio = drag.current?.moved
+          drag.current = null
+          if (movio) {
+            if (posRef.current) localStorage.setItem("esisa_pos", JSON.stringify(posRef.current))
+            return
+          }
+          setAbierto((v) => !v)
+        }}
+        className={`relative w-16 h-16 rounded-full grid place-items-center shadow-2xl border-2 bg-white cursor-grab active:cursor-grabbing touch-none ${sri?.estado==="CAIDO"?"border-red-400":"border-violet-200"}`}
+      >
         <span className="text-[28px]">{hablando?"🗣️": escuchando?"👂":"💜"}</span>
         {sri?.estado==="CAIDO" && <span className="absolute -top-1 -right-1 w-4 h-4 bg-red-500 rounded-full animate-pulse border-2 border-white"></span>}
       </button>
