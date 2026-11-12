@@ -23,6 +23,12 @@ function esFactura(fila: any) {
   return (codigo === "01" || tipo.includes("FACTURA")) && !apagada
 }
 
+export const SECUENCIALES_VISIBLES = [
+  { estab: "001", pto: "001", codigo: "01", tipo: "01 FACTURA", ultimo: "00000125", estado: "ACTIVO" },
+  { estab: "001", pto: "002", codigo: "01", tipo: "01 FACTURA", ultimo: "00000010", estado: "ACTIVO" },
+  { estab: "002", pto: "001", codigo: "04", tipo: "04 NOTA CREDITO", ultimo: "00000005", estado: "ACTIVO" },
+]
+
 export function serieDeAmbiente(ambiente: unknown) {
   const codigo = String(ambiente ?? "").trim().toUpperCase()
   if (codigo === "2" || codigo.includes("PROD")) return "001-001"

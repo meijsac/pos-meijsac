@@ -3,7 +3,7 @@ import { useState, useEffect, useRef } from "react"
 import Link from "next/link"
 import ModalCajaMixto from "./components/ModalCajaMixto"
 import ModuloTransporteReducido from "@/components/ModuloTransporteReducido"
-import { elegirSecuencial, puntoActivoFactura } from "@/lib/sri/punto-emision"
+import { elegirSecuencial, puntoActivoFactura, SECUENCIALES_VISIBLES } from "@/lib/sri/punto-emision"
 import { normalizarComprador } from "@/lib/sri/xml-factura"
 
 function codigosProducto(p: any) {
@@ -142,61 +142,66 @@ export default function FacturadorXMLReal(){
   const cargarPunto = async (estabElegido?: string) => {
     let cfg: any = {}
     try { cfg = JSON.parse(localStorage.getItem("meijsac_config_pro") || "{}") } catch { cfg = {} }
+    let empresaLocal: any = {}
+    try { empresaLocal = JSON.parse(localStorage.getItem("meijsac_empresa") || "{}") } catch { empresaLocal = {} }
+    const conFactura = (lista: unknown) => puntoActivoFactura(lista, "").punto.serie ? lista : null
+    let lista: any[] = (conFactura(cfg.secuenciales) || conFactura(empresaLocal.secuenciales) || SECUENCIALES_VISIBLES).map((s: any) => ({ ...s }))
+    const aplicar = (filas: any[]) => {
+      cfg.secuenciales = filas
+      try {
+        localStorage.setItem("meijsac_config_pro", JSON.stringify(cfg))
+        empresaLocal.secuenciales = filas
+        localStorage.setItem("meijsac_empresa", JSON.stringify(empresaLocal))
+      } catch {}
+    }
+    aplicar(lista)
+    const pintar = (filas: any[]) => {
+      const leido = puntoActivoFactura(filas, cfg.ambiente, estabElegido)
+      const usados = new Set<string>()
+      for (const clave of ["meijsac_comprobantes_sri", "meijsac_comprobantes_emitidos", "meijsac_enviados_sri"]) {
+        try {
+          const docs = JSON.parse(localStorage.getItem(clave) || "[]")
+          for (const d of docs) {
+            const partes = String(d?.secuencial || "").split("-")
+            const est = partes.length >= 3 ? `${partes[0]}-${partes[1]}` : String(d?.establecimiento || "")
+            if (est !== leido.punto.serie) continue
+            const n = (partes.length >= 3 ? partes[2] : String(d?.secuencial || "")).replace(/\D/g, "").padStart(9, "0").slice(-9)
+            if (n && n !== "000000000") usados.add(n)
+          }
+        } catch {}
+      }
+      const guardado = String(leido.punto.ultimo || "").replace(/\D/g, "").padStart(9, "0").slice(-9)
+      const libre = guardado && guardado !== "000000000" && !usados.has(guardado) ? guardado : elegirSecuencial("", guardado, usados)
+      const codigo = String(cfg.ambiente || "").toUpperCase().includes("PROD") || String(cfg.ambiente) === "2" ? "2" : "1"
+      setPuntoEmision({
+        ambiente: codigo as "1" | "2",
+        nombre: codigo === "2" ? "PRODUCCIÓN" : "PRUEBAS",
+        estab: leido.punto.estab,
+        pto: leido.punto.pto,
+        serie: leido.punto.serie,
+        secuencial: libre,
+        ultimo: guardado,
+        indice: leido.punto.indice,
+      })
+    }
+    pintar(lista)
     try {
       const res = await fetch("/api/empresa/mia", { credentials: "same-origin", cache: "no-store" })
       const data = await res.json().catch(() => ({}))
       const remotas = Array.isArray(data?.empresa?.secuenciales) ? data.empresa.secuenciales : []
-      if (remotas.length) {
-        const clave = (s: any) => `${String(s?.estab || "").replace(/\D/g, "").padStart(3, "0").slice(-3)}-${String(s?.pto || "").replace(/\D/g, "").padStart(3, "0").slice(-3)}-${String(s?.codigo || "01").replace(/\D/g, "").padStart(2, "0").slice(-2)}`
-        const mapa = new Map<string, any>((Array.isArray(cfg.secuenciales) ? cfg.secuenciales : []).map((s: any) => [clave(s), s]))
-        for (const s of remotas) {
-          const k = clave(s)
-          const prev = mapa.get(k)
-          const localN = Number(String(prev?.ultimo || "0").replace(/\D/g, "") || "0")
-          const remotoN = Number(String(s?.ultimo || "0").replace(/\D/g, "") || "0")
-          const localFecha = String(prev?.actualizadoEn || "")
-          const remotaFecha = String(s?.actualizadoEn || "")
-          const usarRemoto = !prev || (remotaFecha && remotaFecha > localFecha) || (!remotaFecha && !localFecha && remotoN >= localN) || (remotaFecha === localFecha && remotoN >= localN)
-          mapa.set(k, usarRemoto ? { ...prev, ...s } : prev)
-          if (usarRemoto && remotaFecha && remotaFecha > localFecha) {
-            try {
-              const contador = JSON.parse(localStorage.getItem("meijsac_contador_secuencial") || "{}")
-              contador[k.slice(0, 7)] = String(s?.ultimo || "").replace(/\D/g, "").padStart(9, "0").slice(-9)
-              localStorage.setItem("meijsac_contador_secuencial", JSON.stringify(contador))
-            } catch {}
-          }
-        }
-        cfg.secuenciales = Array.from(mapa.values())
-        localStorage.setItem("meijsac_config_pro", JSON.stringify(cfg))
+      if (conFactura(remotas)) {
+        lista = remotas.map((s: any) => ({ ...s }))
+        aplicar(lista)
+        pintar(lista)
+      } else if (res.ok && remotas.length === 0) {
+        void fetch("/api/configuracion", {
+          method: "POST",
+          credentials: "same-origin",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ secuenciales: lista.map((s) => ({ ...s, actualizadoEn: s.actualizadoEn || new Date().toISOString() })) }),
+        }).catch(() => {})
       }
     } catch {}
-    const leido = puntoActivoFactura(cfg.secuenciales, cfg.ambiente, estabElegido)
-    const usados = new Set<string>()
-    for (const clave of ["meijsac_comprobantes_sri", "meijsac_comprobantes_emitidos", "meijsac_enviados_sri"]) {
-      try {
-        const lista = JSON.parse(localStorage.getItem(clave) || "[]")
-        for (const d of lista) {
-          const partes = String(d?.secuencial || "").split("-")
-          const est = partes.length >= 3 ? `${partes[0]}-${partes[1]}` : String(d?.establecimiento || "")
-          if (est !== leido.punto.serie) continue
-          const n = (partes.length >= 3 ? partes[2] : String(d?.secuencial || "")).replace(/\D/g, "").padStart(9, "0").slice(-9)
-          if (n && n !== "000000000") usados.add(n)
-        }
-      } catch {}
-    }
-    const guardado = String(leido.punto.ultimo || "").replace(/\D/g, "").padStart(9, "0").slice(-9)
-    const libre = guardado && guardado !== "000000000" && !usados.has(guardado) ? guardado : elegirSecuencial("", guardado, usados)
-    const codigo = String(cfg.ambiente || "").toUpperCase().includes("PROD") || String(cfg.ambiente) === "2" ? "2" : "1"
-    setPuntoEmision({
-      ambiente: codigo as "1" | "2",
-      nombre: codigo === "2" ? "PRODUCCIÓN" : "PRUEBAS",
-      estab: leido.punto.estab,
-      pto: leido.punto.pto,
-      serie: leido.punto.serie,
-      secuencial: leido.punto.serie ? libre : "",
-      ultimo: guardado,
-      indice: leido.punto.indice,
-    })
   }
   const guardarSecuencialUsado = (serie: string, usado: string) => {
     if (!serie || !usado) return

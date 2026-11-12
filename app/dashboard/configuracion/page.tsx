@@ -352,6 +352,7 @@ export default function ConfiguracionAvanzadaSRI() {
         }
         const res = await fetch("/api/configuracion", {
           method: "POST",
+          credentials: "same-origin",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(cuerpo),
         });

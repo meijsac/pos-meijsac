@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
-import { usuarioConEmpresaDesdeRequest } from "@/lib/empresa-sesion"
+import { datosRegistroDe, usuarioConEmpresaDesdeRequest } from "@/lib/empresa-sesion"
 import { codigoAmbiente } from "@/lib/sri/ambiente"
 import { puede } from "@/lib/seguridad"
 
@@ -35,9 +35,7 @@ export async function POST(request: Request) {
   const datos = await request.json().catch(() => ({}))
   if (datos?.firma && typeof datos.firma === "object") datos.firma.clave = ""
   const empresa = sesion.empresa
-  const prev = empresa.datosRegistro && typeof empresa.datosRegistro === "object" && !Array.isArray(empresa.datosRegistro)
-    ? empresa.datosRegistro as Record<string, unknown>
-    : {}
+  const prev = datosRegistroDe(empresa.datosRegistro)
   const secuenciales = limpiarSecuenciales(datos.secuenciales)
   if (sesion.usuario.rol !== "ADMIN") {
     if (!puede(sesion.usuario.rol, "facturar") || !secuenciales) return NextResponse.json({ error: "Solo el administrador cambia la empresa" }, { status: 403 })

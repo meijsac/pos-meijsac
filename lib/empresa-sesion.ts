@@ -11,14 +11,20 @@ export function secretoJwt() {
 
 type Extra = Record<string, unknown>
 
+export function datosRegistroDe(valor: unknown): Extra {
+  let actual = valor
+  if (typeof actual === "string") {
+    try { actual = JSON.parse(actual) } catch { actual = {} }
+  }
+  if (!actual || typeof actual !== "object" || Array.isArray(actual)) return {}
+  return actual as Extra
+}
+
 export function empresaParaCliente(
   empresa: Empresa,
   usuario: Pick<Usuario, "nombre" | "rol" | "empresaId">
 ) {
-  const extra =
-    empresa.datosRegistro && typeof empresa.datosRegistro === "object" && !Array.isArray(empresa.datosRegistro)
-      ? (empresa.datosRegistro as Extra)
-      : {}
+  const extra = datosRegistroDe(empresa.datosRegistro)
   const ciudad = String(extra.ciudad || extra.canton || "")
   const obligado = String(extra.obligadoConta || extra.obligado || "")
   return {
