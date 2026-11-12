@@ -52,6 +52,7 @@ export function empresaParaCliente(
     tipoContribuyente: String(extra.tipoContribuyente || ""),
     sector: String(extra.sector || ""),
     modo_negocio: String(extra.modo_negocio || ""),
+    secuenciales: Array.isArray(extra.secuenciales) ? extra.secuenciales : [],
     celular: String(extra.celular || ""),
     respNombre: String(extra.respNombre || ""),
     respCelular: String(extra.respCelular || ""),

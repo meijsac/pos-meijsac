@@ -139,9 +139,37 @@ const Chisme = ({texto, titulo}:{texto:string, titulo:string}) => (
 export default function FacturadorXMLReal(){
   const [fecha, setFecha] = useState("")
   const [puntoEmision, setPuntoEmision] = useState({ ambiente: "1" as "1" | "2", nombre: "PRUEBAS", estab: "", pto: "", serie: "", secuencial: "", ultimo: "", indice: -1 })
-  const cargarPunto = (estabElegido?: string) => {
+  const cargarPunto = async (estabElegido?: string) => {
     let cfg: any = {}
     try { cfg = JSON.parse(localStorage.getItem("meijsac_config_pro") || "{}") } catch { cfg = {} }
+    try {
+      const res = await fetch("/api/empresa/mia", { credentials: "same-origin", cache: "no-store" })
+      const data = await res.json().catch(() => ({}))
+      const remotas = Array.isArray(data?.empresa?.secuenciales) ? data.empresa.secuenciales : []
+      if (remotas.length) {
+        const clave = (s: any) => `${String(s?.estab || "").replace(/\D/g, "").padStart(3, "0").slice(-3)}-${String(s?.pto || "").replace(/\D/g, "").padStart(3, "0").slice(-3)}-${String(s?.codigo || "01").replace(/\D/g, "").padStart(2, "0").slice(-2)}`
+        const mapa = new Map<string, any>((Array.isArray(cfg.secuenciales) ? cfg.secuenciales : []).map((s: any) => [clave(s), s]))
+        for (const s of remotas) {
+          const k = clave(s)
+          const prev = mapa.get(k)
+          const localN = Number(String(prev?.ultimo || "0").replace(/\D/g, "") || "0")
+          const remotoN = Number(String(s?.ultimo || "0").replace(/\D/g, "") || "0")
+          const localFecha = String(prev?.actualizadoEn || "")
+          const remotaFecha = String(s?.actualizadoEn || "")
+          const usarRemoto = !prev || (remotaFecha && remotaFecha > localFecha) || (!remotaFecha && !localFecha && remotoN >= localN) || (remotaFecha === localFecha && remotoN >= localN)
+          mapa.set(k, usarRemoto ? { ...prev, ...s } : prev)
+          if (usarRemoto && remotaFecha && remotaFecha > localFecha) {
+            try {
+              const contador = JSON.parse(localStorage.getItem("meijsac_contador_secuencial") || "{}")
+              contador[k.slice(0, 7)] = String(s?.ultimo || "").replace(/\D/g, "").padStart(9, "0").slice(-9)
+              localStorage.setItem("meijsac_contador_secuencial", JSON.stringify(contador))
+            } catch {}
+          }
+        }
+        cfg.secuenciales = Array.from(mapa.values())
+        localStorage.setItem("meijsac_config_pro", JSON.stringify(cfg))
+      }
+    } catch {}
     const leido = puntoActivoFactura(cfg.secuenciales, cfg.ambiente, estabElegido)
     const usados = new Set<string>()
     for (const clave of ["meijsac_comprobantes_sri", "meijsac_comprobantes_emitidos", "meijsac_enviados_sri"]) {
@@ -156,9 +184,8 @@ export default function FacturadorXMLReal(){
         }
       } catch {}
     }
-    let contadorLocal = ""
-    try { contadorLocal = JSON.parse(localStorage.getItem("meijsac_contador_secuencial") || "{}")[leido.punto.serie] || "" } catch { contadorLocal = "" }
-    const ultimoConocido = Number(String(contadorLocal).replace(/\D/g, "") || "0") > Number(String(leido.punto.ultimo).replace(/\D/g, "") || "0") ? contadorLocal : leido.punto.ultimo
+    const guardado = String(leido.punto.ultimo || "").replace(/\D/g, "").padStart(9, "0").slice(-9)
+    const libre = guardado && guardado !== "000000000" && !usados.has(guardado) ? guardado : elegirSecuencial("", guardado, usados)
     const codigo = String(cfg.ambiente || "").toUpperCase().includes("PROD") || String(cfg.ambiente) === "2" ? "2" : "1"
     setPuntoEmision({
       ambiente: codigo as "1" | "2",
@@ -166,8 +193,8 @@ export default function FacturadorXMLReal(){
       estab: leido.punto.estab,
       pto: leido.punto.pto,
       serie: leido.punto.serie,
-      secuencial: leido.punto.serie ? elegirSecuencial("", ultimoConocido, usados) : "",
-      ultimo: ultimoConocido,
+      secuencial: leido.punto.serie ? libre : "",
+      ultimo: guardado,
       indice: leido.punto.indice,
     })
   }
@@ -175,17 +202,18 @@ export default function FacturadorXMLReal(){
     if (!serie || !usado) return
     try {
       const mapa = JSON.parse(localStorage.getItem("meijsac_contador_secuencial") || "{}")
-      const previo = Number(String(mapa[serie] || "0").replace(/\D/g, ""))
-      if (Number(usado) >= previo) mapa[serie] = usado
+      const siguiente = String(Number(String(usado).replace(/\D/g, "")) + 1).padStart(9, "0")
+      mapa[serie] = siguiente
       localStorage.setItem("meijsac_contador_secuencial", JSON.stringify(mapa))
       const cfg = JSON.parse(localStorage.getItem("meijsac_config_pro") || "{}")
       const lista = Array.isArray(cfg.secuenciales) ? cfg.secuenciales : []
       const [estab, pto] = serie.split("-")
       const i = lista.findIndex((s: any) => String(s?.estab || "").replace(/\D/g, "").padStart(3, "0").slice(-3) === estab && String(s?.pto || "").replace(/\D/g, "").padStart(3, "0").slice(-3) === pto)
-      if (i < 0) lista.push({ estab, pto, codigo: "01", tipo: "01 FACTURA", ultimo: usado, estado: "ACTIVO" })
-      else lista[i] = { ...lista[i], ultimo: usado }
+      if (i < 0) lista.push({ estab, pto, codigo: "01", tipo: "01 FACTURA", ultimo: siguiente, estado: "ACTIVO", actualizadoEn: new Date().toISOString() })
+      else lista[i] = { ...lista[i], ultimo: siguiente, actualizadoEn: new Date().toISOString() }
       cfg.secuenciales = lista
       localStorage.setItem("meijsac_config_pro", JSON.stringify(cfg))
+      void fetch("/api/configuracion", { method: "POST", credentials: "same-origin", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ secuenciales: lista }) }).catch(() => {})
     } catch {}
   }
   useEffect(() => { cargarPunto() }, [])

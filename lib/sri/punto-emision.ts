@@ -56,9 +56,9 @@ export function puntoActivoFactura(secuenciales: unknown, _ambiente: unknown, es
 }
 
 export function elegirSecuencial(pedido: string, ultimo: string, usados: Set<string>) {
-  const mayor = Math.max(Number(nueve(ultimo) || "0"), ...[...usados].map((n) => Number(n)), 0)
   const pedido9 = nueve(pedido)
-  if (pedido9 && Number(pedido9) > mayor && !usados.has(pedido9)) return pedido9
+  if (pedido9 && pedido9 !== "000000000" && !usados.has(pedido9)) return pedido9
+  const mayor = Math.max(Number(nueve(ultimo) || "0"), ...[...usados].map((n) => Number(n)), 0)
   return siguienteSecuencial(String(mayor).padStart(9, "0"), usados)
 }
 

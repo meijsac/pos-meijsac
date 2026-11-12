@@ -348,6 +348,7 @@ export default function ConfiguracionAvanzadaSRI() {
           ciudad: payload.ciudad,
           actividad: payload.actividad,
           modo_negocio: payload.modo_negocio,
+          secuenciales: (Array.isArray(payload.secuenciales) ? payload.secuenciales : []).map((s: any) => ({ ...s, actualizadoEn: new Date().toISOString() })),
         }
         const res = await fetch("/api/configuracion", {
           method: "POST",
@@ -356,14 +357,27 @@ export default function ConfiguracionAvanzadaSRI() {
         });
 
         if (!res.ok) throw new Error(`Error ${res.status}`);
-        try { localStorage.setItem("meijsac_config_pro", JSON.stringify({ ...payload, logoPreview: undefined })) } catch {}
+        try {
+          const secuencialesGuardados = cuerpo.secuenciales
+          localStorage.setItem("meijsac_config_pro", JSON.stringify({ ...payload, secuenciales: secuencialesGuardados, logoPreview: undefined }))
+          const mapa: Record<string, string> = {}
+          for (const s of secuencialesGuardados) {
+            const estab = String(s?.estab || "").replace(/\D/g, "").padStart(3, "0").slice(-3)
+            const pto = String(s?.pto || "").replace(/\D/g, "").padStart(3, "0").slice(-3)
+            const ultimo = String(s?.ultimo || "").replace(/\D/g, "").padStart(9, "0").slice(-9)
+            if (estab !== "000" && pto !== "000") mapa[`${estab}-${pto}`] = ultimo
+          }
+          localStorage.setItem("meijsac_contador_secuencial", JSON.stringify(mapa))
+          const empresaLocal = JSON.parse(localStorage.getItem("meijsac_empresa") || "{}")
+          empresaLocal.secuenciales = secuencialesGuardados
+          localStorage.setItem("meijsac_empresa", JSON.stringify(empresaLocal))
+        } catch {}
         const empresaPendiente = cargarEmpresaSesion()
         if (!logoGuardado) alert("Configuración guardada")
         const empresa = await empresaPendiente
         const logo = empresa.logo_url || empresa.logoUrl || empresa.marca_ride || payload.logo_url || ""
         setCfg((p: any) => ({ ...p, ...payload, firma: { ...p?.firma, ...payload.firma, clave: claveFirma || p?.firma?.clave || "" }, logoFile: null, logo_url: logo, logoUrl: logo, marca_ride: logo, logoPreview: logo || p?.logoPreview || "" }))
         setAvisoLogo(logoGuardado ? "Logotipo guardado correctamente" : "")
-        if (!logoGuardado) alert("Configuración guardada")
       } catch (e:any) {
         if (String(e?.message || "").includes("logo")) setAvisoLogo(e.message)
         else alert("❌ " + e.message);
@@ -469,6 +483,13 @@ base.sucursales = datosReales.sucursales || base.sucursales || [];
           base.marca_ride = logoGuardado;
           base.logoPreview = logoGuardado;
         }
+        try {
+          const mia = await fetch("/api/empresa/mia", { credentials: "same-origin", cache: "no-store" })
+          const miaData = mia.ok ? await mia.json() : null
+          if (Array.isArray(miaData?.empresa?.secuenciales) && miaData.empresa.secuenciales.length) {
+            base.secuenciales = miaData.empresa.secuenciales
+          }
+        } catch {}
         try {
           const firmaRes = await fetch("/api/sri/clave-firma", { credentials: "same-origin" })
           const firmaData = firmaRes.ok ? await firmaRes.json() : null
