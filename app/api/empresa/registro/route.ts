@@ -55,6 +55,11 @@ export async function POST(req: Request) {
             empresaId: existe.id,
           },
         })
+        return NextResponse.json({ ok: true, id: existe.id, empresaId: usuario.empresaId })
+      }
+      const guardada = await bcrypt.compare(adminPass, usuario.password).catch(() => false)
+      if (!guardada) {
+        return NextResponse.json({ error: "Esta empresa ya está registrada. Entra con la clave que creaste." }, { status: 409 })
       }
       return NextResponse.json({ ok: true, id: existe.id, yaExistia: true, empresaId: usuario.empresaId })
     }
