@@ -60,7 +60,7 @@ export default function EmitidosPage(){
     } catch {}
 
     const map = new Map()
-    unificados.filter((d) => esDelAmbiente(d, ambienteRef.current)).forEach(d=>{ 
+    unificados.forEach(d=>{ 
       const clave = String(d.claveAcceso || "").replace(/\D/g, "")
       const llave = clave.length === 49 ? clave : d.secuencial
       const prev = map.get(llave)

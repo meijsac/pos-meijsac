@@ -1,5 +1,5 @@
 import { claveAcceso49 } from "@/lib/sri/clave"
-import { codigoAmbiente } from "@/lib/sri/ambiente"
+import { ambienteDeEmpresa } from "@/lib/sri/ambiente"
 import { tarifasEnMemoria } from "@/lib/sri/catalogos-base"
 
 export class FaltanDatosSri extends Error {
@@ -169,7 +169,7 @@ export function armarXmlFactura(empresa: {
   let estab = estabRaw
   let pto = ptoRaw
   const fecha = fechaSri(body?.fechaEmisionFormato || body?.fechaEmision)
-  const ambiente = codigoAmbiente(extra.ambiente || extra.ambienteCodigo || body?.configEmisor?.ambiente)
+  const ambiente = ambienteDeEmpresa(empresa)
   const obligado = obligadoRaw === "SI" ? "SI" : "NO"
   const comercial = String(empresa.nombreComercial || "").trim()
   const dirEstablecimiento = String(

@@ -255,6 +255,8 @@ export default function FacturadorXMLReal(){
           obligado: conTexto(conf.obligadoConta, conf.obligadoContabilidad, emp.obligadoConta, emp.obligado),
           regimen: conTexto(conf.regimen, emp.regimen),
           ambiente,
+          email: conTexto(conf.email, conf.correo, emp.email, emp.correo),
+          telefono: conTexto(conf.telefono, emp.telefono, emp.celular),
           logo: [conf.logo_url, conf.logoUrl, conf.marca?.logo, emp.logo_url, emp.logoUrl].map(v => String(v || "").trim()).find(v => v.startsWith("http") || v.startsWith("data:")) || "",
           modo_negocio: conTexto(conf.modo_negocio, emp.modo_negocio),
           datosTransferencia: conf.datosTransferencia || conf.transferencia || null,

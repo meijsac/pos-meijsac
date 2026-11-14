@@ -44,7 +44,7 @@ export default function ComprobantesPage() {
   useEffect(() => {
     if (codigoVivo !== "1" && codigoVivo !== "2") return
     fetch("/api/facturas", { credentials: "same-origin" }).then((r) => r.ok ? r.json() : []).then((filas) => {
-      setHistorial(Array.isArray(filas) ? filas.filter((fila) => esDelAmbiente(fila, codigoVivo)).length : 0)
+      setHistorial(Array.isArray(filas) ? filas.length : 0)
     }).catch(() => setHistorial(0))
     fetch("/api/compras-recibidas", { credentials: "same-origin" }).then((r) => r.ok ? r.json() : []).then((filas) => {
       setCompras(Array.isArray(filas) ? filas.filter((fila) => esDelAmbiente(fila, codigoVivo)).length : 0)

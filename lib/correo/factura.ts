@@ -53,7 +53,8 @@ function numeroDe(body: Record<string, any>) {
 
 function remitente(empresa: string, correoEmpresa: string) {
   const configurado = String(process.env.SMTP_FROM || "").trim()
-  const elegido = esDominioEmpresa(configurado) ? configurado : (esDominioEmpresa(correoEmpresa) ? correoEmpresa : "")
+  const buzon = String(process.env.SMTP_USER || "").trim()
+  const elegido = [configurado, correoEmpresa, buzon].find((correo) => esDominioEmpresa(correo)) || ""
   if (!elegido) return ""
   const nombre = empresa.replace(/"/g, "").slice(0, 80) || "Facturación"
   return `"${nombre}" <${elegido}>`
@@ -112,24 +113,25 @@ function transporte() {
 export async function enviarCorreosFactura(body: Record<string, any>, xmlAutorizado: string) {
   const tipo = String(body.tipoComprobante || body.codDoc || "01")
   const estado = String(body.estadoSRI || "").toUpperCase()
-  if (tipo !== "01" || !["AUTORIZADO", "DEVUELTA", "NO AUTORIZADO"].includes(estado)) return ""
+  const autorizado = estado === "AUTORIZADO"
+  const devuelta = estado.includes("DEVUELT") || estado.includes("NO AUTORIZ") || estado.includes("RECHAZ")
+  if (tipo !== "01" || (!autorizado && !devuelta)) return ""
   const emisor = body.configEmisor && typeof body.configEmisor === "object" ? body.configEmisor : {}
   const cliente = body.cliente && typeof body.cliente === "object" ? body.cliente : {}
   const empresa = String(emisor.razon || emisor.razonSocial || "Empresa")
   const ruc = String(emisor.ruc || "")
   const direccion = String(emisor.matriz || emisor.direccion || "")
-  const telefono = String(emisor.telefono || "")
+  const telefono = String(emisor.telefono || emisor.celular || "")
   const logo = String(emisor.logo || "")
   const nombreCliente = String(cliente.razon || "cliente")
   const numero = numeroDe(body)
   const fecha = String(body.fechaEmisionFormato || body.fechaAutorizacion || "")
   const total = dinero(body.totales?.total)
-  const autorizado = estado === "AUTORIZADO"
   const motivo = String(body.mensajeSri || "sin motivo informado por el SRI")
   const autorizacion = String(body.numeroAutorizacion || "")
   const hora = cuando()
-  const destino = correosDe(cliente.email)
-  const emisorCorreo = correosDe(emisor.email)[0] || ""
+  const destino = correosDe(cliente.email || cliente.correo)
+  const emisorCorreo = correosDe(emisor.email || emisor.correo)[0] || ""
   const from = remitente(empresa, emisorCorreo)
   const xml = String(xmlAutorizado || body.xmlContent || "")
   let pdf: Buffer | null = null

@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useEffect, useState } from "react"
 
 type Fila = { id: string; fecha: string; cliente: string; numero: string; estado: string }
 
@@ -10,6 +10,8 @@ export default function RespaldoPage() {
   const [numero, setNumero] = useState("")
   const [filas, setFilas] = useState<Fila[]>([])
   const [aviso, setAviso] = useState("")
+
+  useEffect(() => { buscar() }, [])
 
   async function buscar() {
     const params = new URLSearchParams()
@@ -53,7 +55,7 @@ export default function RespaldoPage() {
               <a className="bg-[#00f5d4] text-black px-3 py-2 rounded-xl text-[11px] font-black" href={`/api/respaldo/archivo?id=${fila.id}&tipo=pdf`}>PDF</a>
             </div>
           ))}
-          {!filas.length && <p className="text-xs text-white/40">Busca para ver las facturas de esta empresa.</p>}
+          {!filas.length && !aviso && <p className="text-xs text-white/40">No hay facturas guardadas de esta empresa.</p>}
         </div>
       </div>
     </div>
