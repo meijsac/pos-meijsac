@@ -582,14 +582,7 @@ base.sucursales = datosReales.sucursales || base.sucursales || [];
     <button onClick={() => location.href = '/dashboard'} className="bg-white/10 px-4 py-2 rounded-xl text-xs">← Dashboard</button>
 </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-4 max-w-3xl">
-                <Link href="/dashboard/configuracion/centro-de-control" className="bg-[#11131a] border border-white/10 rounded-2xl px-4 py-4 flex items-center gap-3">
-                    <span className="text-2xl" aria-hidden="true">📁</span>
-                    <span>
-                        <span className="block text-[11px] font-black tracking-widest">CENTRO DE CONTROL MODULAR</span>
-                        <span className="block text-[10px] text-white/50">Activar o desactivar módulos</span>
-                    </span>
-                </Link>
+            <div className="mb-4 max-w-sm">
                 <Link href="/dashboard/configuracion/catalogo-sri" className="bg-[#11131a] border border-white/10 rounded-2xl px-4 py-4 flex items-center gap-3">
                     <span className="text-2xl" aria-hidden="true">📁</span>
                     <span>

@@ -49,6 +49,7 @@ export default function AdminModuladorCompleto() {
   const [user, setUser] = useState("")
   const [pass, setPass] = useState("")
   const [tab, setTab] = useState<"dash" | "planes" | "clientes" | "crear">("planes")
+  const [centro, setCentro] = useState(false)
   const [planes, setPlanes] = useState<Plan[]>([])
   const [clientes, setClientes] = useState<Cliente[]>([])
   const [filtro, setFiltro] = useState("")
@@ -196,10 +197,19 @@ export default function AdminModuladorCompleto() {
     <div className="min-h-screen bg-[#0a0a0a] text-white p-4">
       <div className="max-w-7xl mx-auto space-y-4">
         <div className="flex justify-between items-center"><h1 className="text-xl font-black">MODULADOR COMPLETO</h1><button onClick={() => setLogado(false)} className="text-xs bg-white/10 px-3 py-1 rounded">Salir</button></div>
-        <div className="flex gap-2 flex-wrap">{(["dash", "planes", "clientes", "crear"] as const).map((t) => <button key={t} onClick={() => { setTab(t); if (t === "crear" && !editId) setForm(vacio) }} className={`px-4 py-2 rounded-xl text-xs font-black ${tab === t ? "bg-[#00f5d4] text-black" : "bg-white/10"}`}>{t === "dash" ? "DASHBOARD" : t === "planes" ? "PLANES" : t === "clientes" ? "CLIENTES / SUSCRIPCIONES" : editId ? "EDITAR PLAN" : "CREAR PLAN"}</button>)}</div>
+        <div className="flex gap-2 flex-wrap">{(["dash", "planes", "clientes", "crear"] as const).map((t) => <button key={t} onClick={() => { setCentro(false); setTab(t); if (t === "crear" && !editId) setForm(vacio) }} className={`px-4 py-2 rounded-xl text-xs font-black ${!centro && tab === t ? "bg-[#00f5d4] text-black" : "bg-white/10"}`}>{t === "dash" ? "DASHBOARD" : t === "planes" ? "PLANES" : t === "clientes" ? "CLIENTES / SUSCRIPCIONES" : editId ? "EDITAR PLAN" : "CREAR PLAN"}</button>)}</div>
+        <button type="button" onClick={() => setCentro(true)} className={`max-w-sm bg-white/5 border rounded-2xl px-4 py-4 flex items-center gap-3 text-left ${centro ? "border-[#00f5d4]" : "border-white/10"}`}>
+          <span className="text-2xl" aria-hidden="true">📁</span>
+          <span>
+            <span className="block text-[11px] font-black tracking-widest">CENTRO DE CONTROL MODULAR</span>
+            <span className="block text-[10px] text-white/50">Activar o desactivar secciones y carpetas</span>
+          </span>
+        </button>
         {aviso && <div className="bg-amber-500/10 border border-amber-400/30 text-amber-200 text-xs p-3 rounded-xl">{aviso}</div>}
 
-        {tab === "dash" && (
+        {centro && <CentroModular />}
+
+        {!centro && tab === "dash" && (
           <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
             <div className="bg-white/5 p-4 rounded-xl"><div className="text-[10px] opacity-50">MRR ESTIMADO</div><div className="font-black text-xl">${mrr.toFixed(2)}</div></div>
             <div className="bg-white/5 p-4 rounded-xl"><div className="text-[10px] opacity-50">CLIENTES</div><div className="font-black text-xl">{clientes.length}</div></div>
@@ -208,7 +218,7 @@ export default function AdminModuladorCompleto() {
           </div>
         )}
 
-        {tab === "planes" && (
+        {!centro && tab === "planes" && (
           <div className="grid gap-2">{planes.map((p) => (
             <div key={p.id} className="bg-white/5 p-4 rounded-xl flex flex-col md:flex-row md:justify-between md:items-center gap-3">
               <div>
@@ -224,7 +234,7 @@ export default function AdminModuladorCompleto() {
           ))}</div>
         )}
 
-        {tab === "crear" && (
+        {!centro && tab === "crear" && (
           <div className="bg-white/5 p-4 rounded-xl space-y-3 max-w-xl">
             <h3 className="font-black">{editId ? "EDITAR PLAN" : "CREAR PLAN"}</h3>
             <input value={form.nombre} onChange={(e) => setForm({ ...form, nombre: e.target.value })} placeholder="Nombre" className="w-full p-3 rounded bg-black border border-white/10 text-sm" />
@@ -244,7 +254,7 @@ export default function AdminModuladorCompleto() {
           </div>
         )}
 
-        {tab === "clientes" && (
+        {!centro && tab === "clientes" && (
           <div className="space-y-3">
             <input value={filtro} onChange={(e) => setFiltro(e.target.value)} placeholder="Buscar por RUC o razón" className="w-full p-3 rounded-xl bg-black border border-white/10 text-sm" />
             <div className="overflow-x-auto bg-white/5 rounded-xl border border-white/10">
@@ -277,6 +287,78 @@ export default function AdminModuladorCompleto() {
           </div>
         )}
       </div>
+    </div>
+  )
+}
+
+const SECCIONES = [
+  "Comprobantes electrónicos",
+  "POS Ticket",
+  "Restaurante POS",
+  "Contabilidad",
+  "Cuentas por cobrar",
+  "Inventario",
+  "Caja",
+  "Clientes",
+  "Reportes",
+  "Comprobantes adicionales",
+  "Respaldo / Restaurar",
+]
+
+const CARPETAS = [
+  "Identidad",
+  "Firma",
+  "Secuenciales",
+  "Impuestos",
+  "Inventario",
+  "Seguridad",
+  "WhatsApp",
+  "Respaldo",
+  "Marca RIDE",
+  "Documentos",
+  "Permisos",
+  "Ambiente SRI",
+  "Catálogo SRI",
+]
+
+function CentroModular() {
+  const [activos, setActivos] = useState<Record<string, boolean>>({})
+
+  useEffect(() => {
+    let guardado: Record<string, boolean> = {}
+    try { guardado = JSON.parse(localStorage.getItem("meijsac_modulos_activos") || "{}") } catch { guardado = {} }
+    const base: Record<string, boolean> = {}
+    for (const nombre of [...SECCIONES, ...CARPETAS]) base[nombre] = guardado[nombre] !== false
+    setActivos(base)
+  }, [])
+
+  function cambiar(nombre: string) {
+    setActivos((prev) => {
+      const siguiente = { ...prev, [nombre]: !prev[nombre] }
+      localStorage.setItem("meijsac_modulos_activos", JSON.stringify(siguiente))
+      return siguiente
+    })
+  }
+
+  const lista = (titulo: string, nombres: string[]) => (
+    <section className="bg-white/5 border border-white/10 rounded-2xl">
+      <h2 className="px-4 pt-4 text-[11px] font-black tracking-widest text-[#00f5d4]">{titulo}</h2>
+      <div className="divide-y divide-white/5">
+        {nombres.map((nombre) => (
+          <label key={nombre} className="flex items-center justify-between px-4 py-3 cursor-pointer">
+            <span className="text-sm">{nombre}</span>
+            <input type="checkbox" checked={activos[nombre] !== false} onChange={() => cambiar(nombre)} className="accent-[#00f5d4] w-4 h-4" />
+          </label>
+        ))}
+      </div>
+    </section>
+  )
+
+  return (
+    <div className="max-w-3xl space-y-4">
+      <h2 className="text-lg font-black">Centro de Control Modular</h2>
+      {lista("SECCIONES", SECCIONES)}
+      {lista("CARPETAS", CARPETAS)}
     </div>
   )
 }
