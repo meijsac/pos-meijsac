@@ -19,7 +19,6 @@ const modules = [
   { title: "CLIENTES", desc: "Gestión y políticas de crédito", href: "/dashboard/clientes", icon: "👥", size: "col-span-1", primary: false },
   { title: "REPORTES", desc: "Ventas, SRI, utilidades", href: "/dashboard/reportes", icon: "📈", size: "col-span-1", primary: false },
   { title: "COMPROBANTES ADICIONALES", desc: "Proformas, historias, recetas", href: "/dashboard/comprobantes-adicionales", icon: "📋", size: "col-span-1", primary: true },
-  { title: "CATÁLOGOS SRI", desc: "IVA y códigos de retención", href: "/dashboard/catalogos-sri", icon: "🏷️", size: "col-span-1", primary: false },
   { title: "RESPALDO / RESTAURAR", desc: "XML y PDF por fecha, cliente o factura", href: "/dashboard/respaldo", icon: "🗄️", size: "col-span-1", primary: false },
 ]
 

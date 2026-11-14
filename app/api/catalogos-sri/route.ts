@@ -38,13 +38,20 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Completa grupo, código, descripción y porcentaje" }, { status: 400 })
   }
   const usuario = nombreDe(sesion)
+  const previo = await prisma.catalogoSri.findUnique({ where: { grupo_codigo: { grupo, codigo } } })
   const fila = await prisma.catalogoSri.upsert({
     where: { grupo_codigo: { grupo, codigo } },
     create: { grupo, codigo, descripcion, porcentaje, vigente: body.vigente !== false, actualizadoPor: usuario },
     update: { descripcion, porcentaje, vigente: body.vigente !== false, actualizadoPor: usuario },
   })
   await prisma.catalogoSriCambio.create({
-    data: { grupo, codigo, usuario, despues: `${descripcion} ${porcentaje}%` },
+    data: {
+      grupo,
+      codigo,
+      usuario,
+      antes: previo ? `${previo.descripcion} ${previo.porcentaje}%` : "",
+      despues: `${descripcion} ${porcentaje}%`,
+    },
   })
   await refrescarTarifas()
   return NextResponse.json({ ok: true, fila })
