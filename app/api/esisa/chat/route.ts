@@ -10,26 +10,30 @@ export async function POST(req: Request){
     let respuesta = ""
 
     if(m.includes("sri") || m.includes("sdi") || m.includes("activo") || m.includes("caido") || m.includes("estado")){
-      // Verificamos SRI real sin llamarse a si mismo
       try{
         const r = await fetch("https://cel.sri.gob.ec/comprobantes-electronicos-ws/AutorizacionComprobantesOffline?wsdl", { cache: "no-store", signal: AbortSignal.timeout(3000) })
         if(r.ok){
-          respuesta = "Papá, verifiqué ahora mismo: el SRI está OPERATIVO 🟢. Puedes facturar normal, sin contingencia."
+          respuesta = "Tranquila, yo te ayudo. El servicio está respondiendo, así que puedes emitir con calma. ¿qué hacemos ahora?"
         } else {
-          respuesta = "Papá, lo verifiqué: el SRI está CAÍDO 🔴. Activa contingencia tipo 2, guarda las facturas, tienes 72h para reenviar."
+          respuesta = "Tranquila, yo te ayudo. El servicio no está respondiendo. Dejamos el comprobante guardado y lo enviamos cuando vuelva. ¿qué hacemos ahora?"
         }
       }catch{
-        respuesta = "Papá, intenté verificar el SRI y no responde en este momento. Mejor guarda en contingencia por si acaso."
+        respuesta = "Tranquila, yo te ayudo. No pude confirmar el servicio en este momento. Seguimos con lo guardado y lo revisamos en un rato. ¿qué hacemos ahora?"
       }
     } else if(m.includes("hola") || m.includes("es isa") || m.includes("quien eres")){
-      respuesta = "Hola, soy ESISA. Puedo verificar el SRI y ayudarte a facturar. ¿Qué necesitas?"
+      respuesta = "Hola, soy ESISA. Te explico paso a paso, sin prisa. ¿qué hacemos ahora?"
     } else {
-      respuesta = `Entendido papá. Ya registré eso de: "${mensaje}". ¿Qué más hacemos en el POS?`
+      const variantes = [
+        "Tranquila, yo te ayudo. Vamos de una cosa a la vez y te digo el siguiente paso. ¿qué hacemos ahora?",
+        "Listo, ya te entendí. Lo vemos fácil, sin saltarnos nada. ¿qué hacemos ahora?",
+        "Aquí estoy. Dime en qué paso vas y lo seguimos juntas. ¿qué hacemos ahora?",
+      ]
+      respuesta = variantes[String(mensaje || "").length % variantes.length]
     }
 
     return NextResponse.json({ respuesta })
 
-  }catch(e){
-    return NextResponse.json({ respuesta: "Papá, me quedé sin internet un momento, ¿me repites?" })
+  }catch{
+    return NextResponse.json({ respuesta: "Tranquila, yo te ayudo. Se cortó un momento y ya volví. ¿qué hacemos ahora?" })
   }
 }

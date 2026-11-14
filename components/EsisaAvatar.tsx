@@ -1,7 +1,38 @@
 "use client"
 import { useEffect, useState, useRef } from "react"
+import { usePathname } from "next/navigation"
 
 type Msg = { role: "user" | "esisa", text: string }
+
+function textoHumano(valor: unknown) {
+  const texto = String(valor || "").replace(/\s+/g, " ").trim()
+  const digitos = texto.replace(/\D/g, "")
+  if (!texto || digitos.length >= 10) return ""
+  return texto
+}
+
+function saludoEsisa() {
+  if (typeof window === "undefined" || window.location.pathname.startsWith("/login")) {
+    return "Hola, ¿en qué te puedo ayudar?"
+  }
+  let usuario = ""
+  let empresa = ""
+  try {
+    const user = JSON.parse(localStorage.getItem("meijsac_user") || "null")
+    usuario = textoHumano(user?.nombre) || textoHumano(localStorage.getItem("esisa_usuario_actual"))
+  } catch {}
+  try {
+    const casa = JSON.parse(localStorage.getItem("meijsac_empresa") || "null")
+    empresa = textoHumano(casa?.razonSocial) || textoHumano(casa?.razon) || textoHumano(casa?.nombreComercial) || textoHumano(casa?.empresa)
+  } catch {}
+  if (usuario && empresa) return `Hola ${usuario} de ${empresa}, qué bueno verte de nuevo, ¿qué hacemos ahora?`
+  if (usuario || empresa) return `Hola ${usuario || empresa}, qué bueno verte de nuevo, ¿qué hacemos ahora?`
+  return "Hola, qué bueno verte de nuevo"
+}
+
+function sinNumerosLargos(texto: string) {
+  return texto.replace(/\d[\d\s-]{8,}\d/g, "").replace(/\s{2,}/g, " ").trim()
+}
 
 export function EsisaAvatar() {
   const [abierto, setAbierto] = useState(false)
@@ -9,7 +40,9 @@ export function EsisaAvatar() {
   const [msgs, setMsgs] = useState<Msg[]>([])
   const [input, setInput] = useState("")
   const [hablando, setHablando] = useState(false)
-  const [escuchando, setEscuchando] = useState(false)
+  const [silencio, setSilencio] = useState(false)
+  const silencioRef = useRef(false)
+  const pathname = usePathname()
   const listRef = useRef<HTMLDivElement>(null)
   const [pos, setPos] = useState<{ x: number; y: number } | null>(null)
   const posRef = useRef<{ x: number; y: number } | null>(null)
@@ -27,53 +60,52 @@ export function EsisaAvatar() {
     } catch {}
   }, [])
 
-  // --- INICIO ARREGLO ESISA + DEMO vs REAL ---
   useEffect(() => {
+    const saludo = saludoEsisa()
     const memoria = localStorage.getItem("esisa_memoria")
     if (memoria) {
-      try { setMsgs(JSON.parse(memoria)); return } catch {}
+      try {
+        const previa = JSON.parse(memoria) as Msg[]
+        const charla = Array.isArray(previa) ? previa.filter((m) => m?.role === "user" || (m?.role === "esisa" && !/papá|ruc/i.test(String(m.text || "")))) : []
+        let yaHablo = false
+        const resto = charla.filter((m) => {
+          if (!yaHablo && m.role === "esisa") return false
+          if (m.role === "user") yaHablo = true
+          return true
+        })
+        if (resto.length) {
+          setMsgs([{ role: "esisa", text: saludo }, ...resto])
+          return
+        }
+      } catch {}
     }
-    
-    // Si no hay memoria, leemos quien ingreso
-    const userRaw = localStorage.getItem("meijsac_user")
-    const user = userRaw ? JSON.parse(userRaw) : null
-
-    if (user?.modo === "demo" || user?.esDemo) {
-      // MODO DEMO - VISITANTE LIMITADO
-      setMsgs([{ role: "esisa", text: "Bienvenido Usuario 💜, estás en modo DEMO. Soy ESISA en versión visitante, con capacidad limitada. Ingresa con tu RUC real para ver toda mi capacidad." }])
-    } else {
-      // MODO REAL - ALEXANDRA O EL NOMBRE QUE VENGA
-      const nombre = user?.nombre || localStorage.getItem("esisa_usuario_actual") || "Alexandra"
-      setMsgs([{ role: "esisa", text: `Hola ${nombre}, soy ESISA, tu ayudante de Meijsac. Ya estoy con toda mi capacidad activa para ti. ¿En qué te ayudo hoy?` }])
-    }
-  }, [])
-  // --- FIN ARREGLO ---
+    setMsgs([{ role: "esisa", text: saludo }])
+  }, [pathname])
 
   const hablar = (texto: string) => {
-    if(!("speechSynthesis" in window)) return
+    const limpio = sinNumerosLargos(texto)
+    if (!limpio || silencioRef.current || !("speechSynthesis" in window)) return
+    const voces = window.speechSynthesis.getVoices()
+    const enEspanol = voces.filter((v) => /^es([-_]|$)/i.test(v.lang) && !/^es-ES/i.test(v.lang))
+    const pool = enEspanol.length ? enEspanol : voces.filter((v) => /^es([-_]|$)/i.test(v.lang))
+    const voz = pool.find((v) => /paulina|sabina|angelica|ángela|mia|sof[ií]a|luc[ií]a|camila|renata|dalia|m[oó]nica|laura|female|mujer/i.test(v.name)) || pool[0]
     window.speechSynthesis.cancel()
-    const u = new SpeechSynthesisUtterance(texto)
-    u.lang = "es-EC"
-    u.rate = 1
-    u.pitch = 1.15
-    u.onstart = ()=> setHablando(true)
-    u.onend = ()=> setHablando(false)
+    const u = new SpeechSynthesisUtterance(limpio)
+    u.lang = voz?.lang || "es-MX"
+    u.rate = 0.95
+    u.pitch = 1
+    if (voz) u.voice = voz
+    u.onstart = () => setHablando(true)
+    u.onend = () => setHablando(false)
     window.speechSynthesis.speak(u)
   }
 
-  const escuchar = () => {
-    const SR: any = (window as any).webkitSpeechRecognition || (window as any).SpeechRecognition
-    if(!SR) { alert("Tu navegador no soporta micrófono, usa Chrome"); return }
-    const rec = new SR()
-    rec.lang = "es-EC"
-    rec.onstart = ()=> setEscuchando(true)
-    rec.onend = ()=> setEscuchando(false)
-    rec.onresult = (e:any)=> {
-      const t = e.results[0][0].transcript
-      setInput(t)
-      enviar(t)
-    }
-    rec.start()
+  const silenciar = () => {
+    const siguiente = !silencioRef.current
+    silencioRef.current = siguiente
+    setSilencio(siguiente)
+    if (siguiente && "speechSynthesis" in window) window.speechSynthesis.cancel()
+    setHablando(false)
   }
 
   const checkSRI = async () => {
@@ -82,7 +114,7 @@ export function EsisaAvatar() {
       const d = await r.json()
       setSri(d)
       if(d.estado==="CAIDO"){
-        const alerta = `Papá, el SRI se acaba de caer. ${d.disposicion}`
+        const alerta = "Tranquila, yo te ayudo. El servicio del SRI no está respondiendo ahora. Lo dejamos guardado y seguimos cuando vuelva. ¿qué hacemos ahora?"
         setMsgs(m=> [...m, { role:"esisa", text: alerta }])
         hablar(alerta)
         setAbierto(true)
@@ -100,10 +132,11 @@ export function EsisaAvatar() {
 
     // SI ES DEMO, LIMITAMOS CAPACIDAD
     if(esDemo){
-      const nuevo = [...msgs, { role:"user", text: texto } as Msg, { role:"esisa", text:"Estás en modo DEMO, mi capacidad está limitada. No puedo procesar esa acción. Ingresa con tu RUC real para activar todas mis funciones." } as Msg]
+      const aviso = "Tranquila, yo te ayudo. Desde la visita te oriento con lo básico, paso a paso. ¿qué hacemos ahora?"
+      const nuevo = [...msgs, { role:"user", text: texto } as Msg, { role:"esisa", text: aviso } as Msg]
       setMsgs(nuevo)
       setInput("")
-      hablar("Estás en modo demo, capacidad limitada")
+      hablar(aviso)
       return
     }
 
@@ -119,20 +152,33 @@ export function EsisaAvatar() {
           mensaje: texto, 
           historial: nuevo.slice(-8),
           sriEstado: sri,
-          contexto: "Eres ESISA, ayudante del POS MEIJSAC. Respondes corto y útil."
+          contexto: "Eres ESISA. Hablas cálida, en español latino, explicas fácil y paso a paso. Dices tranquila, yo te ayudo. No regañas, no repites la misma frase y no lees números de identificación. Cierras con ¿qué hacemos ahora?"
         })
       })
       const data = await res.json()
-      const respuesta = data.respuesta || "Ya entendí papá, estoy aprendiendo eso."
+      const respuesta = data.respuesta || "Tranquila, yo te ayudo. Lo vemos paso a paso. ¿qué hacemos ahora?"
       setMsgs(m=> [...m, { role:"esisa", text: respuesta }])
       hablar(respuesta)
       localStorage.setItem("esisa_memoria", JSON.stringify([...nuevo, { role:"esisa", text: respuesta }]))
     }catch{
-      const fallback = "Papá, me quedé sin internet un momento, pero ya estoy aquí. ¿Me repites?"
+      const fallback = "Tranquila, yo te ayudo. Se cortó un momento la conexión y ya estoy de vuelta. ¿qué hacemos ahora?"
       setMsgs(m=> [...m, { role:"esisa", text: fallback }])
       hablar(fallback)
     }
   }
+
+  useEffect(() => {
+    if (!("speechSynthesis" in window)) return
+    window.speechSynthesis.getVoices()
+    const cargar = () => window.speechSynthesis.getVoices()
+    window.speechSynthesis.addEventListener("voiceschanged", cargar)
+    return () => window.speechSynthesis.removeEventListener("voiceschanged", cargar)
+  }, [])
+
+  useEffect(() => {
+    if (!abierto) return
+    hablar(saludoEsisa())
+  }, [abierto])
 
   useEffect(()=>{
     checkSRI()
@@ -158,7 +204,7 @@ export function EsisaAvatar() {
                 <p className="font-black text-[13px] tracking-widest">ESISA</p>
 <p className="text-[10px] opacity-80">
   {sri === null ? "🟡 Verificando SRI..." : sri?.estado==="CAIDO" ? "🔴 SRI CAÍDO" : "🟢 SRI Operativo"} 
-  {hablando ? " • Hablando..." : escuchando ? " • Escuchando..." : " • Lista"} 
+  {silencio ? " • En silencio" : hablando ? " • Hablando..." : " • Lista"} 
 </p>
               </div>
             </div>
@@ -179,8 +225,8 @@ export function EsisaAvatar() {
           </div>
 
           <div className="p-3 border-t bg-white flex gap-2 items-center">
-            <button onClick={escuchar} className={`w-10 h-10 rounded-full grid place-items-center ${escuchando?"bg-red-500 text-white animate-pulse":"bg-slate-100"}`}>🎤</button>
-            <input value={input} onChange={e=>setInput(e.target.value)} onKeyDown={e=> e.key==="Enter" && enviar()} placeholder="Háblame papá..." className="flex-1 bg-slate-100 rounded-full px-4 py-2.5 text-[12px] outline-none focus:ring-2 focus:ring-violet-300" />
+            <button type="button" onClick={silenciar} aria-label={silencio ? "Activar la voz" : "Silenciar"} className={`w-10 h-10 rounded-full grid place-items-center ${silencio ? "bg-slate-300" : "bg-slate-100"}`}>{silencio ? "🔇" : "🎤"}</button>
+            <input value={input} onChange={e=>setInput(e.target.value)} onKeyDown={e=> e.key==="Enter" && enviar()} placeholder="Cuéntame y te ayudo" className="flex-1 bg-slate-100 rounded-full px-4 py-2.5 text-[12px] outline-none focus:ring-2 focus:ring-violet-300" />
             <button onClick={()=>enviar()} className="w-10 h-10 rounded-full bg-violet-600 text-white grid place-items-center font-black">↑</button>
             <button onClick={()=> { const t=msgs[msgs.length-1]?.text; if(t) hablar(t) }} className="w-10 h-10 rounded-full bg-black/5 grid place-items-center">🔊</button>
           </div>
@@ -218,7 +264,7 @@ export function EsisaAvatar() {
         }}
         className={`relative w-16 h-16 rounded-full grid place-items-center shadow-2xl border-2 bg-white cursor-grab active:cursor-grabbing touch-none ${sri?.estado==="CAIDO"?"border-red-400":"border-violet-200"}`}
       >
-        <span className="text-[28px]">{hablando?"🗣️": escuchando?"👂":"💜"}</span>
+        <span className="text-[28px]">{hablando ? "🗣️" : "💜"}</span>
         {sri?.estado==="CAIDO" && <span className="absolute -top-1 -right-1 w-4 h-4 bg-red-500 rounded-full animate-pulse border-2 border-white"></span>}
       </button>
     </div>
