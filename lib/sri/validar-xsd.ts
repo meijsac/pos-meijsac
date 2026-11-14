@@ -1,10 +1,10 @@
 import { DOMParser, type Element as XmlElement } from "@xmldom/xmldom"
+import { tarifasEnMemoria } from "@/lib/sri/catalogos-base"
+import { validarXmlOficial } from "@/lib/sri/validar-xsd-oficial"
 
 /**
- * Esquemas que emite este sistema. Cuando el SRI publique otra versión,
- * se cambia aquí la versión y, si cambia el IVA, la tabla TARIFAS_IVA.
- * factura 1.1.0, liquidación 1.1.0, nota de crédito 1.1.0, guía 1.1.0,
- * nota de débito 1.0.0, retención 2.0.0.
+ * Esquemas que emite este sistema. La versión vigente sale del XSD oficial
+ * cargado en lib/sri/xsd. El IVA sale de Catálogos SRI.
  */
 const VERSIONES: Record<string, { version: string; codDoc: string }> = {
   factura: { version: "1.1.0", codDoc: "01" },
@@ -13,10 +13,6 @@ const VERSIONES: Record<string, { version: string; codDoc: string }> = {
   notaDebito: { version: "1.0.0", codDoc: "05" },
   guiaRemision: { version: "1.1.0", codDoc: "06" },
   comprobanteRetencion: { version: "2.0.0", codDoc: "07" },
-}
-
-export const TARIFAS_IVA: Record<string, number> = {
-  "0": 0, "2": 12, "3": 14, "4": 15, "5": 5, "6": 0, "7": 0, "8": 8, "10": 13,
 }
 
 const INFO: Record<string, string[]> = {
@@ -77,9 +73,10 @@ function revisarIva(nodo: XmlElement): string {
     const codigo = texto(uno(bloque, "codigo") || uno(bloque, "codImpuestoDocSustento"))
     if (codigo !== "2") continue
     const porcentaje = texto(uno(bloque, "codigoPorcentaje"))
-    if (!Object.prototype.hasOwnProperty.call(TARIFAS_IVA, porcentaje)) return `El código de IVA ${porcentaje || "(vacío)"} no está en la tabla vigente`
+    const tarifas = tarifasEnMemoria()
+    if (!Object.prototype.hasOwnProperty.call(tarifas, porcentaje)) return `El código de IVA ${porcentaje || "(vacío)"} no está en la tabla vigente`
     const tarifa = texto(uno(bloque, "tarifa"))
-    if (tarifa && Math.abs(Number(tarifa) - TARIFAS_IVA[porcentaje]) > 0.001) {
+    if (tarifa && Math.abs(Number(tarifa) - tarifas[porcentaje]) > 0.001) {
       return `La tarifa ${tarifa} no corresponde al código de IVA ${porcentaje}`
     }
   }
@@ -105,7 +102,7 @@ function revisarDetalle(raiz: XmlElement, nombre: string) {
   return ""
 }
 
-export function validarEsquemaSri(xml: string) {
+function validarEstructura(xml: string) {
   const fallos: string[] = []
   let doc
   try {
@@ -123,7 +120,12 @@ export function validarEsquemaSri(xml: string) {
   const regla = VERSIONES[raiz.nodeName]
   if (!regla) return `El comprobante ${raiz.nodeName || ""} no tiene esquema cargado`
   if (raiz.getAttribute("version") !== regla.version) {
-    return `La versión ${raiz.getAttribute("version") || "(vacía)"} no es la vigente ${regla.version} de ${raiz.nodeName}`
+    const archivo = raiz.nodeName === "factura" ? "factura_V1.1.0.xsd"
+      : raiz.nodeName === "notaCredito" ? "NotaCredito_V1.1.0.xsd"
+      : raiz.nodeName === "comprobanteRetencion" ? "ComprobanteRetencion_V2.0.0.xsd"
+      : raiz.nodeName === "guiaRemision" ? "GuiaRemision_V1.1.0.xsd"
+      : raiz.nodeName
+    return `La versión ${raiz.getAttribute("version") || "(vacía)"} no es la vigente ${regla.version} del esquema oficial ${archivo}`
   }
   const info = uno(raiz, "infoTributaria")
   const faltaInfo = exigir(info, ["ambiente", "tipoEmision", "razonSocial", "ruc", "claveAcceso", "codDoc", "estab", "ptoEmi", "secuencial", "dirMatriz"], "infoTributaria")
@@ -166,4 +168,24 @@ export function validarEsquemaSri(xml: string) {
     if (!lista.length) return "La nota de débito no tiene motivos"
   }
   return ""
+}
+
+export async function validarEsquemaSri(xml: string) {
+  try {
+    const { refrescarTarifas } = await import("@/lib/sri/catalogos")
+    await refrescarTarifas()
+  } catch {
+    /* la tabla vigente sigue siendo la última conocida */
+  }
+  const estructural = validarEstructura(xml)
+  if (estructural.startsWith("La versión")) return estructural
+  let oficial = ""
+  try {
+    oficial = await validarXmlOficial(xml)
+  } catch {
+    oficial = ""
+  }
+  if (oficial.startsWith("La versión")) return oficial
+  if (oficial && estructural) return oficial
+  return estructural
 }

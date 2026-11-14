@@ -1,6 +1,6 @@
 import { claveAcceso49 } from "@/lib/sri/clave"
 import { codigoAmbiente } from "@/lib/sri/ambiente"
-import { TARIFAS_IVA as TARIFAS } from "@/lib/sri/validar-xsd"
+import { tarifasEnMemoria } from "@/lib/sri/catalogos-base"
 
 export class FaltanDatosSri extends Error {
   faltantes: string[]
@@ -158,7 +158,7 @@ export function armarXmlFactura(empresa: {
     const auxiliar = String(item.codigoAuxiliar || "").trim()
     const esTransporte = auxiliar === "H492001" || auxiliar === "H492002"
     const cod = esTransporte ? "0" : String(item.codigoPorcentaje ?? "4")
-    const tarifa = esTransporte ? 0 : (TARIFAS[cod] ?? 0)
+    const tarifa = esTransporte ? 0 : (tarifasEnMemoria()[cod] ?? 0)
     const iva = cod === "6" || cod === "7" || esTransporte ? 0 : base * (tarifa / 100)
     totalDescuento += desc
     if (!grupos[cod]) grupos[cod] = { base: 0, valor: 0, tarifa }

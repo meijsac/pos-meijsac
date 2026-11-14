@@ -70,6 +70,15 @@ export async function archivarComprobante(
   if (archivos?.html) await subirPrivado(COMPROBANTES, `${base}.html`, Buffer.from(archivos.html, "utf8"), "text/html")
 }
 
+export async function guardarCopiaDiaria(empresaId: string, clave: string, dia: string, xml: Buffer, pdf: Buffer) {
+  const limpia = String(clave || "").replace(/\D/g, "")
+  const fecha = String(dia || "").slice(0, 10)
+  if (!empresaId || limpia.length !== 49 || !/^\d{4}-\d{2}-\d{2}$/.test(fecha)) return
+  const base = `${empresaId}/diario/${fecha}/${limpia}`
+  await subirPrivado(COMPROBANTES, `${base}.xml`, xml, "application/xml")
+  await subirPrivado(COMPROBANTES, `${base}.pdf`, pdf, "application/pdf")
+}
+
 export async function leerComprobanteArchivado(empresaId: string, clave: string, ext: "xml" | "pdf" | "html" | "json") {
   const limpia = String(clave || "").replace(/\D/g, "")
   if (!empresaId || limpia.length !== 49) return null

@@ -60,7 +60,7 @@ export async function POST(req: Request) {
       if (e instanceof FaltanDatosSri) return NextResponse.json({ error: e.message, faltantes: e.faltantes }, { status: 400 })
       throw e
     }
-    const esquema = validarEsquemaSri(armado.xml)
+    const esquema = await validarEsquemaSri(armado.xml)
     if (esquema) return NextResponse.json({ error: esquema }, { status: 400 })
     const ambiente = ambienteDeEmpresa(sesion.empresa)
     let xml = armado.xml

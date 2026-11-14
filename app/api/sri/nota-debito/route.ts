@@ -103,7 +103,7 @@ export async function POST(req: Request) {
     ${motivos.map((m: { razon?: string; valor?: number }) => `<motivo><razon>${xml(m.razon)}</razon><valor>${Number(m.valor).toFixed(2)}</valor></motivo>`).join("")}
   </motivos>
 </notaDebito>`
-    const esquema = validarEsquemaSri(xmlSinFirmar)
+    const esquema = await validarEsquemaSri(xmlSinFirmar)
     if (esquema) return NextResponse.json({ autorizado: false, mensaje: esquema }, { status: 400 })
     let firmado = ""
     try {

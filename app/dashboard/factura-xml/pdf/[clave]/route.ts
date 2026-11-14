@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server"
 import { usuarioConEmpresaDesdeRequest } from "@/lib/empresa-sesion"
+import { puede } from "@/lib/seguridad"
 import { htmlGuiaRemision, htmlGuiaTicket, htmlRide, htmlTicket } from "@/lib/sri/ride-html"
 import { facturaPorClave } from "@/lib/sri/buscar-comprobante"
 import { pdfRide } from "@/lib/sri/ride-archivo"
@@ -19,6 +20,7 @@ export async function GET(req: Request, context: { params: Promise<{ clave: stri
   if (clave.length !== 49) return pagina("Comprobante", "La clave de acceso no tiene 49 dígitos.", 400)
   const sesion = await usuarioConEmpresaDesdeRequest(req)
   if ("error" in sesion) return pagina("Sesión", "Vuelve a entrar para ver el comprobante.", 401)
+  if (!puede(sesion.usuario.rol, "facturar")) return pagina("Permiso", "Tu rol no puede ver este comprobante.", 403)
   const fila = await facturaPorClave(sesion.empresa.id, clave)
   const xmlGuardado = await leerComprobanteArchivado(sesion.empresa.id, clave, "xml")
   const htmlGuardado = await leerComprobanteArchivado(sesion.empresa.id, clave, "html")

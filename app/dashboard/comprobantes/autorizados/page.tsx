@@ -62,31 +62,7 @@ export default function EmitidosPage(){
 
   // 1. INYECCION UNIFICADA - Aquí está la solución al POS
   const cargar = async ()=>{
-    const get = (k:string)=>{ try{ return JSON.parse(localStorage.getItem(k)||"[]") }catch{ return [] } }
-    
-    // LEEMOS TODAS LAS LLAVES POSIBLES
-    const fuentes = [
-      ...get("meijsac_comprobantes_sri"),
-      ...get("meijsac_comprobantes_emitidos"),
-      ...get("meijsac_documentos_emitidos"),
-      ...get("meijsac_facturas"),
-      ...get("meijsac_ventas_pos"), // <- TU POS DE CHIFA ESTABA AQUÍ
-      ...get("meijsac_restaurante_facturas"), // <- Y AQUÍ
-      ...get("meijsac_enviados_sri"),
-      ...get("meijsac_autorizados"),
-      ...get("meijsac_emitidos"),
-      ...get("meijsac_facturas_emitidas"),
-      ...get("meijsac_guias_06"),
-      ...get("meijsac_liquidaciones_03"),
-      ...get("meijsac_retenciones").map((r:any)=>({
-        id: r.id, tipoComprobante:'07', secuencial:r.numRetencion||r.secuencial,
-        claveAcceso: r.claveAccesoSustento||r.clave, fechaEmision: r.fechaGeneracion||r.fecha,
-        receptorIdentificacion: r.proveedorRuc||r.ruc, receptorNombre: r.proveedorNombre||r.razon,
-        valorTotal: (Number(r.valorRetRenta)||0)+(Number(r.valorRetIva)||0), estadoSRI: r.estado || "PENDIENTE",
-        fechaAutorizacion: r.fechaAutorizacion || "", numeroAutorizacion: r.numeroAutorizacion || "", mensajeSri: r.mensajeSri || "",
-        xmlContent: r.xml
-      }))
-    ]
+    const fuentes: any[] = []
 
     const ficha = (d: any, i: number): ComprobanteHistorialSRI => {
       const fechaAutorizacion = String(d.fechaAutorizacion || "")

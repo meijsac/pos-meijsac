@@ -3,17 +3,6 @@ import { useEffect, useState } from "react"
 import Link from "next/link"
 import ModalRetencion, { type CompraRecibida } from "@/components/ModalRetencion"
 
-function leerLocales(): Record<string, unknown>[] {
-  try {
-    const nuevas = JSON.parse(localStorage.getItem("meijsac_compras_ats_v2") || "[]")
-    const viejas = JSON.parse(localStorage.getItem("meijsac_compras_ats") || "[]")
-    const origen = Array.isArray(nuevas) && nuevas.length ? nuevas : viejas
-    return Array.isArray(origen) ? origen : []
-  } catch {
-    return []
-  }
-}
-
 export default function ComprasRecibidasPage() {
   const [compras, setCompras] = useState<CompraRecibida[]>([])
   const [cargando, setCargando] = useState(true)
@@ -31,15 +20,6 @@ export default function ComprasRecibidasPage() {
       const res = await fetch(`/api/compras-recibidas?${params.toString()}`)
       const data = await res.json()
       if (!res.ok) { setAviso(data.mensaje || "No se pudieron cargar las compras."); return }
-      if (Array.isArray(data) && data.length === 0 && !busqueda && !periodo) {
-        const locales = leerLocales()
-        if (locales.length) {
-          await fetch("/api/compras-recibidas", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ compras: locales }) })
-          const otra = await fetch("/api/compras-recibidas")
-          const migradas = await otra.json()
-          if (Array.isArray(migradas)) { setCompras(migradas); return }
-        }
-      }
       if (Array.isArray(data)) setCompras(data)
     } catch {
       setAviso("No pude conectar con el servidor.")

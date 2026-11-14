@@ -414,3 +414,25 @@ BEGIN
 EXCEPTION WHEN OTHERS THEN
   NULL;
 END $$;
+
+CREATE TABLE IF NOT EXISTS catalogos_sri (
+  id TEXT PRIMARY KEY,
+  grupo TEXT NOT NULL,
+  codigo TEXT NOT NULL,
+  descripcion TEXT NOT NULL DEFAULT '',
+  porcentaje DOUBLE PRECISION NOT NULL DEFAULT 0,
+  vigente BOOLEAN NOT NULL DEFAULT true,
+  "actualizadoEn" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  "actualizadoPor" TEXT NOT NULL DEFAULT ''
+);
+CREATE UNIQUE INDEX IF NOT EXISTS catalogos_sri_grupo_codigo ON catalogos_sri (grupo, codigo);
+
+CREATE TABLE IF NOT EXISTS catalogos_sri_cambios (
+  id TEXT PRIMARY KEY,
+  grupo TEXT NOT NULL,
+  codigo TEXT NOT NULL,
+  fecha TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  usuario TEXT NOT NULL,
+  antes TEXT NOT NULL DEFAULT '',
+  despues TEXT NOT NULL DEFAULT ''
+);

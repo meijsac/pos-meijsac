@@ -48,47 +48,7 @@ export default function EmitidosPage(){
   const cargar = async ()=>{
     const get = (k:string)=>{ try{ return JSON.parse(localStorage.getItem(k)||"[]") }catch{ return [] } }
     
-    const fuentes = [
-      ...get("meijsac_comprobantes_sri"),
-      ...get("meijsac_comprobantes_emitidos"),
-      ...get("meijsac_documentos_emitidos"),
-      ...get("meijsac_facturas"),
-      ...get("meijsac_ventas_pos"),
-      ...get("meijsac_restaurante_facturas"),
-      ...get("meijsac_enviados_sri"),
-      ...get("meijsac_comprobantes_pendientes_sri"),
-      ...get("meijsac_retenciones").map((r:any)=>({
-        id: r.id, tipoComprobante:'07', secuencial:r.numRetencion||r.secuencial,
-        claveAcceso: r.claveAccesoSustento||r.clave, fechaEmision: r.fechaGeneracion||r.fecha,
-        receptorIdentificacion: r.proveedorRuc||r.ruc, receptorNombre: r.proveedorNombre||r.razon,
-        valorTotal: (Number(r.valorRetRenta)||0)+(Number(r.valorRetIva)||0), estadoSRI: r.estado||'AUTORIZADO',
-        xmlContent: r.xml
-      }))
-    ]
-
-    const unificados: ComprobanteHistorialSRI[] = fuentes.map((d:any,i:number)=>({
-      id: d.id || `doc-${i}-${d.secuencial}`,
-      tipoComprobante: d.tipoComprobante || d.codDoc || (d.tipo?.includes('07')?'07':d.tipo?.includes('06')?'06':d.tipo?.includes('05')?'05':d.tipo?.includes('04')?'04':d.tipo?.includes('03')?'03':'01'),
-      secuencial: d.secuencial || d.numRetencion || `001-001-00000${i}`,
-      claveAcceso: d.claveAcceso || d.clave || d.claveAccesoSustento || `000000000000000000000000${i}`,
-      fechaEmision: d.fechaEmision || d.fecha || d.fechaGeneracion || new Date().toLocaleDateString('es-EC'),
-      fechaAutorizacion: d.fechaAutorizacion || "",
-      fechaISO: d.fechaISO || d.fechaCreacion || new Date().toISOString(),
-      receptorIdentificacion: d.receptorIdentificacion || d.ruc || d.rucProveedor || d.receptorRuc || "9999999999999",
-      receptorNombre: d.receptorNombre || d.razon || d.proveedor || d.proveedorNombre || "CONSUMIDOR FINAL",
-      valorTotal: Number(d.valorTotal ?? d.total ?? d.valorRetenido ?? 0),
-      estadoSRI: String(d.estadoSRI || d.estado || "").toUpperCase().includes("ANUL") ? "ANULADO" : (d.fechaAutorizacion ? "AUTORIZADO" : (d.estadoSRI || d.estado || "PENDIENTE")),
-      xmlContent: d.xmlContent || d.xml || "",
-      motivoAnulacion: d.motivoAnulacion,
-      fechaAnulacion: d.fechaAnulacion,
-      intentos: d.intentos || 0,
-      tipo_cobro: d.tipo_cobro || d.tipoCobro || "",
-      estado_pago: d.estado_pago || d.estadoPago || "",
-      fecha_vencimiento: d.fecha_vencimiento || d.fechaVencimiento || "",
-      plazo: d.plazo ?? null,
-      cuotas: d.cuotas ?? null,
-      facturaId: d.facturaId || ""
-    }))
+    const unificados: ComprobanteHistorialSRI[] = []
 
     try {
       const res = await fetch("/api/facturas", { headers: { Authorization: `Bearer ${localStorage.getItem("meijsac_token") || ""}` } })

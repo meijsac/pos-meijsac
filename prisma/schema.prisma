@@ -366,3 +366,29 @@ model CajaMovimiento {
   motivo  String?
   fecha   DateTime @default(now())
 }
+
+model CatalogoSri {
+  id             String   @id @default(cuid())
+  grupo          String
+  codigo         String
+  descripcion    String   @default("")
+  porcentaje     Float    @default(0)
+  vigente        Boolean  @default(true)
+  actualizadoEn  DateTime @default(now()) @updatedAt
+  actualizadoPor String   @default("")
+
+  @@unique([grupo, codigo])
+  @@map("catalogos_sri")
+}
+
+model CatalogoSriCambio {
+  id      String   @id @default(cuid())
+  grupo   String
+  codigo  String
+  fecha   DateTime @default(now())
+  usuario String
+  antes   String   @default("")
+  despues String   @default("")
+
+  @@map("catalogos_sri_cambios")
+}

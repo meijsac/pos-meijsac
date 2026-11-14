@@ -33,10 +33,6 @@ const EMITIR = [
   { title: "Liquidación de Compra", desc: "Compras a proveedores informales sin RUC", href: "/dashboard/liquidacion-xml", codigo: "03", icono: BOLSA },
 ]
 
-function contar(clave: string, codigo: string) {
-  try { return JSON.parse(localStorage.getItem(clave) || "[]").filter((fila: unknown) => esDelAmbiente(fila, codigo)).length } catch { return 0 }
-}
-
 const tarjeta = "group bg-[#111827]/90 hover:bg-[#151E32] border border-slate-800/90 border-t-slate-700/50 hover:border-teal-500/40 rounded-2xl p-6 transition-all duration-300 hover:-translate-y-1 shadow-lg flex flex-col justify-between min-h-[165px]"
 
 export default function ComprobantesPage() {
@@ -47,8 +43,12 @@ export default function ComprobantesPage() {
 
   useEffect(() => {
     if (codigoVivo !== "1" && codigoVivo !== "2") return
-    setHistorial(contar("meijsac_facturas", codigoVivo) + contar("meijsac_retenciones", codigoVivo) + contar("meijsac_comprobantes_emitidos", codigoVivo) + contar("meijsac_documentos_emitidos", codigoVivo))
-    setCompras(contar("meijsac_compras_ats_v2", codigoVivo) || contar("meijsac_compras_ats", codigoVivo))
+    fetch("/api/facturas", { credentials: "same-origin" }).then((r) => r.ok ? r.json() : []).then((filas) => {
+      setHistorial(Array.isArray(filas) ? filas.filter((fila) => esDelAmbiente(fila, codigoVivo)).length : 0)
+    }).catch(() => setHistorial(0))
+    fetch("/api/compras-recibidas", { credentials: "same-origin" }).then((r) => r.ok ? r.json() : []).then((filas) => {
+      setCompras(Array.isArray(filas) ? filas.filter((fila) => esDelAmbiente(fila, codigoVivo)).length : 0)
+    }).catch(() => setCompras(0))
     fetch("/api/empresa/mia", { credentials: "same-origin" })
       .then((r) => r.ok ? r.json() : null)
       .then((data) => {

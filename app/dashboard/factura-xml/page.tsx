@@ -278,17 +278,11 @@ export default function FacturadorXMLReal(){
       setConfigEmisor(emisor)
       setEmisorListo(Boolean(emisor.razon && emisor.ruc && emisor.regimen))
       setEmisorCargando(false)
-      const claves = new Set(
-        [emisor.empresaId, localStorage.getItem("empresaId"), localStorage.getItem("empresa_id"), "EMPRESA_001"].filter(Boolean) as string[]
-      )
-      for (let i = 0; i < localStorage.length; i++) {
-        const llave = localStorage.key(i) || ""
-        if (llave.startsWith("productos_")) claves.add(llave.slice("productos_".length))
-      }
+      const idEmpresa = String(emisor.empresaId || empresa?.id || empresa?.empresaId || "")
       const locales: any[] = []
-      claves.forEach((id) => {
-        try { locales.push(...JSON.parse(localStorage.getItem(`productos_${id}`) || "[]")) } catch {}
-      })
+      if (idEmpresa) {
+        try { locales.push(...JSON.parse(localStorage.getItem(`productos_${idEmpresa}`) || "[]")) } catch {}
+      }
       let remotos: any[] = []
       try {
         const res = await fetch("/api/productos")
@@ -371,11 +365,19 @@ export default function FacturadorXMLReal(){
 
  const [catalogoRapido, setCatalogoRapido] = useState<any[]>([]);
 useEffect(()=>{
-  const s = localStorage.getItem('catalogo_rapido_meijsac');
-  if(s) try{ setCatalogoRapido(JSON.parse(s)) }catch{}
+  try {
+    const casa = JSON.parse(localStorage.getItem("meijsac_empresa") || "null")
+    const id = String(casa?.id || casa?.empresaId || "")
+    const s = id ? localStorage.getItem(`catalogo_rapido_${id}`) : null
+    if(s) setCatalogoRapido(JSON.parse(s))
+  } catch {}
 },[]);
 useEffect(()=>{
-  localStorage.setItem('catalogo_rapido_meijsac', JSON.stringify(catalogoRapido));
+  try {
+    const casa = JSON.parse(localStorage.getItem("meijsac_empresa") || "null")
+    const id = String(casa?.id || casa?.empresaId || "")
+    if (id) localStorage.setItem(`catalogo_rapido_${id}`, JSON.stringify(catalogoRapido))
+  } catch {}
 },[catalogoRapido]);
 
 const [busquedaLector, setBusquedaLector] = useState("");

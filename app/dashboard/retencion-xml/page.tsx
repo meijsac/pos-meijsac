@@ -22,21 +22,28 @@ const SUSTENTOS = [
   { code:"10", name:"10 - Distribución de Dividendos o Utilidades (Retención a socios)" },
 ];
 
-const RET_Renta = [
-  { code:"312", desc:"312 - Transferencia bienes 1.75%", porc:1.75 },
-  { code:"343", desc:"343 - RIMPE Emprendedor 1%", porc:1 },
-  { code:"310", desc:"310 - Honorarios profesionales 8%", porc:8 },
-  { code:"303", desc:"303 - Servicios predomina intelecto 8%", porc:8 },
-  { code:"332", desc:"332 - Compra bienes no prod por soc. 2.75%", porc:2.75 },
-];
-
-const RET_Iva = [
-  { code:"1", desc:"30% Bienes", porc:30 },
-  { code:"2", desc:"70% Servicios", porc:70 },
-  { code:"3", desc:"100% - Honorarios / Liquidación", porc:100 },
-];
+type CodigoRet = { code: string; desc: string; porc: number }
 
 export default function RetencionCompraPage(){
+  const [retRenta, setRetRenta] = useState<CodigoRet[]>([])
+  const [retIva, setRetIva] = useState<CodigoRet[]>([])
+  useEffect(() => {
+    fetch("/api/catalogos-sri", { cache: "no-store" })
+      .then((res) => res.json())
+      .then((data) => {
+        const filas = Array.isArray(data.filas) ? data.filas : []
+        const tomar = (grupo: string) => filas
+          .filter((fila: { grupo?: string; vigente?: boolean }) => fila.grupo === grupo && fila.vigente !== false)
+          .map((fila: { codigo?: string; descripcion?: string; porcentaje?: number }) => ({
+            code: String(fila.codigo || ""),
+            desc: String(fila.descripcion || fila.codigo || ""),
+            porc: Number(fila.porcentaje || 0),
+          }))
+        setRetRenta(tomar("RETENCION_RENTA"))
+        setRetIva(tomar("RETENCION_IVA"))
+      })
+      .catch(() => {})
+  }, [])
   // PARTE A: COMPRA - Sustento
   const [proveedorRuc, setRuc] = useState("1792000000001");
   const [proveedorNombre, setNombre] = useState("PROVEEDOR INDUSTRIAL S.A.");
@@ -88,7 +95,8 @@ useEffect(()=>{
   setDetalles(prev => {
     const yaHayIVA = prev.some(f=>f.tipoImpuesto==='2');
     if(valorIvaCompra > 0 &&!yaHayIVA){
-      const sel = RET_Iva[0];
+      const sel = retIva[0];
+      if (!sel) return prev;
       return [...prev, {
         id:`iva-${Date.now()}`, // ESTA LINEA ARREGLA EL ERROR
         tipoImpuesto:'2' as const,
@@ -101,7 +109,7 @@ useEffect(()=>{
     }
     return prev;
   });
-},[valorIvaCompra]);
+},[valorIvaCompra, retIva]);
 
 
   // B. RECALCULO AUTOMATICO EN CALIENTE - Ya no necesita botón
@@ -117,11 +125,12 @@ useEffect(()=>{
   // A. FILA AUTOMATICA IVA - Si hay IVA >0, inyecta fila IVA sola
   useEffect(()=>{
     if(valorIvaCompra > 0 &&!detalles.some(f=>f.tipoImpuesto==='2')){
-      const sel = RET_Iva[0];
+      const sel = retIva[0];
+      if (!sel) return;
       setDetalles(prev=>[...prev, { id:"iva-auto", tipoImpuesto:'2', codigoRetencionSRI:sel.code, descripcion:sel.desc, baseImponibleCalculada:baseIvaAuto, porcentajeAplicado:sel.porc, valorRetenido: baseIvaAuto * (sel.porc/100) }]);
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  },[valorIvaCompra]);
+  },[valorIvaCompra, retIva]);
 
   const totalRetenido = useMemo(()=> detalles.reduce((s,d)=>s+d.valorRetenido,0), [detalles]);
 
@@ -146,10 +155,12 @@ useEffect(()=>{
 
   const agregarRetencion = (tipo:'1'|'2') => {
     if(tipo==='1'){
-      const sel = RET_Renta[0];
+      const sel = retRenta[0];
+      if (!sel) return;
       setDetalles([...detalles, { id:Date.now().toString(), tipoImpuesto:'1', codigoRetencionSRI:sel.code, descripcion:sel.desc, baseImponibleCalculada:baseRentaAuto, porcentajeAplicado:sel.porc, valorRetenido: baseRentaAuto * (sel.porc/100) }]);
     } else {
-      const sel = RET_Iva[0];
+      const sel = retIva[0];
+      if (!sel) return;
       setDetalles([...detalles, { id:Date.now().toString(), tipoImpuesto:'2', codigoRetencionSRI:sel.code, descripcion:sel.desc, baseImponibleCalculada:baseIvaAuto, porcentajeAplicado:sel.porc, valorRetenido: baseIvaAuto * (sel.porc/100) }]);
     }
   };
@@ -237,10 +248,10 @@ useEffect(()=>{
                     <div className="md:col-span-4">
                       <select value={d.codigoRetencionSRI} onChange={e=>{
                         const code=e.target.value;
-                        if(d.tipoImpuesto==='1'){ const f=RET_Renta.find(x=>x.code===code); if(f) setDetalles(detalles.map(x=>x.id===d.id?{...x, codigoRetencionSRI:code, descripcion:f.desc, porcentajeAplicado:f.porc, valorRetenido:d.baseImponibleCalculada*(f.porc/100)}:x)); }
-                        else { const f=RET_Iva.find(x=>x.code===code); if(f) setDetalles(detalles.map(x=>x.id===d.id?{...x, codigoRetencionSRI:code, descripcion:f.desc, porcentajeAplicado:f.porc, valorRetenido:d.baseImponibleCalculada*(f.porc/100)}:x)); }
+                        if(d.tipoImpuesto==='1'){ const f=retRenta.find(x=>x.code===code); if(f) setDetalles(detalles.map(x=>x.id===d.id?{...x, codigoRetencionSRI:code, descripcion:f.desc, porcentajeAplicado:f.porc, valorRetenido:d.baseImponibleCalculada*(f.porc/100)}:x)); }
+                        else { const f=retIva.find(x=>x.code===code); if(f) setDetalles(detalles.map(x=>x.id===d.id?{...x, codigoRetencionSRI:code, descripcion:f.desc, porcentajeAplicado:f.porc, valorRetenido:d.baseImponibleCalculada*(f.porc/100)}:x)); }
                       }} className="w-full bg-[#11131a] border border-white/10 rounded-lg px-2 py-2 text-[11px]">
-                        {(d.tipoImpuesto==='1'? RET_Renta : RET_Iva).map(o=><option key={o.code} value={o.code}>{o.desc}</option>)}
+                        {(d.tipoImpuesto==='1'? retRenta : retIva).map(o=><option key={o.code} value={o.code}>{o.desc}</option>)}
                       </select>
                     </div>
                     <div className="md:col-span-3"><p className="text-[8px] text-white/30 uppercase">Base Imp. Auto (en caliente)</p><p className="text-xs font-mono font-bold">${d.baseImponibleCalculada.toFixed(2)} {d.tipoImpuesto==='1'? `(Bases IVA15+0)` : `(IVA Compra)`}</p></div>

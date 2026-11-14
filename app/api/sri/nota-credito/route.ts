@@ -240,7 +240,7 @@ export async function POST(req: Request) {
     }).join("")}
   </detalles>
 </notaCredito>`
-    const esquema = validarEsquemaSri(xmlSinFirmar)
+    const esquema = await validarEsquemaSri(xmlSinFirmar)
     if (esquema) return NextResponse.json({ autorizado: false, mensaje: esquema }, { status: 400 })
     let firmado = ""
     try {
