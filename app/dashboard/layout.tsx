@@ -3,7 +3,7 @@ import { useEffect } from 'react'
 import { useRouter, usePathname } from 'next/navigation'
 import { EsisaAvatar } from '@/components/EsisaAvatar'
 import { SelloAmbiente } from '@/components/SelloAmbiente'
-import { guardarEmpresaLocal } from '@/lib/sesion-cliente'
+import { guardarEmpresaLocal, limpiarSesionLocal } from '@/lib/sesion-cliente'
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   const router = useRouter()
@@ -55,6 +55,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       timer = window.setTimeout(() => {
         sessionStorage.setItem("meijsac_aviso_sesion", "Sesión vencida")
         fetch("/api/auth/logout", { method: "POST", credentials: "same-origin" }).catch(() => {})
+        limpiarSesionLocal()
         router.replace("/login")
       }, 30 * 60 * 1000)
     }

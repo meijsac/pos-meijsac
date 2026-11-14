@@ -304,7 +304,7 @@ export default function ClientesModule() {
     // Si es nuevo, NO mandes el id
     const payload: any = { ...form };
     if(esNuevo) delete payload.id;
-    payload.empresaId = "meijsac-default"; // o tu empresaId real
+    delete payload.empresaId;
 
     const method = esNuevo ? "POST" : "PUT";
     

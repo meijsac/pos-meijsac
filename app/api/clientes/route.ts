@@ -4,13 +4,10 @@ import { usuarioConEmpresaDesdeRequest } from "@/lib/empresa-sesion";
 
 export async function POST(req: NextRequest) {
   try {
+    const sesion = await usuarioConEmpresaDesdeRequest(req);
+    if ("error" in sesion) return NextResponse.json({ error: sesion.error }, { status: sesion.status });
     const body = await req.json();
-    
-    // 1. Buscar empresa - sin depender de Neon
-    let empresa = await prisma.empresa.findFirst();
-    if (!empresa) {
-      return NextResponse.json({ error: "Primero crea una Empresa en /dashboard/empresas" }, { status: 400 });
-    }
+    const empresa = sesion.empresa;
 
     const {
       tipoId, identificacion, razonSocial, nombreComercial,
@@ -56,7 +53,7 @@ export async function POST(req: NextRequest) {
       }
     });
 
-    return NextResponse.json(cliente);
+    return NextResponse.json({ success: true, cliente });
 
   } catch (error: any) {
     console.error("Error al guardar en DB:", error);
@@ -108,10 +105,30 @@ export async function PUT(req: NextRequest) {
   }
 }
 
-export async function GET() {
+export async function GET(req: NextRequest) {
+  const sesion = await usuarioConEmpresaDesdeRequest(req);
+  if ("error" in sesion) return NextResponse.json({ error: sesion.error }, { status: sesion.status });
   const clientes = await prisma.cliente.findMany({
+    where: { empresaId: sesion.empresa.id },
     include: { sucursales: true },
-    orderBy: { createdAt: 'desc' }
+    orderBy: { createdAt: "desc" },
   });
   return NextResponse.json(clientes);
+}
+
+export async function DELETE(req: NextRequest) {
+  const sesion = await usuarioConEmpresaDesdeRequest(req);
+  if ("error" in sesion) return NextResponse.json({ success: false, error: sesion.error }, { status: sesion.status });
+  const url = new URL(req.url);
+  const id = String(url.searchParams.get("id") || "");
+  const identificacion = String(url.searchParams.get("identificacion") || "").trim();
+  if (!id && !identificacion) return NextResponse.json({ success: false, error: "Falta el cliente" }, { status: 400 });
+  const existe = await prisma.cliente.findFirst({
+    where: id
+      ? { id, empresaId: sesion.empresa.id }
+      : { identificacion, empresaId: sesion.empresa.id },
+  });
+  if (!existe) return NextResponse.json({ success: false, error: "No encontré este cliente" }, { status: 404 });
+  await prisma.cliente.delete({ where: { id: existe.id } });
+  return NextResponse.json({ success: true });
 }

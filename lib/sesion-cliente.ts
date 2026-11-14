@@ -4,6 +4,10 @@ let refresco: Promise<any | null> | null = null
 export function guardarEmpresaLocal(empresa: any, token?: string, usuario?: any) {
   if (typeof window === "undefined" || !empresa) return
   void token
+  const previa = leerEmpresaLocal()
+  const idNuevo = String(empresa.id || empresa.empresaId || "")
+  const idPrevio = String(previa?.id || previa?.empresaId || "")
+  if (idNuevo && idPrevio && idNuevo !== idPrevio) localStorage.removeItem("meijsac_clientes")
   localStorage.setItem("meijsac_empresa", JSON.stringify(empresa))
   localStorage.setItem("meijsac_registro", JSON.stringify(empresa))
   localStorage.setItem(
@@ -63,6 +67,10 @@ export function limpiarSesionLocal() {
   localStorage.removeItem("meijsac_empresa")
   localStorage.removeItem("meijsac_registro")
   localStorage.removeItem("meijsac_token")
+  localStorage.removeItem("meijsac_clientes")
+  localStorage.removeItem("empresaId")
+  localStorage.removeItem("empresa_id")
+  localStorage.removeItem("empresa")
   sessionStorage.removeItem(MARCA)
   sessionStorage.removeItem("meijsac_acceso_ok")
 }
