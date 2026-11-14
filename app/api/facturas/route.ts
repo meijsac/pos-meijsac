@@ -216,6 +216,7 @@ export async function GET(req: Request) {
         fechaAutorizacion: p.fechaAutorizacion || "",
         numeroAutorizacion: p.numeroAutorizacion || "",
         mensajeSri: p.mensajeSri || p.mensajeAutorizacion || "",
+        correoRegistro: p.correoRegistro || "",
         estadoRecepcion: p.estadoRecepcion || "",
         mensajeRecepcion: p.mensajeRecepcion || "",
         fechaRecepcion: p.fechaRecepcion || "",

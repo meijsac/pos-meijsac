@@ -27,6 +27,7 @@ interface ComprobanteHistorialSRI {
   plazo?: number | null;
   cuotas?: number | null;
   facturaId?: string;
+  correoRegistro?: string;
 }
 
 export default function EmitidosPage(){
@@ -313,7 +314,8 @@ export default function EmitidosPage(){
         {filtrados.map((d,i)=>{
           const pago = insigniaPago(d)
           return (
-          <div key={i} className={`grid grid-cols-12 px-4 py-3 border-t border-slate-800/60 text-[11px] items-center hover:bg-slate-800/30 ${d.estadoSRI==='ANULADO'?'opacity-40':''}`}>
+          <div key={i} className={`border-t border-slate-800/60 ${d.estadoSRI==='ANULADO'?'opacity-40':''}`}>
+          <div className="grid grid-cols-12 px-4 py-3 text-[11px] items-center hover:bg-slate-800/30">
             <div className="col-span-1"><span className="bg-slate-800 text-slate-300 border border-slate-700 px-2 py-1 rounded-lg text-[10px]">{nombreTipo(d.tipoComprobante)}</span></div>
             <div className="col-span-2 font-mono text-slate-200">{d.secuencial}</div>
             <div className="col-span-2 text-slate-300">{d.fechaEmision || "—"}</div>
@@ -328,6 +330,8 @@ export default function EmitidosPage(){
               {!String(d.fechaAutorizacion || "").trim() && <button onClick={()=>eliminarNoReal(d)} className="text-rose-300 border border-rose-500/40 px-2 py-1 rounded-lg text-[10px] whitespace-nowrap">Eliminar</button>}
               <button onClick={()=>setShowAnular(d)} title="Anular" className="text-slate-500 hover:text-rose-400 px-1.5 py-1">✕</button>
             </div>
+          </div>
+          {d.correoRegistro ? <p className="px-4 pb-3 text-[10px] text-slate-400">{d.correoRegistro}</p> : null}
           </div>
         )})}
       </div>

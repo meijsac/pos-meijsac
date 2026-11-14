@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/prisma"
 import { clasificarEstadoSri } from "@/lib/sri/estado-visible"
 import { guardarRespaldo } from "@/lib/sri/respaldo"
+import { enviarCorreosFactura } from "@/lib/correo/factura"
 import type { ResultadoConexion } from "@/lib/sri/cliente-sri"
 
 export function sriStatusDe(estado: string, fecha: string) {
@@ -56,6 +57,8 @@ export async function guardarRespuestaSri(facturaId: string, body: any, real: Re
   body.respaldoOk = respaldo.respaldoOk
   body.respaldoError = respaldo.respaldoError
   body.conservarHasta = respaldo.conservarHasta
+  const xmlAutorizado = String(real.autorizacion?.RespuestaAutorizacionComprobante.autorizaciones.autorizacion.comprobante || "")
+  body.correoRegistro = await enviarCorreosFactura(body, xmlAutorizado.startsWith("<") ? xmlAutorizado : String(body.xmlContent || "")).catch(() => "")
   await prisma.facturaEmitida.update({
     where: { id: facturaId },
     data: { payload: body },

@@ -6,7 +6,7 @@ const nextConfig = {
   typescript: {
     ignoreBuildErrors: true,
   },
-  serverExternalPackages: ["ec-sri-invoice-signer", "xml-crypto", "@xmldom/xmldom", "fast-xml-parser", "node-forge", "xmllint-wasm"],
+  serverExternalPackages: ["ec-sri-invoice-signer", "xml-crypto", "@xmldom/xmldom", "fast-xml-parser", "node-forge", "xmllint-wasm", "nodemailer"],
   async headers() {
     const comunes = [
       { key: "X-Content-Type-Options", value: "nosniff" },
