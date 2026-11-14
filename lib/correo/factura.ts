@@ -1,7 +1,6 @@
 import nodemailer from "nodemailer"
 import { pdfRide } from "@/lib/sri/ride-archivo"
 
-const PERSONALES = new Set(["gmail.com", "googlemail.com", "hotmail.com", "outlook.com", "live.com", "yahoo.com", "yahoo.es", "icloud.com", "me.com"])
 const LEYENDA = "Este documento es un comprobante electrónico autorizado por el SRI. Para verificar su autenticidad ingrese a www.sri.gob.ec. Este correo fue generado automáticamente, por favor no responder."
 
 function escapar(valor: unknown) {
@@ -24,15 +23,6 @@ function correosDe(valor: unknown) {
     .filter((parte) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(parte))
 }
 
-function dominioDe(correo: string) {
-  return correo.split("@")[1]?.toLowerCase() || ""
-}
-
-function esDominioEmpresa(correo: string) {
-  const dominio = dominioDe(correo)
-  return Boolean(dominio) && !PERSONALES.has(dominio)
-}
-
 function cuando() {
   return new Intl.DateTimeFormat("es-EC", {
     timeZone: "America/Guayaquil",
@@ -51,10 +41,10 @@ function numeroDe(body: Record<string, any>) {
   return [serie, sec].filter(Boolean).join("-")
 }
 
-function remitente(empresa: string, correoEmpresa: string) {
-  const configurado = String(process.env.SMTP_FROM || "").trim()
+function remitente(empresa: string) {
   const buzon = String(process.env.SMTP_USER || "").trim()
-  const elegido = [configurado, correoEmpresa, buzon].find((correo) => esDominioEmpresa(correo)) || ""
+  const configurado = String(process.env.SMTP_FROM || "").trim()
+  const elegido = correosDe(buzon)[0] || correosDe(configurado)[0] || ""
   if (!elegido) return ""
   const nombre = empresa.replace(/"/g, "").slice(0, 80) || "Facturación"
   return `"${nombre}" <${elegido}>`
@@ -130,9 +120,9 @@ export async function enviarCorreosFactura(body: Record<string, any>, xmlAutoriz
   const motivo = String(body.mensajeSri || "sin motivo informado por el SRI")
   const autorizacion = String(body.numeroAutorizacion || "")
   const hora = cuando()
-  const destino = correosDe(cliente.email || cliente.correo)
+  const destino = correosDe(cliente.email || cliente.correo || cliente.mail)
   const emisorCorreo = correosDe(emisor.email || emisor.correo)[0] || ""
-  const from = remitente(empresa, emisorCorreo)
+  const from = remitente(empresa)
   const xml = String(xmlAutorizado || body.xmlContent || "")
   let pdf: Buffer | null = null
   try { pdf = pdfRide(body, String(body.fechaAutorizacion || fecha)) } catch { pdf = null }
@@ -143,20 +133,18 @@ export async function enviarCorreosFactura(body: Record<string, any>, xmlAutoriz
   const receptor = htmlCorreoReceptor({ cliente: nombreCliente, numero, total, fecha, empresa, ruc, direccion, telefono, logo })
   const emisorHtml = htmlCorreoEmisor({ cliente: nombreCliente, numero, autorizacion, correo: destino[0] || "sin correo", cuando: hora, autorizado, motivo, empresa, ruc, direccion, telefono, logo })
   const mail = transporte()
-  const fallaBase = !from
-    ? "el remitente debe ser del dominio de la empresa, no un correo personal"
-    : !mail
-      ? "falta configurar el SMTP del dominio de la empresa"
-      : !xml || !pdf?.length
-        ? "faltan el XML o el PDF"
-        : ""
+  const fallaBase = !from || !mail
+    ? "falta configurar el correo SMTP"
+    : !xml || !pdf?.length
+      ? "faltan el XML o el PDF"
+      : ""
   const fallos: string[] = []
   async function mandar(para: string, asunto: string, mensaje: { texto: string; html: string }) {
     if (!para || fallaBase) return "Fallido"
     await mail!.sendMail({
       from,
       to: para,
-      replyTo: esDominioEmpresa(emisorCorreo) ? emisorCorreo : undefined,
+      replyTo: emisorCorreo || undefined,
       subject: asunto,
       text: mensaje.texto,
       html: mensaje.html,

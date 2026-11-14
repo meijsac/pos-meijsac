@@ -57,6 +57,14 @@ export async function guardarRespuestaSri(facturaId: string, body: any, real: Re
   body.respaldoOk = respaldo.respaldoOk
   body.respaldoError = respaldo.respaldoError
   body.conservarHasta = respaldo.conservarHasta
+  if (dueña?.empresaId) {
+    const cuenta = await prisma.empresa.findUnique({ where: { id: dueña.empresaId }, select: { email: true } })
+    const correoCuenta = String(cuenta?.email || "").trim()
+    if (correoCuenta) {
+      const emisor = body.configEmisor && typeof body.configEmisor === "object" ? body.configEmisor : {}
+      body.configEmisor = { ...emisor, email: correoCuenta }
+    }
+  }
   const xmlAutorizado = String(real.autorizacion?.RespuestaAutorizacionComprobante.autorizaciones.autorizacion.comprobante || "")
   body.correoRegistro = await enviarCorreosFactura(body, xmlAutorizado.startsWith("<") ? xmlAutorizado : String(body.xmlContent || "")).catch(() => "")
   await prisma.facturaEmitida.update({

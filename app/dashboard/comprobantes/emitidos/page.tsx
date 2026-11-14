@@ -41,6 +41,7 @@ export default function EmitidosPage(){
   const [pagoDoc,setPagoDoc]=useState<ComprobanteHistorialSRI|null>(null)
   const [showAnular,setShowAnular]=useState<ComprobanteHistorialSRI|null>(null)
   const [claveAnular,setClaveAnular]=useState("")
+  const [reenviando,setReenviando]=useState("")
   const [borradores,setBorradores]=useState<any[]>([])
   const [pendientes,setPendientes]=useState<ComprobanteHistorialSRI[]>([])
   let refrescando = false
@@ -143,6 +144,20 @@ export default function EmitidosPage(){
     if (!window.open(url, "_blank")) alert("Activa las ventanas emergentes para ver el comprobante.")
   }
 
+  const reenviarCorreo = async (d: ComprobanteHistorialSRI) => {
+    if (!d.facturaId || reenviando) return
+    setReenviando(d.facturaId)
+    const res = await fetch("/api/facturas/correo", {
+      method: "POST",
+      credentials: "same-origin",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${localStorage.getItem("meijsac_token") || ""}` },
+      body: JSON.stringify({ id: d.facturaId }),
+    }).catch(() => null)
+    const data = await res?.json().catch(() => ({}))
+    setReenviando("")
+    if (!res?.ok) { alert(data?.error || "No se pudo reenviar el correo"); return }
+    setDocs((prev) => prev.map((x) => x.facturaId === d.facturaId ? { ...x, correoRegistro: data.correoRegistro || x.correoRegistro } : x))
+  }
   const descargarXML = (doc: ComprobanteHistorialSRI) => abrirDocumentoReal(doc, "xml")
   const verImprimir = (doc: ComprobanteHistorialSRI) => {
     const clave = String(doc.claveAcceso || "").replace(/\D/g, "")
@@ -325,6 +340,7 @@ export default function EmitidosPage(){
             <div className="col-span-1 text-[10px] text-slate-400">{d.tipo_cobro === "CREDITO" ? "Crédito" : d.tipo_cobro === "PENDIENTE_DE_PAGO" ? "Por cobrar" : "Contado"}</div>
             <div className="col-span-1"><button onClick={() => { if (pago.texto !== "Pagado") setPagoDoc(d) }} className={`px-2 py-1 rounded-lg text-[10px] ${pago.clase}`}>{pago.texto}</button></div>
             <div className="col-span-2 flex justify-end items-center gap-1.5 flex-nowrap">
+              <button onClick={()=>reenviarCorreo(d)} title="Reenviar la factura por correo" className="text-slate-200 border border-slate-700 px-2 py-1 rounded-lg text-[12px] leading-none">{reenviando===d.facturaId ? "…" : "✉"}</button>
               <button onClick={()=>verImprimir(d)} className="bg-teal-400 text-slate-950 px-2.5 py-1 rounded-lg text-[10px] font-bold whitespace-nowrap">Ver / Imprimir</button>
               <button onClick={()=>descargarXML(d)} className="bg-slate-800 text-slate-200 border border-slate-700 px-2.5 py-1 rounded-lg text-[10px]">XML</button>
               {!String(d.fechaAutorizacion || "").trim() && <button onClick={()=>eliminarNoReal(d)} className="text-rose-300 border border-rose-500/40 px-2 py-1 rounded-lg text-[10px] whitespace-nowrap">Eliminar</button>}
