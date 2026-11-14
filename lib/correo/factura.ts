@@ -87,17 +87,49 @@ export function htmlCorreoEmisor(datos: { cliente: string; numero: string; autor
   }
 }
 
-function transporte() {
-  const host = String(process.env.SMTP_HOST || "").trim()
-  const user = String(process.env.SMTP_USER || "").trim()
-  const pass = String(process.env.SMTP_PASS || "")
-  if (!host || !user || !pass) return null
+function esGmail(host: string) {
+  return /gmail|googlemail|google/i.test(host)
+}
+
+function claveSmtp(host: string) {
+  const cruda = String(process.env.SMTP_PASS || "")
+  return esGmail(host) ? cruda.replace(/\s/g, "") : cruda
+}
+
+function motivoSmtp(error: unknown) {
+  const texto = String((error as { response?: string; message?: string })?.response || (error as { message?: string })?.message || "")
+  if (/535|534|BadCredentials|Username and Password not accepted|Invalid login/i.test(texto)) {
+    return "Gmail rechazó la clave. Hay que usar una contraseña de aplicación de Google, sin espacios"
+  }
+  if (/ECONNREFUSED|ETIMEDOUT|ESOCKET|ENOTFOUND|timed out|Greeting never|connect/i.test(texto)) {
+    return "no hubo conexión con el servidor de correo"
+  }
+  const limpio = texto.replace(/\s+/g, " ").replace(/pass(word)?[=:]\S+/gi, "").slice(0, 160)
+  return limpio || "no se pudo entregar"
+}
+
+function abrirTransporte(host: string, user: string, pass: string, port: number) {
   return nodemailer.createTransport({
     host,
-    port: Number(process.env.SMTP_PORT || 587),
-    secure: String(process.env.SMTP_PORT || "") === "465",
+    port,
+    secure: port === 465,
     auth: { user, pass },
+    connectionTimeout: 12000,
+    greetingTimeout: 12000,
+    socketTimeout: 20000,
+    tls: { minVersion: "TLSv1.2" },
   })
+}
+
+function transporte() {
+  const hostIngresado = String(process.env.SMTP_HOST || "").trim()
+  const user = String(process.env.SMTP_USER || "").trim()
+  const pass = claveSmtp(hostIngresado)
+  if (!hostIngresado || !user || !pass) return null
+  const gmail = esGmail(hostIngresado)
+  const host = gmail ? "smtp.gmail.com" : hostIngresado
+  const port = gmail ? 465 : (Number(String(process.env.SMTP_PORT || "587").trim()) || 587)
+  return abrirTransporte(host, user, pass, port)
 }
 
 export async function enviarCorreosFactura(body: Record<string, any>, xmlAutorizado: string) {
@@ -158,17 +190,18 @@ export async function enviarCorreosFactura(body: Record<string, any>, xmlAutoriz
     try {
       estadoReceptor = await mandar(destino.join(","), `Factura No. ${numero} - ${empresa}`, receptor)
       if (estadoReceptor === "Fallido" && fallaBase) fallos.push(fallaBase)
-    } catch {
+    } catch (error) {
       estadoReceptor = "Fallido"
-      fallos.push("no se pudo entregar al cliente")
+      fallos.push(motivoSmtp(error))
     }
   }
   let estadoEmisor = "Fallido"
   if (emisorCorreo) {
     try {
       estadoEmisor = await mandar(emisorCorreo, `Copia de Factura No. ${numero} enviada a ${nombreCliente}`, emisorHtml)
-    } catch {
+    } catch (error) {
       estadoEmisor = "Fallido"
+      if (!fallos.length) fallos.push(motivoSmtp(error))
     }
   }
   const linea = `Correo enviado a ${destino[0] || "sin correo"} el ${hora} - Estado: ${estadoReceptor}`
