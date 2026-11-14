@@ -16,8 +16,47 @@ function xml(valor: unknown) {
   return sanitizarTextoXml(valor)
 }
 
+function redondear(n: number, decimales: number) {
+  if (!Number.isFinite(n)) n = 0
+  const negativo = n < 0
+  const ajustado = Math.abs(n) * (10 ** decimales) + 1e-8
+  const entero = Math.floor(ajustado)
+  const resultado = ajustado - entero >= 0.5 ? entero + 1 : entero
+  const texto = String(resultado).padStart(decimales + 1, "0")
+  const ent = texto.slice(0, texto.length - decimales)
+  const frac = texto.slice(texto.length - decimales)
+  const cuerpo = decimales ? `${ent}.${frac}` : ent
+  return negativo && resultado !== 0 ? `-${cuerpo}` : cuerpo
+}
+
 function dinero(n: number) {
-  return (Math.round(n * 100) / 100).toFixed(2)
+  return redondear(n, 2)
+}
+
+function hastaSeis(n: number) {
+  return redondear(n, 6).replace(/(\.\d*?)0+$/, "$1").replace(/\.$/, "")
+}
+
+function aEscala(texto: string, decimales: number) {
+  const negativo = texto.startsWith("-")
+  const [ent, frac = ""] = texto.replace("-", "").split(".")
+  const valor = BigInt(ent || "0") * (10n ** BigInt(decimales)) + BigInt((frac + "0".repeat(decimales)).slice(0, decimales) || "0")
+  return negativo ? -valor : valor
+}
+
+function mitadArriba(valor: bigint, divisor: bigint) {
+  const negativo = valor < 0n
+  const absoluto = negativo ? -valor : valor
+  const cociente = absoluto / divisor
+  const sube = absoluto % divisor * 2n >= divisor
+  const resultado = sube ? cociente + 1n : cociente
+  return negativo ? -resultado : resultado
+}
+
+function textoCentavos(centavos: bigint) {
+  const negativo = centavos < 0n
+  const absoluto = negativo ? -centavos : centavos
+  return `${negativo ? "-" : ""}${absoluto / 100n}.${(absoluto % 100n).toString().padStart(2, "0")}`
 }
 
 function fechaSri(valor: unknown) {
@@ -148,30 +187,39 @@ export function armarXmlFactura(empresa: {
     secuencial,
   })
 
-  const grupos: Record<string, { base: number; valor: number; tarifa: number }> = {}
-  let totalDescuento = 0
+  const grupos: Record<string, { base: bigint; tarifa: number }> = {}
+  let totalDescuento = 0n
+  let totalSin = 0n
   const detalles = items.map((item: any) => {
     const cant = Number(item.cant ?? item.cantidad ?? 0)
     const precio = Number(item.pUnit ?? item.precioUnitario ?? 0)
-    const desc = cant * precio * (Number(item.descPorc || 0) / 100)
-    const base = cant * precio - desc
+    const cantTxt = redondear(cant, 6)
+    const precioTxt = redondear(precio, 6)
+    const producto = aEscala(cantTxt, 6) * aEscala(precioTxt, 6)
+    const porc = aEscala(redondear(Number(item.descPorc || 0), 4), 4)
+    const descuento = mitadArriba(producto * porc, 10000000000000000n)
+    const base = mitadArriba(producto - descuento * 10000000000n, 10000000000n)
     const auxiliar = String(item.codigoAuxiliar || "").trim()
     const esTransporte = auxiliar === "H492001" || auxiliar === "H492002"
     const cod = esTransporte ? "0" : String(item.codigoPorcentaje ?? "4")
     const tarifa = esTransporte ? 0 : (tarifasEnMemoria()[cod] ?? 0)
-    const iva = cod === "6" || cod === "7" || esTransporte ? 0 : base * (tarifa / 100)
-    totalDescuento += desc
-    if (!grupos[cod]) grupos[cod] = { base: 0, valor: 0, tarifa }
+    const iva = cod === "6" || cod === "7" || esTransporte ? 0n : mitadArriba(base * aEscala(redondear(tarifa, 2), 2), 10000n)
+    totalDescuento += descuento
+    totalSin += base
+    if (!grupos[cod]) grupos[cod] = { base: 0n, tarifa }
     grupos[cod].base += base
-    grupos[cod].valor += iva
-    return `<detalle><codigoPrincipal>${xml(item.codigo || item.codigoPrincipal || "001")}</codigoPrincipal>${auxiliar ? `<codigoAuxiliar>${xml(auxiliar)}</codigoAuxiliar>` : ""}<descripcion>${xml(item.descripcion)}</descripcion><cantidad>${dinero(cant)}</cantidad><precioUnitario>${dinero(precio)}</precioUnitario><descuento>${dinero(desc)}</descuento><precioTotalSinImpuesto>${dinero(base)}</precioTotalSinImpuesto><impuestos><impuesto><codigo>2</codigo><codigoPorcentaje>${xml(cod)}</codigoPorcentaje><tarifa>${dinero(tarifa)}</tarifa><baseImponible>${dinero(base)}</baseImponible><valor>${dinero(iva)}</valor></impuesto></impuestos></detalle>`
+    return `<detalle><codigoPrincipal>${xml(item.codigo || item.codigoPrincipal || "001")}</codigoPrincipal>${auxiliar ? `<codigoAuxiliar>${xml(auxiliar)}</codigoAuxiliar>` : ""}<descripcion>${xml(item.descripcion)}</descripcion><cantidad>${hastaSeis(cant)}</cantidad><precioUnitario>${hastaSeis(precio)}</precioUnitario><descuento>${textoCentavos(descuento)}</descuento><precioTotalSinImpuesto>${textoCentavos(base)}</precioTotalSinImpuesto><impuestos><impuesto><codigo>2</codigo><codigoPorcentaje>${xml(cod)}</codigoPorcentaje><tarifa>${dinero(tarifa)}</tarifa><baseImponible>${textoCentavos(base)}</baseImponible><valor>${textoCentavos(iva)}</valor></impuesto></impuestos></detalle>`
   }).join("")
 
-  const totalSin = Object.values(grupos).reduce((s, g) => s + g.base, 0)
-  const totalIva = Object.values(grupos).reduce((s, g) => s + g.valor, 0)
+  let totalIva = 0n
   const propina = Number(body?.totales?.propina || 0)
-  const importe = totalSin + totalIva + propina
-  const totalesXml = Object.entries(grupos).map(([cod, g]) => `<totalImpuesto><codigo>2</codigo><codigoPorcentaje>${cod}</codigoPorcentaje><baseImponible>${dinero(g.base)}</baseImponible><valor>${dinero(g.valor)}</valor></totalImpuesto>`).join("")
+  const totalesXml = Object.entries(grupos).map(([cod, g]) => {
+    const valor = cod === "6" || cod === "7" ? 0n : mitadArriba(g.base * aEscala(redondear(g.tarifa, 2), 2), 10000n)
+    totalIva += valor
+    return `<totalImpuesto><codigo>2</codigo><codigoPorcentaje>${cod}</codigoPorcentaje><baseImponible>${textoCentavos(g.base)}</baseImponible><valor>${textoCentavos(valor)}</valor></totalImpuesto>`
+  }).join("")
+  const propinaCentavos = aEscala(redondear(propina, 2), 2)
+  const importe = Number(textoCentavos(totalSin + totalIva + propinaCentavos))
 
   const listaPagos: Array<[string, number]> = body?.tipo_cobro === "CREDITO"
     ? [["20", importe]]
@@ -182,7 +230,7 @@ export function armarXmlFactura(empresa: {
   const email = String(body?.cliente?.email || "").trim()
   const placa = String(body?.placaVehiculo || "").trim()
 
-  const documento = `<?xml version="1.0" encoding="UTF-8"?><factura id="comprobante" version="1.1.0"><infoTributaria><ambiente>${ambiente}</ambiente><tipoEmision>1</tipoEmision><razonSocial>${xml(razon)}</razonSocial>${comercial ? `<nombreComercial>${xml(comercial)}</nombreComercial>` : ""}<ruc>${ruc}</ruc><claveAcceso>${clave}</claveAcceso><codDoc>01</codDoc><estab>${estab}</estab><ptoEmi>${pto}</ptoEmi><secuencial>${secuencial}</secuencial><dirMatriz>${xml(direccion)}</dirMatriz></infoTributaria><infoFactura><fechaEmision>${fecha}</fechaEmision><dirEstablecimiento>${xml(dirEstablecimiento)}</dirEstablecimiento><obligadoContabilidad>${obligado}</obligadoContabilidad><tipoIdentificacionComprador>${tipoIdentificacion(compradorId, compradorTipo)}</tipoIdentificacionComprador><razonSocialComprador>${xml(comprador)}</razonSocialComprador><identificacionComprador>${xml(compradorId)}</identificacionComprador><totalSinImpuestos>${dinero(totalSin)}</totalSinImpuestos><totalDescuento>${dinero(totalDescuento)}</totalDescuento><totalConImpuestos>${totalesXml}</totalConImpuestos><propina>${dinero(propina)}</propina><importeTotal>${dinero(importe)}</importeTotal><moneda>DOLAR</moneda>${placa ? `<placa>${xml(placa)}</placa>` : ""}<pagos>${pagos}</pagos></infoFactura><detalles>${detalles}</detalles>${email ? `<infoAdicional><campoAdicional nombre="Email">${xml(email)}</campoAdicional></infoAdicional>` : ""}</factura>`
+  const documento = `<?xml version="1.0" encoding="UTF-8"?><factura id="comprobante" version="1.1.0"><infoTributaria><ambiente>${ambiente}</ambiente><tipoEmision>1</tipoEmision><razonSocial>${xml(razon)}</razonSocial>${comercial ? `<nombreComercial>${xml(comercial)}</nombreComercial>` : ""}<ruc>${ruc}</ruc><claveAcceso>${clave}</claveAcceso><codDoc>01</codDoc><estab>${estab}</estab><ptoEmi>${pto}</ptoEmi><secuencial>${secuencial}</secuencial><dirMatriz>${xml(direccion)}</dirMatriz></infoTributaria><infoFactura><fechaEmision>${fecha}</fechaEmision><dirEstablecimiento>${xml(dirEstablecimiento)}</dirEstablecimiento><obligadoContabilidad>${obligado}</obligadoContabilidad><tipoIdentificacionComprador>${tipoIdentificacion(compradorId, compradorTipo)}</tipoIdentificacionComprador><razonSocialComprador>${xml(comprador)}</razonSocialComprador><identificacionComprador>${xml(compradorId)}</identificacionComprador><totalSinImpuestos>${textoCentavos(totalSin)}</totalSinImpuestos><totalDescuento>${textoCentavos(totalDescuento)}</totalDescuento><totalConImpuestos>${totalesXml}</totalConImpuestos><propina>${dinero(propina)}</propina><importeTotal>${textoCentavos(totalSin + totalIva + propinaCentavos)}</importeTotal><moneda>DOLAR</moneda>${placa ? `<placa>${xml(placa)}</placa>` : ""}<pagos>${pagos}</pagos></infoFactura><detalles>${detalles}</detalles>${email ? `<infoAdicional><campoAdicional nombre="Email">${xml(email)}</campoAdicional></infoAdicional>` : ""}</factura>`
 
   return { xml: documento, claveAcceso: clave, ambiente, estab, pto, secuencial, fecha }
 }
