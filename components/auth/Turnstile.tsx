@@ -40,6 +40,7 @@ export const Turnstile = forwardRef<TurnstileHandle, {
   const modo = size || options?.size || "normal"
   const cuando = execution || options?.execution || "render"
   const invisible = modo === "invisible" || cuando === "execute"
+  const flexible = modo === "flexible"
 
   useImperativeHandle(ref, () => ({
     execute: () => widget.current?.execute(),
@@ -55,10 +56,11 @@ export const Turnstile = forwardRef<TurnstileHandle, {
       {invisible && (
         <Script src="https://challenges.cloudflare.com/turnstile/v0/api.js" strategy="afterInteractive" />
       )}
-      <div className={invisible ? "absolute w-0 h-0 overflow-hidden opacity-0 pointer-events-none" : "min-h-[70px] w-full bg-white rounded-xl flex items-center justify-center"} aria-hidden={invisible}>
+      <div className={invisible ? "absolute w-0 h-0 overflow-hidden opacity-0 pointer-events-none" : flexible ? "min-h-[70px] w-full max-w-full overflow-hidden bg-white rounded-xl flex items-center justify-center" : "min-h-[70px] w-full bg-white rounded-xl flex items-center justify-center"} aria-hidden={invisible}>
         <Widget
           ref={widget}
           siteKey={clave}
+          style={flexible ? { width: "100%", maxWidth: "100%" } : undefined}
           onSuccess={(token) => {
             onVerify?.(token)
             onToken?.(token)
@@ -75,7 +77,7 @@ export const Turnstile = forwardRef<TurnstileHandle, {
           }}
           options={{
             theme: options?.theme ?? "auto",
-            size: invisible ? "invisible" : "normal",
+            size: invisible ? "invisible" : modo === "compact" || modo === "flexible" ? modo : "normal",
             appearance: invisible ? "interaction-only" : "always",
             execution: invisible ? "execute" : "render",
           }}

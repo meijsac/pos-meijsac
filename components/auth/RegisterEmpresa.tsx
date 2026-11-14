@@ -199,10 +199,15 @@ export function RegisterEmpresa({ dark, setTipo }: any) {
         </div>
       )}
 
-      <div className="flex gap-2 pt-2">
-        {paso>1 && <button onClick={()=>setPaso(paso-1)} className="flex-1 py-3 rounded-xl bg-white/10 text-white text-xs">Atrás</button>}
-        {paso===4 && <Turnstile onToken={setCaptcha} />}
-        {paso<4? <button onClick={siguiente} className="flex-1 py-3 rounded-xl bg-[#00f5d4] text-black font-black text-xs">Siguiente</button> : <button onClick={guardar} className="flex-1 py-3 rounded-xl bg-[#00f5d4] text-black font-black text-xs">CREAR EMPRESA</button>}
+      {paso===4 && (
+        <div className="registro-captcha w-full max-w-full overflow-hidden pt-2">
+          <style>{`.registro-captcha,.registro-captcha .cf-turnstile,.registro-captcha iframe{position:static !important;float:none !important;width:100% !important;max-width:100% !important;min-width:0 !important;margin:0 auto !important}`}</style>
+          <Turnstile onToken={setCaptcha} size="flexible" />
+        </div>
+      )}
+      <div className={`flex w-full max-w-full gap-3 pt-2 ${paso===4 ? "justify-between" : ""}`}>
+        {paso>1 && <button onClick={()=>setPaso(paso-1)} className={`${paso===4 ? "shrink-0 px-4 whitespace-nowrap" : "flex-1"} py-3 rounded-xl bg-white/10 text-white text-xs`}>Atrás</button>}
+        {paso<4? <button onClick={siguiente} className="flex-1 py-3 rounded-xl bg-[#00f5d4] text-black font-black text-xs">Siguiente</button> : <button onClick={guardar} className="shrink-0 px-4 py-3 rounded-xl bg-[#00f5d4] text-black font-black text-xs whitespace-nowrap">CREAR EMPRESA</button>}
       </div>
       <button onClick={()=>setTipo("principal")} className="w-full text-[10px] text-white/30">¿Ya tienes cuenta? Ingresar</button>
     </div>
