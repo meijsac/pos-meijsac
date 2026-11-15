@@ -1,9 +1,10 @@
 import { NextResponse } from "next/server"
+import { Prisma } from "@prisma/client"
 import { prisma } from "@/lib/prisma"
 import { usuarioConEmpresaDesdeRequest } from "@/lib/empresa-sesion"
 
 export const maxDuration = 60
-const LOTE_MAX = 40
+const LOTE_MAX = 500
 
 function datos(body: any) {
   const codigo = String(body?.codigo || "").trim()
@@ -70,30 +71,55 @@ export async function POST(req: Request) {
   if (lista.length > LOTE_MAX) return NextResponse.json({ error: `Envía hasta ${LOTE_MAX} productos por vez` }, { status: 400 })
   try {
     const porCodigo = new Map<string, ReturnType<typeof datos>>()
+    const conId: { id: string; data: ReturnType<typeof datos> }[] = []
     const errores: string[] = []
     for (const item of lista) {
       try {
         const data = datos(item)
-        porCodigo.set(data.codigo, data)
+        const id = String(item?.id || "").trim()
+        if (id) conId.push({ id, data })
+        else porCodigo.set(data.codigo, data)
       } catch (e: any) {
         errores.push(e?.message || "Fila inválida")
       }
     }
-    const unicos = [...porCodigo.values()]
-    if (!unicos.length) return NextResponse.json({ error: errores[0] || "No hay productos para guardar", errores }, { status: 400 })
-    const ya = await prisma.producto.findMany({
-      where: { empresaId: sesion.empresa.id, codigo: { in: unicos.map((d) => d.codigo) } },
-      select: { id: true, codigo: true },
-    })
-    const ids = new Map(ya.map((p) => [p.codigo, p.id]))
-    const nuevos = unicos.filter((d) => d.codigo && !ids.has(d.codigo)).map((d) => ({ ...d, empresaId: sesion.empresa.id }))
-    if (nuevos.length) await prisma.producto.createMany({ data: nuevos })
-    for (const data of unicos) {
-      const id = ids.get(data.codigo)
-      if (!id) continue
-      await prisma.producto.update({ where: { id }, data })
+    if (!porCodigo.size && !conId.length) return NextResponse.json({ error: errores[0] || "No hay productos para guardar", errores }, { status: 400 })
+    let guardados = 0
+    for (const fila of conId) {
+      const propio = await prisma.producto.updateMany({ where: { id: fila.id, empresaId: sesion.empresa.id }, data: fila.data })
+      if (propio.count) guardados += 1
+      else porCodigo.set(fila.data.codigo, fila.data)
     }
-    return NextResponse.json({ ok: true, guardados: unicos.length, errores })
+    const unicos = [...porCodigo.values()]
+    if (unicos.length) {
+      const values = unicos.map((d) => Prisma.sql`(
+        ${crypto.randomUUID()},
+        ${d.codigo},
+        ${d.nombre},
+        ${d.categoria},
+        ${d.costo},
+        ${d.precio},
+        ${d.stock},
+        ${d.stockMinimo},
+        CAST(${JSON.stringify(d.ficha)} AS jsonb),
+        ${sesion.empresa.id},
+        NOW()
+      )`)
+      await prisma.$executeRaw`
+        INSERT INTO "Producto" ("id", "codigo", "nombre", "categoria", "costo", "precio", "stock", "stockMinimo", "ficha", "empresaId", "createdAt")
+        VALUES ${Prisma.join(values)}
+        ON CONFLICT ("codigo", "empresaId") DO UPDATE SET
+          "nombre" = EXCLUDED."nombre",
+          "categoria" = EXCLUDED."categoria",
+          "costo" = EXCLUDED."costo",
+          "precio" = EXCLUDED."precio",
+          "stock" = EXCLUDED."stock",
+          "stockMinimo" = EXCLUDED."stockMinimo",
+          "ficha" = EXCLUDED."ficha"
+      `
+      guardados += unicos.length
+    }
+    return NextResponse.json({ ok: true, guardados, errores })
   } catch (e: any) {
     return NextResponse.json({ error: e?.message || "No se pudo guardar" }, { status: 400 })
   }
@@ -102,10 +128,18 @@ export async function POST(req: Request) {
 export async function DELETE(req: Request) {
   const sesion = await usuarioConEmpresaDesdeRequest(req)
   if ("error" in sesion) return NextResponse.json({ error: sesion.error }, { status: sesion.status })
-  const id = new URL(req.url).searchParams.get("id") || ""
-  if (!id) return NextResponse.json({ error: "Falta el id" }, { status: 400 })
-  const fila = await prisma.producto.findFirst({ where: { id, empresaId: sesion.empresa.id } })
-  if (!fila) return NextResponse.json({ error: "Ese producto no es de tu empresa" }, { status: 404 })
-  await prisma.producto.delete({ where: { id } })
-  return NextResponse.json({ ok: true })
+  const url = new URL(req.url)
+  if (url.searchParams.get("todos") === "1") {
+    const r = await prisma.producto.deleteMany({ where: { empresaId: sesion.empresa.id } })
+    return NextResponse.json({ ok: true, eliminados: r.count })
+  }
+  const body = await req.json().catch(() => ({}))
+  const ids = Array.isArray(body?.ids) ? body.ids.map((id: unknown) => String(id || "").trim()).filter(Boolean) : []
+  const id = url.searchParams.get("id") || ""
+  const lista = ids.length ? ids : id ? [id] : []
+  if (!lista.length) return NextResponse.json({ error: "Falta el id" }, { status: 400 })
+  if (lista.length > 5000) return NextResponse.json({ error: "Elimina hasta 5000 productos por vez" }, { status: 400 })
+  const r = await prisma.producto.deleteMany({ where: { empresaId: sesion.empresa.id, id: { in: lista } } })
+  if (!r.count) return NextResponse.json({ error: "Ese producto no es de tu empresa" }, { status: 404 })
+  return NextResponse.json({ ok: true, eliminados: r.count })
 }

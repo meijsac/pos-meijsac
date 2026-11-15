@@ -115,6 +115,7 @@ export default function ProductosModule() {
   const [aviso, setAviso] = useState("");
   const [errorGuardado, setErrorGuardado] = useState("");
   const [guardando, setGuardando] = useState(false);
+  const [marcados, setMarcados] = useState<Set<string>>(new Set());
 
   const desdeApi = (row: any): Producto => {
     const ficha = row?.ficha && typeof row.ficha === "object" ? row.ficha : {}
@@ -164,7 +165,7 @@ export default function ProductosModule() {
     setAviso("")
     setErrorGuardado("")
     const payloads = lista.map(aPayload)
-    const tamano = 40
+    const tamano = 400
     let guardados = 0
     const fallos: string[] = []
     try {
@@ -172,23 +173,27 @@ export default function ProductosModule() {
         const lote = payloads.slice(i, i + tamano)
         const hasta = Math.min(i + lote.length, payloads.length)
         setAviso(`Guardando ${hasta} de ${payloads.length}`)
-        const ctrl = new AbortController()
-        const timer = window.setTimeout(() => ctrl.abort(), 20000)
-        let res: Response
-        try {
-          res = await fetch("/api/productos", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            signal: ctrl.signal,
-            body: JSON.stringify({ productos: lote }),
-          })
-        } catch {
-          throw new Error(`Se cortó en el producto ${i + 1}. Lo ya guardado quedó. Vuelve a pulsar guardar.`)
-        } finally {
-          window.clearTimeout(timer)
+        let data: { error?: string; guardados?: number; errores?: unknown[] } = {}
+        let ok = false
+        for (let intento = 0; intento < 2 && !ok; intento++) {
+          const ctrl = new AbortController()
+          const timer = window.setTimeout(() => ctrl.abort(), 50000)
+          try {
+            const res = await fetch("/api/productos", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              signal: ctrl.signal,
+              body: JSON.stringify({ productos: lote }),
+            })
+            data = await res.json().catch(() => ({}))
+            if (!res.ok) throw new Error(data.error || `No se pudo guardar a partir del producto ${i + 1}`)
+            ok = true
+          } catch (e: any) {
+            if (intento === 1) throw new Error(e?.name === "AbortError" ? `Se cortó en el producto ${i + 1}. Lo ya guardado quedó. Vuelve a pulsar guardar.` : (e?.message || `No se pudo guardar a partir del producto ${i + 1}`))
+          } finally {
+            window.clearTimeout(timer)
+          }
         }
-        const data = await res.json().catch(() => ({}))
-        if (!res.ok) throw new Error(data.error || `No se pudo guardar a partir del producto ${i + 1}`)
         guardados += Number(data.guardados || 0)
         if (Array.isArray(data.errores)) fallos.push(...data.errores.map(String))
       }
@@ -546,8 +551,27 @@ export default function ProductosModule() {
     const data = await res.json().catch(() => ({}))
     if (!res.ok) { setErrorGuardado(data.error || "No se pudo eliminar"); return }
     setProductos(ps => ps.filter(p => p.id !== id));
+    setMarcados((prev) => { const next = new Set(prev); next.delete(id); return next })
     if(form.id === id) setForm(formInicial);
     setAviso(`Se eliminó ${nombre}`)
+  };
+  const eliminarMarcados = async () => {
+    const ids = [...marcados]
+    if (!ids.length) return
+    if (!confirm(`¿Eliminar ${ids.length} productos seleccionados?`)) return
+    setErrorGuardado("")
+    const res = await fetch("/api/productos", {
+      method: "DELETE",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ ids }),
+    })
+    const data = await res.json().catch(() => ({}))
+    if (!res.ok) { setErrorGuardado(data.error || "No se pudo eliminar el grupo"); return }
+    const borrados = new Set(ids)
+    setProductos((ps) => ps.filter((p) => !borrados.has(p.id)))
+    setMarcados(new Set())
+    if (form.id && borrados.has(form.id)) setForm(formInicial)
+    setAviso(`Se eliminaron ${data.eliminados ?? ids.length} productos`)
   };
 
   if (!cargado) return <div className="min-h-screen bg-black text-white p-10 text-[11px]">Cargando inventario del sistema...</div>;
@@ -717,15 +741,25 @@ export default function ProductosModule() {
                    <input type="file" accept=".xlsx,.xls,.csv" onChange={importarDesdeExcel} className="absolute inset-0 opacity-0 cursor-pointer" />
                 </div>
                 <button title="📤 Exportar todo el listado actual a Excel con todos los parámetros completos" onClick={exportarAExcel} className="bg-white/10 hover:bg-yellow-400 hover:text-black text-white rounded-md p-1.5 text-[12px] transition-colors">📤</button>
+              <button
+  title="Eliminar los productos marcados"
+  onClick={eliminarMarcados}
+  disabled={marcados.size === 0}
+  className="bg-red-500/10 hover:bg-red-500 hover:text-white text-red-400 rounded-md px-2 text-[9px] font-bold disabled:opacity-30"
+>
+  Borrar ({marcados.size})
+</button>
               <button 
   title="🚨 Eliminar TODO el inventario" 
   onClick={async () => {
     if(confirm("🚨 PELIGRO EXTREMO: ¿Estás seguro de eliminar TODO el inventario y el Kárdex de forma permanente?")) {
-      for (const prod of productos) {
-        await fetch(`/api/productos?id=${encodeURIComponent(prod.id)}`, { method: "DELETE" })
-      }
+      const res = await fetch("/api/productos?todos=1", { method: "DELETE" })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok) { setErrorGuardado(data.error || "No se pudo eliminar el inventario"); return }
       setMovimientos([]);
+      setMarcados(new Set());
       localStorage.removeItem(`movimientos_${empresaId}`);
+      setAviso(`Se eliminaron ${data.eliminados ?? 0} productos`)
       recargar().catch((e) => setErrorGuardado(e.message));
     }
   }} 
@@ -759,6 +793,22 @@ export default function ProductosModule() {
                 <table className="w-full text-[9px] text-left border-collapse whitespace-nowrap">
                   <thead className="bg-[#11131a] sticky top-0 z-10 shadow-md">
                     <tr className="text-white/40 uppercase tracking-wider text-[8px]">
+                      <th className="p-2.5 font-bold">
+                        <input
+                          type="checkbox"
+                          title="Marcar los productos que se ven en la lista"
+                          checked={filtrados.length > 0 && filtrados.every((p) => marcados.has(p.id))}
+                          onChange={(e) => {
+                            const activo = e.target.checked
+                            setMarcados((prev) => {
+                              const next = new Set(prev)
+                              filtrados.forEach((p) => { if (activo) next.add(p.id); else next.delete(p.id) })
+                              return next
+                            })
+                          }}
+                          className="accent-[#00f5d4]"
+                        />
+                      </th>
                       <th className="p-2.5 font-bold cursor-help" title="Identificador único">Id</th>
                       <th className="p-2.5 font-bold cursor-help" title="Código Principal">Codigo</th>
                       <th className="p-2.5 font-bold min-w-[140px] cursor-help" title="Nombre comercial">Nombre</th>
@@ -776,10 +826,26 @@ export default function ProductosModule() {
                   </thead>
                   <tbody className="divide-y divide-white/5">
                     {filtrados.length === 0 ? (
-                      <tr><td colSpan={13} className="text-center p-8 text-white/30 text-[11px]">{productos.length === 0 ? "Sin productos aún" : "No hay productos que coincidan con la búsqueda."}</td></tr>
+                      <tr><td colSpan={14} className="text-center p-8 text-white/30 text-[11px]">{productos.length === 0 ? "Sin productos aún" : "No hay productos que coincidan con la búsqueda."}</td></tr>
                     ) : (
                       filtrados.map((prod) => (
                         <tr key={prod.id} className="hover:bg-white/5 group transition-colors cursor-pointer" onClick={() => { setProductoSel(prod); setTab("KARDEX"); }}>
+                          <td className="p-2.5" onClick={(e) => e.stopPropagation()}>
+                            <input
+                              type="checkbox"
+                              checked={marcados.has(prod.id)}
+                              onChange={(e) => {
+                                const activo = e.target.checked
+                                setMarcados((prev) => {
+                                  const next = new Set(prev)
+                                  if (activo) next.add(prod.id)
+                                  else next.delete(prod.id)
+                                  return next
+                                })
+                              }}
+                              className="accent-[#00f5d4]"
+                            />
+                          </td>
                           <td className="p-2.5 text-white/30 font-mono text-[8px]">{prod.id.length > 8 ? prod.id.slice(-6) : prod.id}</td>
                           <td className="p-2.5 font-bold text-white">{prod.codigo}</td>
                           <td className="p-2.5 truncate max-w-[150px] text-white/90" title={prod.nombre}>{prod.nombre}</td>
