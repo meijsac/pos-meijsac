@@ -215,14 +215,24 @@ export default function ProductosModule() {
     if(!file) return;
     const reader = new FileReader();
     reader.onload = (evt) => {
+      try {
       const wb = XLSX.read(evt.target!.result, { type: 'array' });
-      const nombreHoja = wb.SheetNames.find((n) => n.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().includes("producto")) || wb.SheetNames[0]
-      const ws = wb.Sheets[nombreHoja];
-      const data: any[] = XLSX.utils.sheet_to_json(ws);
+      const clave = (valor: string) => valor.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/[^a-z0-9]+/g, "")
+      const hojas = wb.SheetNames.map((n) => ({ n, rows: XLSX.utils.sheet_to_json(wb.Sheets[n]) as Record<string, unknown>[] }))
+      const tieneCodigo = (fila: Record<string, unknown>) => Object.keys(fila).some((k) => {
+        const limpia = clave(k)
+        return limpia === "codigo" || limpia === "codigoprincipal"
+      })
+      const elegida = hojas.find((h) => h.rows.some(tieneCodigo))
+        || hojas.find((h) => h.n.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().includes("producto"))
+        || hojas[0]
+      const data = elegida?.rows || []
       
       const texto = (fila: Record<string, unknown>, ...nombres: string[]) => {
+        const mapa = new Map<string, unknown>()
+        Object.entries(fila).forEach(([k, v]) => mapa.set(clave(k), v))
         for (const nombre of nombres) {
-          const valor = fila[nombre]
+          const valor = mapa.get(clave(nombre))
           if (valor !== undefined && valor !== null && String(valor).trim() !== "") return valor
         }
         return ""
@@ -331,10 +341,13 @@ export default function ProductosModule() {
       })
       
       setPendientes(mapeados)
-      setAviso("")
-      setErrorGuardado("")
+      setAviso(mapeados.length ? `Listos ${mapeados.length} productos. Pulsa Guardar.` : "")
+      setErrorGuardado(mapeados.length ? "" : "No se reconocieron productos en el archivo. Revisa Código y Nombre.")
       setResumenImportacion({ importados: mapeados.length, errores })
-      
+      } catch {
+        setPendientes([])
+        setErrorGuardado("No se pudo leer el archivo")
+      }
       e.target.value = '';
     };
     reader.readAsArrayBuffer(file);
@@ -708,7 +721,7 @@ export default function ProductosModule() {
           </div>
 
           <div className="bg-[#0f172a]/50 border border-white/10 rounded-xl p-3 flex-1 flex flex-col min-h-0">
-            <div className="flex gap-2 items-center mb-3">
+            <div className="flex gap-2 items-center mb-3 flex-wrap">
               <div className="relative flex-1">
                 <input value={busqueda} onChange={(e)=>setBusqueda(e.target.value)} placeholder="Buscar artículo por nombre o código..." className="w-full bg-black border border-white/10 rounded-lg px-4 py-2 pl-8 text-[11px] text-white focus:border-[#00f5d4] outline-none" />
                 <span className="absolute left-3 top-2.5 text-[10px] opacity-50">🔍</span>
@@ -740,6 +753,14 @@ export default function ProductosModule() {
                    <span className="text-[12px]">📂</span>
                    <input type="file" accept=".xlsx,.xls,.csv" onChange={importarDesdeExcel} className="absolute inset-0 opacity-0 cursor-pointer" />
                 </div>
+                {pendientes.length > 0 && (
+                  <button type="button" disabled={guardando} onClick={async () => {
+                    const ok = await guardarEnBase(pendientes)
+                    if (ok) setPendientes([])
+                  }} className="bg-green-500 text-black font-black text-[10px] px-3 py-1.5 rounded-md whitespace-nowrap disabled:opacity-50">
+                    {guardando ? (aviso || "GUARDANDO...") : `GUARDAR (${pendientes.length})`}
+                  </button>
+                )}
                 <button title="📤 Exportar todo el listado actual a Excel con todos los parámetros completos" onClick={exportarAExcel} className="bg-white/10 hover:bg-yellow-400 hover:text-black text-white rounded-md p-1.5 text-[12px] transition-colors">📤</button>
               <button
   title="Eliminar los productos marcados"
