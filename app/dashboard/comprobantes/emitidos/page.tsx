@@ -245,6 +245,7 @@ export default function EmitidosPage(){
       <div className="max-w-7xl mx-auto flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-6 pb-4 border-b border-slate-800/80">
         <div className="flex items-center gap-3">
           <button onClick={()=>router.push("/dashboard/comprobantes")} className="text-xs text-slate-400 hover:text-white bg-slate-900 border border-slate-800 px-3.5 py-2 rounded-xl">← Comprobantes</button>
+          <button onClick={()=>router.push("/dashboard/factura-xml")} className="text-xs text-slate-950 font-bold bg-teal-400 hover:bg-teal-300 px-3.5 py-2 rounded-xl">Facturador</button>
           <div className="flex items-center gap-2.5">
             <span className="w-2.5 h-2.5 rounded-full bg-teal-400"></span>
             <h1 className="text-lg font-semibold text-white">Historial de comprobantes</h1>

@@ -5,6 +5,7 @@ import ModalCajaMixto from "./components/ModalCajaMixto"
 import ModuloTransporteReducido from "@/components/ModuloTransporteReducido"
 import { elegirSecuencial, puntoActivoFactura } from "@/lib/sri/punto-emision"
 import { permisosLocales } from "@/lib/permisos-pos"
+import { cerrarSesionEnEsteEquipo } from "@/lib/sesion-cliente"
 import { normalizarComprador } from "@/lib/sri/xml-factura"
 
 function codigosProducto(p: any) {
@@ -140,6 +141,7 @@ const Chisme = ({texto, titulo}:{texto:string, titulo:string}) => (
 export default function FacturadorXMLReal(){
   const [fecha, setFecha] = useState("")
   const [vendedorNombre, setVendedorNombre] = useState("")
+  const [esVendedor, setEsVendedor] = useState(false)
   const [permisos, setPermisos] = useState<ReturnType<typeof permisosLocales>>(null)
   const puedePrecio = !permisos || permisos.modificarPrecio
   const puedeDescuento = !permisos || permisos.descuento
@@ -232,6 +234,7 @@ export default function FacturadorXMLReal(){
     try {
       const usuario = JSON.parse(localStorage.getItem("meijsac_user") || "{}")
       setVendedorNombre(String(usuario?.nombre || ""))
+      setEsVendedor(String(usuario?.rol || "").toUpperCase() === "VENDEDOR")
       setPermisos(permisosLocales())
     } catch {}
   }, [])
@@ -1186,6 +1189,7 @@ const total = subtotalSin + iva15 + ivaDiferenciado + valorICE + valorIRBPNR + p
       {(!permisos || permisos.verCostos) && <a href="/dashboard/productos" className="bg-[#1e293b] border border-white/10 px-4 py-2 rounded-full text-[11px] font-bold">Inventario</a>}
       <a href="/dashboard/clientes" className="bg-[#1e293b] border border-white/10 px-4 py-2 rounded-full text-[11px] font-bold">Clientes</a>
       <a href="/dashboard/comprobantes" className="bg-[#1e293b] border border-white/10 px-4 py-2 rounded-full text-[11px] font-bold">Comprobantes</a>
+      {esVendedor && <button type="button" onClick={() => { void cerrarSesionEnEsteEquipo() }} className="bg-[#1e293b] border border-white/10 px-4 py-2 rounded-full text-[11px] font-bold">Cerrar sesión</button>}
       <button onClick={toggleTema} className="bg-white text-black px-3 py-2 rounded-full text-[10px] font-black ml-auto">{isDark?"☀️ CLARO":"🌙 OSCURO"}</button>
     </div>
 

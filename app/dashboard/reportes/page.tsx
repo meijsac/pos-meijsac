@@ -89,10 +89,11 @@ export default function ReporteVendedoresPage() {
 
   return (
     <div className="min-h-screen bg-[#060608] text-white p-4 font-sans select-none">
-      <div className="mb-4">
+      <div className="mb-4 flex gap-2">
         <button onClick={()=>router.back()} className="bg-white/10 text-white border border-white/5 px-4 py-2 rounded-xl text-xs font-bold hover:bg-white/20 transition-all">
           ← Volver al Dashboard
         </button>
+        <button onClick={()=>router.push("/dashboard/factura-xml")} className="bg-[#00f5d4] text-black px-4 py-2 rounded-xl text-xs font-bold">Facturador</button>
       </div>
 
       <div className="bg-[#11131a] rounded-[20px] p-4 border border-white/5 flex items-center justify-between gap-4 mb-3">

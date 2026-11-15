@@ -105,7 +105,10 @@ export default function EmisionNotaCredito() {
           <h1 className="text-lg font-semibold text-white tracking-wide">Nueva Nota de Crédito</h1>
           <span className="text-xs bg-slate-800 text-slate-400 px-2.5 py-0.5 rounded-md border border-slate-700">Comprobante 04 • Devolución / Anulación</span>
         </div>
-        <Link href="/dashboard/comprobantes" className="text-xs text-slate-400 hover:text-white bg-slate-900 border border-slate-800 px-4 py-2 rounded-lg transition">← Volver al Panel</Link>
+        <div className="flex gap-2">
+          <Link href="/dashboard/factura-xml" className="text-xs text-slate-950 font-bold bg-teal-400 hover:bg-teal-300 px-4 py-2 rounded-lg">Facturador</Link>
+          <Link href="/dashboard/comprobantes" className="text-xs text-slate-400 hover:text-white bg-slate-900 border border-slate-800 px-4 py-2 rounded-lg transition">← Volver al Panel</Link>
+        </div>
       </div>
 
       <div className="max-w-7xl mx-auto grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">

@@ -349,6 +349,7 @@ export default function ClientesModule() {
     <div className="min-h-screen bg-black text-white p-4 flex gap-4">
       <div className="w-[40%] bg-[#0f172a]/50 border border-white/10 rounded-xl p-3 flex flex-col">
         <div className="flex flex-wrap gap-2 mb-3">
+          <a href="/dashboard/factura-xml" className="flex-1 min-w-[140px] bg-white text-black font-black text-[11px] py-2 rounded-full text-center">Facturador</a>
           <button onClick={() => setForm({ id: "", tipoId: "05", identificacion: "", razonSocial: "", nombreComercial: "", tipoCliente: "NATURAL", email: "", telefono: "", direccion: "", provincia: "PICHINCHA", ciudad: "QUITO", diasCredito: 0, limiteCredito: 0, categoria: "DETALLISTA", descuento: 0 })}
             className="flex-1 min-w-[140px] bg-[#00f5d4] text-black font-black text-[11px] py-2 rounded-full">+ NUEVO CLIENTE</button>
           <button type="button" onClick={() => bajarArchivo("/api/clientes/plantilla")} className="flex-1 min-w-[140px] bg-white text-black font-black text-[10px] py-2 rounded-full">Descargar Plantilla</button>

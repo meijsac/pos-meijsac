@@ -265,7 +265,10 @@ export default function EmitidosPage(){
   return (
     <div className="min-h-screen bg-[#060608] text-white p-6">
       <div className="flex justify-between items-center mb-6">
-        <Chismoso texto="Regresa al menú donde ves 15 DOCS en amarillo y 167 COMPRAS. Tu hub principal"><button onClick={()=>router.push("/dashboard/comprobantes")} className="bg-white text-black px-4 py-2 rounded-xl text-xs font-bold">← Volver a COMPROBANTES</button></Chismoso>
+        <div className="flex gap-2">
+          <Chismoso texto="Regresa al menú donde ves 15 DOCS en amarillo y 167 COMPRAS. Tu hub principal"><button onClick={()=>router.push("/dashboard/comprobantes")} className="bg-white text-black px-4 py-2 rounded-xl text-xs font-bold">← Volver a COMPROBANTES</button></Chismoso>
+          <button onClick={()=>router.push("/dashboard/factura-xml")} className="bg-[#00f5d4] text-black px-4 py-2 rounded-xl text-xs font-bold">Facturador</button>
+        </div>
         <Chismoso texto="Historial maestro unificado: aquí llegan facturas 01 del POS chifa + retenciones 07 de CHUBB ATS 2.0. Todo en orden descendente"><h1 className="font-black tracking-tight">COMPROBANTES AUTORIZADOS</h1></Chismoso>
         <Chismoso texto="Filtra por secuencial 001-001-000000007 o por cliente CHUBB, UNIK, ARCACONTINENTAL"><input value={filtro} onChange={e=>setFiltro(e.target.value)} placeholder="Buscar secuencial / cliente" className="bg-black border border-white/10 rounded-xl px-4 py-2 text-xs w-[240px]" /></Chismoso>
       </div>

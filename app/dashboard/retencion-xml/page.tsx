@@ -199,7 +199,10 @@ useEffect(()=>{
     <div className="min-h-screen bg-[#060608] text-white p-4">
       <div className="flex justify-between mb-4 max-w-6xl mx-auto">
         <h1 className="font-black text-sm tracking-tight">REGISTRO DE COMPRAS / <span className="text-[#00f5d4]">RETENCIÓN 07 v3.1</span></h1>
-        <button onClick={()=>location.href='/dashboard/compras-recibidas'} className="bg-white/10 px-4 py-2 rounded-xl text-xs">← Compras</button>
+        <div className="flex gap-2">
+          <button onClick={()=>location.href='/dashboard/factura-xml'} className="bg-[#00f5d4] text-black px-4 py-2 rounded-xl text-xs font-bold">Facturador</button>
+          <button onClick={()=>location.href='/dashboard/compras-recibidas'} className="bg-white/10 px-4 py-2 rounded-xl text-xs">← Compras</button>
+        </div>
       </div>
 
       <div className="max-w-6xl mx-auto space-y-4">
