@@ -1,6 +1,7 @@
 import nodemailer from "nodemailer"
 import { pdfRide } from "@/lib/sri/ride-archivo"
 import { leerComprobanteArchivado } from "@/lib/security/storage"
+import { facturaPorClave } from "@/lib/sri/buscar-comprobante"
 
 const LEYENDA = "Este documento es un comprobante electrónico autorizado por el SRI. Para verificar su autenticidad ingrese a www.sri.gob.ec. Este correo fue generado automáticamente, por favor no responder."
 const PIE = "Enviado automáticamente por el sistema de facturación electrónica MEIJSAC."
@@ -197,6 +198,14 @@ function transporte() {
   return abrirTransporte(host, user, pass, port)
 }
 
+function xmlEmitido(p: Record<string, any>, xmlGuardado: Buffer | null) {
+  const aut = p.sriAutorizacion?.RespuestaAutorizacionComprobante?.autorizaciones?.autorizacion
+  const comp = Array.isArray(aut)
+    ? aut.find((fila: { estado?: string }) => fila?.estado === "AUTORIZADO")?.comprobante || aut[0]?.comprobante
+    : aut?.comprobante
+  return String(comp || p.xmlContent || xmlGuardado?.toString("utf8") || "")
+}
+
 export async function enviarCorreosFactura(body: Record<string, any>, xmlAutorizado: string, empresaId = "") {
   const tipo = String(body.tipoComprobante || body.codDoc || "01")
   const estado = String(body.estadoSRI || "").toUpperCase()
@@ -217,23 +226,30 @@ export async function enviarCorreosFactura(body: Record<string, any>, xmlAutoriz
   const motivo = String(body.mensajeSri || "sin motivo informado por el SRI")
   const autorizacion = String(body.numeroAutorizacion || "")
   const hora = cuando()
-  const destino = correosDe(cliente.email || cliente.correo || cliente.mail)
   const emisorCorreo = correosDe(emisor.email || emisor.correo)[0] || ""
   const llave = llaveResend()
   const from = await remitente(empresa, llave)
-  const xml = String(xmlAutorizado || body.xmlContent || "")
   const clave = String(body.claveAcceso || "").replace(/\D/g, "")
-  let pdf: Buffer | null = null
-  if (empresaId && clave.length === 49) pdf = await leerComprobanteArchivado(empresaId, clave, "pdf").catch(() => null)
-  if (!pdf?.length) {
-    try { pdf = pdfRide(body, String(body.fechaAutorizacion || fecha)) } catch { pdf = null }
+  const propia = empresaId && clave.length === 49 ? await facturaPorClave(empresaId, clave).catch(() => null) : null
+  const guardada = propia && propia.payload && typeof propia.payload === "object" ? propia.payload as Record<string, any> : null
+  const origen = guardada || (empresaId ? null : body)
+  const xmlGuardado = origen && empresaId && clave.length === 49 ? await leerComprobanteArchivado(empresaId, clave, "xml").catch(() => null) : null
+  const pdfGuardado = origen && empresaId && clave.length === 49 ? await leerComprobanteArchivado(empresaId, clave, "pdf").catch(() => null) : null
+  const xml = origen ? xmlEmitido(origen, xmlGuardado) : ""
+  let pdf: Buffer | null = pdfGuardado?.length ? pdfGuardado : null
+  if (!pdf?.length && origen) {
+    try { pdf = pdfRide(origen, String(origen.fechaAutorizacion || fecha)) } catch { pdf = null }
   }
+  const clienteDeEsta = guardada && guardada.cliente && typeof guardada.cliente === "object" ? guardada.cliente as Record<string, any> : (empresaId ? {} : cliente)
+  const destinoDeEsta = correosDe(clienteDeEsta.email || clienteDeEsta.correo || clienteDeEsta.mail)
+  const nombreDeEsta = String(clienteDeEsta.razon || (empresaId ? "cliente" : nombreCliente))
+  void xmlAutorizado
   const adjuntos = [
     xml ? { filename: `factura-${numero || "sri"}.xml`, content: xml, contentType: "application/xml" } : null,
     pdf?.length ? { filename: `factura-${numero || "sri"}.pdf`, content: pdf, contentType: "application/pdf" } : null,
   ].filter(Boolean)
-  const receptor = htmlCorreoReceptor({ cliente: nombreCliente, numero, total, fecha, empresa, ruc, direccion, telefono, logo })
-  const emisorHtml = htmlCorreoEmisor({ cliente: nombreCliente, numero, autorizacion, correo: destino[0] || "sin correo", cuando: hora, autorizado, motivo, empresa, ruc, direccion, telefono, logo })
+  const receptor = htmlCorreoReceptor({ cliente: nombreDeEsta, numero, total, fecha, empresa, ruc, direccion, telefono, logo })
+  const emisorHtml = htmlCorreoEmisor({ cliente: nombreDeEsta, numero, autorizacion, correo: destinoDeEsta[0] || "sin correo", cuando: hora, autorizado, motivo, empresa, ruc, direccion, telefono, logo })
   const mail = llave ? null : transporte()
   const fallaBase = !llave && !mail
     ? "falta la clave de Resend"
@@ -262,10 +278,10 @@ export async function enviarCorreosFactura(body: Record<string, any>, xmlAutoriz
     return "Enviado"
   }
   let estadoReceptor = "Fallido"
-  if (!destino.length) fallos.push("sin correo del cliente")
+  if (!destinoDeEsta.length) fallos.push("sin correo del cliente")
   else {
     try {
-      estadoReceptor = await mandar(destino.join(","), `Factura No. ${numero} - ${empresa}`, receptor)
+      estadoReceptor = await mandar(destinoDeEsta.join(","), `Factura No. ${numero} - ${empresa}`, receptor)
       if (estadoReceptor === "Fallido" && fallaBase) fallos.push(fallaBase)
     } catch (error) {
       estadoReceptor = "Fallido"
@@ -281,7 +297,7 @@ export async function enviarCorreosFactura(body: Record<string, any>, xmlAutoriz
       if (!fallos.length) fallos.push(motivoSmtp(error))
     }
   }
-  const linea = `Correo enviado a ${destino[0] || "sin correo"} el ${hora} - Estado: ${estadoReceptor}`
+  const linea = `Correo enviado a ${destinoDeEsta[0] || "sin correo"} el ${hora} - Estado: ${estadoReceptor}`
   const copia = emisorCorreo ? `. Copia al emisor ${emisorCorreo} - Estado: ${estadoEmisor}` : ""
   return `${linea}${copia}${fallos.length ? `. ${fallos[0]}` : ""}`
 }
