@@ -86,18 +86,23 @@ export function validarCedulaEC(ced: string) {
   return ver === dig[9]
 }
 
-function filaDesde(celdas: string[]): FilaCliente {
-  const [codigo, tipo, identificacion, nombre, email, telefono, direccion, ciudad, frecuente] = celdas
+const COLUMNAS_SIN_TIPO = COLUMNAS_CLIENTE.filter((col) => col !== "tipo_identificacion")
+
+function filaDesde(columnas: readonly string[], celdas: string[]): FilaCliente {
+  const mapa: Record<string, string> = {}
+  columnas.forEach((col, i) => { mapa[col] = celdas[i] || "" })
+  const codigo = normalizarCodigo(mapa.codigo_tipo_identificacion || "")
+  const escrito = normalizarTipo(mapa.tipo_identificacion || "")
   return {
-    codigo_tipo_identificacion: normalizarCodigo(codigo || ""),
-    tipo_identificacion: normalizarTipo(tipo || ""),
-    identificacion: (identificacion || "").trim(),
-    nombre_razon_social: (nombre || "").trim(),
-    email: (email || "").trim(),
-    telefono: (telefono || "").trim(),
-    direccion: (direccion || "").trim(),
-    ciudad: (ciudad || "").trim(),
-    es_cliente_frecuente: normalizarTipo(frecuente || "").replace("SÍ", "SI"),
+    codigo_tipo_identificacion: codigo,
+    tipo_identificacion: escrito || CODIGO_TIPO[codigo] || "",
+    identificacion: (mapa.identificacion || "").trim(),
+    nombre_razon_social: (mapa.nombre_razon_social || "").trim(),
+    email: (mapa.email || "").trim(),
+    telefono: (mapa.telefono || "").trim(),
+    direccion: (mapa.direccion || "").trim(),
+    ciudad: (mapa.ciudad || "").trim(),
+    es_cliente_frecuente: normalizarTipo(mapa.es_cliente_frecuente || "").replace("SÍ", "SI"),
   }
 }
 
@@ -159,14 +164,18 @@ export function filaSePuedeGuardar(errores: string[]) {
 export function revisarTabla(matriz: unknown[][]): { error?: string; filas: FilaRevisada[] } {
   if (!matriz.length) return { error: "El archivo no tiene filas", filas: [] }
   const encabezado = COLUMNAS_CLIENTE.map((_, i) => textoCelda(matriz[0][i]).toLowerCase())
-  const faltan = COLUMNAS_CLIENTE.filter((col, i) => encabezado[i] !== col)
-  if (faltan.length) return { error: `La primera fila debe tener estas columnas en este orden: ${COLUMNAS_CLIENTE.join(" | ")}`, filas: [] }
+  const columnas = COLUMNAS_CLIENTE.every((col, i) => encabezado[i] === col)
+    ? COLUMNAS_CLIENTE
+    : COLUMNAS_SIN_TIPO.every((col, i) => encabezado[i] === col)
+      ? COLUMNAS_SIN_TIPO
+      : null
+  if (!columnas) return { error: `La primera fila debe tener estas columnas en este orden: ${COLUMNAS_SIN_TIPO.join(" | ")}`, filas: [] }
 
   const filas: FilaRevisada[] = []
   const vistas = new Map<string, number>()
   for (let i = 1; i < matriz.length; i++) {
-    const celdas = COLUMNAS_CLIENTE.map((_, col) => textoCelda(matriz[i]?.[col]))
-    const datos = filaDesde(celdas)
+    const celdas = columnas.map((_, col) => textoCelda(matriz[i]?.[col]))
+    const datos = filaDesde(columnas, celdas)
     if (vacia(datos)) continue
     const errores = erroresDeFila(datos)
     const clave = datos.identificacion
