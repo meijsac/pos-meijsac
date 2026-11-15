@@ -65,15 +65,17 @@ export async function POST(req: Request) {
       : await prisma.usuario.findMany({ where: { empresa: { ruc } }, include: { empresa: true } })
     const rolesCaja = new Set(["CAJERO", "VENDEDOR"])
     const clavePresentada = password.normalize("NFC")
-    let usuario = null as (typeof usuarios)[number] | null
+    const validos: (typeof usuarios)[number][] = []
     for (const candidato of usuarios) {
       if (canal === "POS" && !rolesCaja.has(String(candidato.rol || "").toUpperCase())) continue
       const hash = String(candidato.password || "")
       if (!hash.startsWith("$2")) continue
       const coincide = await bcrypt.compare(clavePresentada, hash).catch(() => false)
         || (clavePresentada.trim() !== clavePresentada && await bcrypt.compare(clavePresentada.trim(), hash).catch(() => false))
-      if (coincide) usuario = candidato
+      if (coincide) validos.push(candidato)
     }
+    if (validos.length > 1) return responder({ error: MENSAJE }, 401)
+    const usuario = validos[0] || null
     if (usuario?.empresa && usuario.empresaId) {
       await limpiarIntentos(ip, identificador)
       prisma.seguridadLog.create({ data: { empresaId: usuario.empresaId, usuario: usuario.nombre, ip, accion: "LOGIN_OK", dispositivo: ua, detalle: ruc } }).catch(() => {})

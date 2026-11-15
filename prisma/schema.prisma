@@ -59,6 +59,8 @@ model Empresa {
   documentosLegales DocumentoLegal[]
   kardex          KardexMovimiento[]
   transferencias  TransferenciaInventario[]
+  establecimientos EstablecimientoSri[]
+  puntosVenta     PuntoVenta[]
   inventarioConfig InventarioConfig?
   ambienteSri      String   @default("1") @map("ambiente_sri")
   firmaElectronica FirmaElectronica?
@@ -106,6 +108,36 @@ model EmpresaUsuario {
   @@map("empresa_usuarios")
 }
 
+model EstablecimientoSri {
+  id        String       @id @default(cuid())
+  empresaId String
+  codigo    String
+  nombre    String       @default("")
+  direccion String       @default("")
+  createdAt DateTime     @default(now())
+  empresa   Empresa      @relation(fields: [empresaId], references: [id], onDelete: Cascade)
+  puntos    PuntoVenta[]
+
+  @@unique([empresaId, codigo])
+  @@map("establecimientos_sri")
+}
+
+model PuntoVenta {
+  id                String             @id @default(cuid())
+  empresaId         String
+  establecimientoId String
+  codigo            String
+  activo            Boolean            @default(true)
+  createdAt         DateTime           @default(now())
+  empresa           Empresa            @relation(fields: [empresaId], references: [id], onDelete: Cascade)
+  establecimiento   EstablecimientoSri @relation(fields: [establecimientoId], references: [id], onDelete: Cascade)
+  facturas          FacturaEmitida[]
+
+  @@unique([establecimientoId, codigo])
+  @@index([empresaId])
+  @@map("puntos_venta")
+}
+
 model DocumentoLegal {
   id             String   @id @default(cuid())
   empresaId      String   @map("empresa_id")
@@ -133,7 +165,13 @@ model FacturaEmitida {
   unidadPlazo      String?   @map("unidad_plazo")
   cuotas           Int?
   fechaVencimiento DateTime? @map("fecha_vencimiento")
+  usuarioId        String?
+  puntoVentaId     String?
+  usuario          Usuario?  @relation(fields: [usuarioId], references: [id], onDelete: SetNull)
+  puntoVenta       PuntoVenta? @relation(fields: [puntoVentaId], references: [id], onDelete: SetNull)
   createdAt        DateTime  @default(now())
+
+  @@index([empresaId, usuarioId])
 }
 
 model Usuario {
@@ -141,11 +179,15 @@ model Usuario {
   nombre    String
   email     String?
   password  String
-  rol       String   @default("ADMIN")
-  empresaId String
-  empresa   Empresa  @relation(fields: [empresaId], references: [id], onDelete: Cascade)
-  createdAt DateTime @default(now())
-  sesiones  SesionUsuario[]
+  rol                   String   @default("ADMIN")
+  establecimientoCodigo String?  @default("")
+  puntoEmisionCodigo    String?  @default("")
+  empresaId             String
+  empresa               Empresa  @relation(fields: [empresaId], references: [id], onDelete: Cascade)
+  createdAt             DateTime @default(now())
+  sesiones              SesionUsuario[]
+  facturas              FacturaEmitida[]
+  clientesCreados       Cliente[]
 }
 
 model SesionUsuario {
@@ -240,9 +282,11 @@ model Cliente {
   limiteCredito   Float      @default(0)
   categoria       String     @default("DETALLISTA")
   descuento       Float      @default(0)
-  frecuente       Boolean    @default(false)
-  sucursales      Sucursal[]
-  createdAt       DateTime   @default(now())
+  frecuente          Boolean    @default(false)
+  creadoPorUsuarioId String?
+  creadoPor          Usuario?   @relation(fields: [creadoPorUsuarioId], references: [id], onDelete: SetNull)
+  sucursales         Sucursal[]
+  createdAt          DateTime   @default(now())
   updatedAt       DateTime   @updatedAt
 
   @@unique([identificacion, empresaId], name: "identificacion_empresaId")
@@ -345,6 +389,8 @@ model CajaTurno {
   fechaCierre       DateTime?
   usuario           String
   puntoEmision      String
+  empresaId         String?
+  puntoVentaId      String?
   montoInicial      Float
   estado            String   @default("ABIERTA")
   montoCierreFisico Float?

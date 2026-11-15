@@ -2,7 +2,20 @@ import { NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
 import { datosRegistroDe, usuarioConEmpresaDesdeRequest } from "@/lib/empresa-sesion"
 import { codigoAmbiente } from "@/lib/sri/ambiente"
+import { asegurarPunto } from "@/lib/pos/puntos"
 import { puede } from "@/lib/seguridad"
+
+async function guardarPuntos(empresaId: string, secuenciales: { estab: string; pto: string }[] | undefined, sucursales: unknown) {
+  const lista = Array.isArray(secuenciales) ? secuenciales : []
+  for (const fila of lista) {
+    await asegurarPunto(empresaId, fila.estab, fila.pto).catch(() => null)
+  }
+  if (!Array.isArray(sucursales)) return
+  for (const fila of sucursales) {
+    const s = fila as { id?: string; nombre?: string; dir?: string; ptoEmision?: string }
+    await asegurarPunto(empresaId, s.id, s.ptoEmision || "001", String(s.nombre || ""), String(s.dir || "")).catch(() => null)
+  }
+}
 
 function limpiarSecuenciales(lista: unknown) {
   if (!Array.isArray(lista)) return undefined
@@ -44,6 +57,7 @@ export async function POST(request: Request) {
       where: { id: empresa.id },
       data: { datosRegistro: { ...prev, secuenciales: listaGuardada } as any },
     })
+    await guardarPuntos(empresa.id, listaGuardada, undefined)
     return NextResponse.json({ ok: true, secuenciales: listaGuardada })
   }
   const ambienteSri = codigoAmbiente(datos.ambiente ?? prev.ambiente ?? empresa.ambienteSri)
@@ -75,5 +89,6 @@ export async function POST(request: Request) {
       } as any,
     },
   })
+  await guardarPuntos(empresa.id, listaGuardada || prev.secuenciales, datos.sucursales)
   return NextResponse.json({ ok: true, secuenciales: listaGuardada || prev.secuenciales || [] })
 }

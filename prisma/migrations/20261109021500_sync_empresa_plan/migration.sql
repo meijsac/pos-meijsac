@@ -436,3 +436,58 @@ CREATE TABLE IF NOT EXISTS catalogos_sri_cambios (
   antes TEXT NOT NULL DEFAULT '',
   despues TEXT NOT NULL DEFAULT ''
 );
+
+CREATE TABLE IF NOT EXISTS "establecimientos_sri" (
+  "id" TEXT NOT NULL,
+  "empresaId" TEXT NOT NULL,
+  "codigo" TEXT NOT NULL,
+  "nombre" TEXT NOT NULL DEFAULT '',
+  "direccion" TEXT NOT NULL DEFAULT '',
+  "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  CONSTRAINT "establecimientos_sri_pkey" PRIMARY KEY ("id")
+);
+CREATE UNIQUE INDEX IF NOT EXISTS "establecimientos_sri_empresaId_codigo_key" ON "establecimientos_sri" ("empresaId", "codigo");
+
+CREATE TABLE IF NOT EXISTS "puntos_venta" (
+  "id" TEXT NOT NULL,
+  "empresaId" TEXT NOT NULL,
+  "establecimientoId" TEXT NOT NULL,
+  "codigo" TEXT NOT NULL,
+  "activo" BOOLEAN NOT NULL DEFAULT true,
+  "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  CONSTRAINT "puntos_venta_pkey" PRIMARY KEY ("id")
+);
+CREATE UNIQUE INDEX IF NOT EXISTS "puntos_venta_establecimientoId_codigo_key" ON "puntos_venta" ("establecimientoId", "codigo");
+CREATE INDEX IF NOT EXISTS "puntos_venta_empresaId_idx" ON "puntos_venta" ("empresaId");
+
+ALTER TABLE "FacturaEmitida" ADD COLUMN IF NOT EXISTS "usuarioId" TEXT;
+ALTER TABLE "FacturaEmitida" ADD COLUMN IF NOT EXISTS "puntoVentaId" TEXT;
+CREATE INDEX IF NOT EXISTS "FacturaEmitida_empresaId_usuarioId_idx" ON "FacturaEmitida" ("empresaId", "usuarioId");
+
+ALTER TABLE "Cliente" ADD COLUMN IF NOT EXISTS "creadoPorUsuarioId" TEXT;
+ALTER TABLE "CajaTurno" ADD COLUMN IF NOT EXISTS "empresaId" TEXT;
+ALTER TABLE "CajaTurno" ADD COLUMN IF NOT EXISTS "puntoVentaId" TEXT;
+ALTER TABLE "Usuario" ADD COLUMN IF NOT EXISTS "establecimientoCodigo" TEXT DEFAULT '';
+ALTER TABLE "Usuario" ADD COLUMN IF NOT EXISTS "puntoEmisionCodigo" TEXT DEFAULT '';
+
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'establecimientos_sri_empresaId_fkey') THEN
+    ALTER TABLE "establecimientos_sri" ADD CONSTRAINT "establecimientos_sri_empresaId_fkey" FOREIGN KEY ("empresaId") REFERENCES "Empresa"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'puntos_venta_empresaId_fkey') THEN
+    ALTER TABLE "puntos_venta" ADD CONSTRAINT "puntos_venta_empresaId_fkey" FOREIGN KEY ("empresaId") REFERENCES "Empresa"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'puntos_venta_establecimientoId_fkey') THEN
+    ALTER TABLE "puntos_venta" ADD CONSTRAINT "puntos_venta_establecimientoId_fkey" FOREIGN KEY ("establecimientoId") REFERENCES "establecimientos_sri"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'FacturaEmitida_usuarioId_fkey') THEN
+    ALTER TABLE "FacturaEmitida" ADD CONSTRAINT "FacturaEmitida_usuarioId_fkey" FOREIGN KEY ("usuarioId") REFERENCES "Usuario"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'FacturaEmitida_puntoVentaId_fkey') THEN
+    ALTER TABLE "FacturaEmitida" ADD CONSTRAINT "FacturaEmitida_puntoVentaId_fkey" FOREIGN KEY ("puntoVentaId") REFERENCES "puntos_venta"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'Cliente_creadoPorUsuarioId_fkey') THEN
+    ALTER TABLE "Cliente" ADD CONSTRAINT "Cliente_creadoPorUsuarioId_fkey" FOREIGN KEY ("creadoPorUsuarioId") REFERENCES "Usuario"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+  END IF;
+END $$;

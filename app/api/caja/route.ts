@@ -3,6 +3,7 @@ import bcrypt from "bcryptjs"
 import { prisma } from "@/lib/prisma"
 import { usuarioConEmpresaDesdeRequest } from "@/lib/empresa-sesion"
 import { puedeAbrirCaja } from "@/lib/seguridad"
+import { asegurarPunto } from "@/lib/pos/puntos"
 import { ipDe, navegadorDe } from "@/lib/seguridad"
 
 async function captchaValido(token: string, ip: string) {
@@ -22,14 +23,21 @@ export async function POST(req: Request) {
   const password = String(body.password || "")
   if (!(await bcrypt.compare(password, sesion.usuario.password))) return NextResponse.json({ error: "Clave incorrecta" }, { status: 401 })
   const dispositivo = String(body.dispositivo || navegadorDe(req))
-  const abiertas = await prisma.cajaTurno.findMany({ where: { usuario: sesion.usuario.id, estado: "ABIERTA" } })
+  const abiertas = await prisma.cajaTurno.findMany({
+    where: { usuario: sesion.usuario.id, estado: "ABIERTA", OR: [{ empresaId: sesion.empresa.id }, { empresaId: null }] },
+  })
   const decision = puedeAbrirCaja(abiertas.map((a) => ({ usuario: a.usuario, dispositivo: a.dispositivo || "" })), sesion.usuario.id, dispositivo)
   if (!decision.ok) return NextResponse.json({ error: decision.error }, { status: 409 })
   if (abiertas[0]) return NextResponse.json({ id: abiertas[0].id, estado: "ABIERTA" })
+  const codigo = String(body.puntoEmision || sesion.usuario.puntoEmisionCodigo || "001")
+  const estab = String(body.establecimiento || sesion.usuario.establecimientoCodigo || "001")
+  const punto = await asegurarPunto(sesion.empresa.id, estab, codigo).catch(() => null)
   const turno = await prisma.cajaTurno.create({
     data: {
       usuario: sesion.usuario.id,
-      puntoEmision: String(body.puntoEmision || "001"),
+      empresaId: sesion.empresa.id,
+      puntoEmision: codigo.replace(/\D/g, "").padStart(3, "0").slice(-3),
+      puntoVentaId: punto && punto.empresaId === sesion.empresa.id ? punto.id : null,
       montoInicial: Number(body.montoInicial) || 0,
       dispositivo,
       estado: "ABIERTA",
@@ -45,7 +53,9 @@ export async function PATCH(req: Request) {
   if (!(await bcrypt.compare(String(body.password || ""), sesion.usuario.password))) {
     return NextResponse.json({ error: "La contraseña del cajero no coincide" }, { status: 401 })
   }
-  const turno = await prisma.cajaTurno.findFirst({ where: { usuario: sesion.usuario.id, estado: "ABIERTA" } })
+  const turno = await prisma.cajaTurno.findFirst({
+    where: { usuario: sesion.usuario.id, estado: "ABIERTA", OR: [{ empresaId: sesion.empresa.id }, { empresaId: null }] },
+  })
   if (!turno) return NextResponse.json({ error: "No hay caja abierta" }, { status: 404 })
   const conteo = Number(body.conteo)
   const esperado = Number(body.esperado ?? turno.montoInicial)

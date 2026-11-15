@@ -38,6 +38,7 @@ export async function POST(req: NextRequest) {
         limiteCredito: Number(limiteCredito) || 0,
         categoria: categoria || "DETALLISTA",
         descuento: Number(descuento) || 0,
+        creadoPorUsuarioId: sesion.usuario.id,
         // Si mandas sucursales del formulario
         sucursales: sucursales && sucursales.length > 0 ? {
           create: sucursales.map((s: any) => ({

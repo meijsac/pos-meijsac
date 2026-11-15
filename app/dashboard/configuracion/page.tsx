@@ -1,5 +1,5 @@
 "use client";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import Link from "next/link";
 import { feriadosIvaReducido } from '@/lib/iva-feriados.config';
 import { cargarEmpresaSesion } from "@/lib/sesion-cliente";
@@ -198,6 +198,7 @@ export default function ConfiguracionAvanzadaSRI() {
         return () => { vivo = false };
     }, [tab]);
     const [cfg, setCfg] = useState<any>(null);
+    const equipoListo = useRef(false);
     const [logs, setLogs] = useState<any[]>([]);
     const [infoFirma, setInfoFirma] = useState<any>(null);
     const [claveIngreso, setClaveIngreso] = useState("");
@@ -360,9 +361,20 @@ export default function ConfiguracionAvanzadaSRI() {
         });
 
         if (!res.ok) throw new Error(`Error ${res.status}`);
+        if (equipoListo.current && Array.isArray(payload.usuarios)) {
+          const equipo = await fetch("/api/usuarios/equipo", {
+            method: "POST",
+            credentials: "same-origin",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ usuarios: payload.usuarios }),
+          })
+          const dataEquipo = await equipo.json().catch(() => ({}))
+          if (!equipo.ok) throw new Error(dataEquipo.error || "No se pudo guardar el equipo")
+          if (Array.isArray(dataEquipo.usuarios)) payload.usuarios = dataEquipo.usuarios
+        }
         try {
           const secuencialesGuardados = cuerpo.secuenciales
-          localStorage.setItem("meijsac_config_pro", JSON.stringify({ ...payload, secuenciales: secuencialesGuardados, logoPreview: undefined }))
+          localStorage.setItem("meijsac_config_pro", JSON.stringify({ ...payload, secuenciales: secuencialesGuardados, logoPreview: undefined }, (clave, valor) => clave === "clave" || clave === "password" ? "" : valor))
           const mapa: Record<string, string> = {}
           for (const s of secuencialesGuardados) {
             const estab = String(s?.estab || "").replace(/\D/g, "").padStart(3, "0").slice(-3)
@@ -505,6 +517,14 @@ base.sucursales = datosReales.sucursales || base.sucursales || [];
           }
         } catch {}
         setCfg(base);
+        try {
+          const equipo = await fetch("/api/usuarios/equipo", { credentials: "same-origin" })
+          const dataEquipo = equipo.ok ? await equipo.json() : null
+          if (vivo && Array.isArray(dataEquipo?.usuarios)) {
+            equipoListo.current = true
+            setCfg((p: any) => ({ ...(p || base), usuarios: dataEquipo.usuarios }))
+          }
+        } catch {}
         setLogs(JSON.parse(localStorage.getItem("meijsac_logs") || "[]"));
       })()
       return () => { vivo = false }
@@ -940,7 +960,7 @@ base.sucursales = datosReales.sucursales || base.sucursales || [];
                               <p className="text-[#ffbe0a] text-[10px] font-bold">PERFIL Y AMARRE A CAJA / BODEGA (CRÍTICO)</p>
                               <div className="grid grid-cols-2 gap-3">
                                 <div><label className="text-[8px] text-white/40">Nombre Empleado</label><input value={u.nombre} onChange={e=>upd({nombre:e.target.value})} className="w-full bg-black rounded p-2 text-[11px] text-white border border-white/10" placeholder="Ej: Juan Cajero"/></div>
-                                <div><label className="text-[8px] text-white/40">Rol</label><select value={u.rol} onChange={e=>upd({rol:e.target.value})} className="w-full bg-black rounded p-2 text-[11px] text-white border border-white/10"><option>Administrador</option><option>Cajero</option><option>Contador</option><option>Bodeguero</option></select></div>
+                                <div><label className="text-[8px] text-white/40">Rol</label><select value={u.rol} onChange={e=>upd({rol:e.target.value})} className="w-full bg-black rounded p-2 text-[11px] text-white border border-white/10"><option>Administrador</option><option>Vendedor</option><option>Cajero</option><option>Contador</option><option>Bodeguero</option></select></div>
                                 <div><label className="text-[8px] text-white/40">Correo / Usuario</label><input value={u.email} onChange={e=>upd({email:e.target.value})} className="w-full bg-black rounded p-2 text-[11px] text-white border border-white/10" placeholder="cajero@meijsac.com"/></div>
                                 <div><label className="text-[8px] text-white/40">Contraseña</label><input type="password" value={u.password||''} onChange={e=>upd({password:e.target.value})} className="w-full bg-black rounded p-2 text-[11px] text-white border border-white/10" placeholder="****"/></div>
                                 <div><label className="text-[8px] text-[#00f5d4]">Establecimiento</label><select value={u.establecimiento} onChange={e=>upd({establecimiento:e.target.value})} className="w-full bg-black rounded p-2 text-[11px] text-white border border-[#00f5d4]/20"><option>001</option><option>002</option><option>003</option></select></div>

@@ -13,6 +13,7 @@ import { clasificarEstadoSri } from "@/lib/sri/estado-visible"
 import { elegirSecuencial, serieDeAmbiente } from "@/lib/sri/punto-emision"
 import { validarEntradaFactura } from "@/lib/factura-entrada"
 import { ambienteDeComprobante } from "@/lib/ambiente-datos"
+import { marcarVenta } from "@/lib/pos/puntos"
 
 export const maxDuration = 60
 
@@ -94,6 +95,7 @@ export async function POST(req: Request) {
     body.estadoSRI = "PENDIENTE_DE_AUTORIZAR"
     body.envioSri = ambiente === "2" ? "PRODUCCION" : "PRUEBAS"
     body.auditoria = { ip: ipDe(req), dispositivo: navegadorDe(req), usuario: sesion.usuario.nombre, caja, fecha: new Date().toISOString() }
+    const puntoVentaId = await marcarVenta(sesion.empresa.id, sesion.usuario, armado.estab, armado.pto, body)
     const plazo = Number(body.plazo)
     const cuotas = Number(body.cuotas)
     const vence = body.fecha_vencimiento ? new Date(body.fecha_vencimiento) : null
@@ -108,6 +110,8 @@ export async function POST(req: Request) {
         unidadPlazo: body.unidad_plazo ? String(body.unidad_plazo) : null,
         cuotas: Number.isFinite(cuotas) && cuotas > 0 ? Math.round(cuotas) : null,
         fechaVencimiento: vence && !Number.isNaN(vence.getTime()) ? vence : null,
+        usuarioId: sesion.usuario.id,
+        puntoVentaId,
       },
     })
     if (body.modo_negocio === "RESTAURANTE" || body.modo_negocio === "GENERAL") {

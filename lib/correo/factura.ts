@@ -38,6 +38,14 @@ function cuando() {
   }).format(new Date())
 }
 
+function lineaAtencion(body: Record<string, any> | null) {
+  if (!body) return ""
+  const nombre = String(body.atendidoPor || body.auditoria?.usuario || "").trim()
+  const caja = String(body.establecimiento || "").trim()
+  if (!nombre && !caja) return ""
+  return `Atendido por: ${nombre || "—"} · Caja: ${caja || "—"}`
+}
+
 function numeroDe(body: Record<string, any>) {
   const serie = String(body.establecimiento || "").trim()
   const sec = String(body.secuencial || "").replace(/\D/g, "").padStart(9, "0").slice(-9)
@@ -109,21 +117,23 @@ function marco(datos: { empresa: string; ruc: string; direccion: string; telefon
   </div>`
 }
 
-export function htmlCorreoReceptor(datos: { cliente: string; numero: string; total: string; fecha: string; empresa: string; ruc: string; direccion: string; telefono: string; logo: string }) {
+export function htmlCorreoReceptor(datos: { cliente: string; numero: string; total: string; fecha: string; empresa: string; ruc: string; direccion: string; telefono: string; logo: string; atencion?: string }) {
   const texto = `Hola ${datos.cliente}, te enviamos tu comprobante electrónico No. ${datos.numero}, por un valor de $${datos.total}, fecha ${datos.fecha}, emitido por ${datos.empresa} con RUC ${datos.ruc}. Puedes verificarlo en www.sri.gob.ec.`
+  const atencion = datos.atencion ? `<p style="margin:12px 0 0;font-size:12px;color:#5c6b73">${escapar(datos.atencion)}</p>` : ""
   return {
-    texto: `${texto}\n\n${LEYENDA}\n\n${PIE}`,
-    html: marco({ ...datos, cuerpo: `<p style="margin:0">${escapar(texto)}</p><p style="margin:16px 0 0;font-size:12px;color:#5c6b73">Adjuntos: XML autorizado y RIDE PDF.</p>` }),
+    texto: `${texto}${datos.atencion ? `\n${datos.atencion}` : ""}\n\n${LEYENDA}\n\n${PIE}`,
+    html: marco({ ...datos, cuerpo: `<p style="margin:0">${escapar(texto)}</p>${atencion}<p style="margin:16px 0 0;font-size:12px;color:#5c6b73">Adjuntos: XML autorizado y RIDE PDF.</p>` }),
   }
 }
 
-export function htmlCorreoEmisor(datos: { cliente: string; numero: string; autorizacion: string; correo: string; cuando: string; autorizado: boolean; motivo: string; empresa: string; ruc: string; direccion: string; telefono: string; logo: string }) {
+export function htmlCorreoEmisor(datos: { cliente: string; numero: string; autorizacion: string; correo: string; cuando: string; autorizado: boolean; motivo: string; empresa: string; ruc: string; direccion: string; telefono: string; logo: string; atencion?: string }) {
   const texto = datos.autorizado
     ? `Tu factura No. ${datos.numero} fue AUTORIZADA por el SRI, autorización No. ${datos.autorizacion}, y ya fue enviada a ${datos.correo} el ${datos.cuando}.`
     : `Tu factura No. ${datos.numero} NO fue autorizada, motivo SRI: ${datos.motivo}.`
+  const atencion = datos.atencion ? `<p style="margin:12px 0 0;font-size:12px;color:#5c6b73">${escapar(datos.atencion)}</p>` : ""
   return {
-    texto: `${texto}\n\n${LEYENDA}\n\n${PIE}`,
-    html: marco({ ...datos, cuerpo: `<p style="margin:0">${escapar(texto)}</p><p style="margin:16px 0 0;font-size:12px;color:#5c6b73">Adjuntos: XML y RIDE PDF.</p>` }),
+    texto: `${texto}${datos.atencion ? `\n${datos.atencion}` : ""}\n\n${LEYENDA}\n\n${PIE}`,
+    html: marco({ ...datos, cuerpo: `<p style="margin:0">${escapar(texto)}</p>${atencion}<p style="margin:16px 0 0;font-size:12px;color:#5c6b73">Adjuntos: XML y RIDE PDF.</p>` }),
   }
 }
 
@@ -248,8 +258,9 @@ export async function enviarCorreosFactura(body: Record<string, any>, xmlAutoriz
     xml ? { filename: `factura-${numero || "sri"}.xml`, content: xml, contentType: "application/xml" } : null,
     pdf?.length ? { filename: `factura-${numero || "sri"}.pdf`, content: pdf, contentType: "application/pdf" } : null,
   ].filter(Boolean)
-  const receptor = htmlCorreoReceptor({ cliente: nombreDeEsta, numero, total, fecha, empresa, ruc, direccion, telefono, logo })
-  const emisorHtml = htmlCorreoEmisor({ cliente: nombreDeEsta, numero, autorizacion, correo: destinoDeEsta[0] || "sin correo", cuando: hora, autorizado, motivo, empresa, ruc, direccion, telefono, logo })
+  const atencion = lineaAtencion(origen)
+  const receptor = htmlCorreoReceptor({ cliente: nombreDeEsta, numero, total, fecha, empresa, ruc, direccion, telefono, logo, atencion })
+  const emisorHtml = htmlCorreoEmisor({ cliente: nombreDeEsta, numero, autorizacion, correo: destinoDeEsta[0] || "sin correo", cuando: hora, autorizado, motivo, empresa, ruc, direccion, telefono, logo, atencion })
   const mail = llave ? null : transporte()
   const fallaBase = !llave && !mail
     ? "falta la clave de Resend"
