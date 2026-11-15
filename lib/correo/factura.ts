@@ -1,6 +1,5 @@
 import nodemailer from "nodemailer"
 import { pdfRide } from "@/lib/sri/ride-archivo"
-import { guardarPdfArchivado, leerComprobanteArchivado } from "@/lib/security/storage"
 
 const LEYENDA = "Este documento es un comprobante electrónico autorizado por el SRI. Para verificar su autenticidad ingrese a www.sri.gob.ec. Este correo fue generado automáticamente, por favor no responder."
 
@@ -101,26 +100,16 @@ function marco(datos: { empresa: string; ruc: string; direccion: string; telefon
       <div style="padding:24px;font-size:14px;line-height:1.6">${datos.cuerpo}</div>
       <div style="padding:0 24px 20px">
         <p style="margin:0;padding:12px;background:#f4f7f8;border-radius:8px;font-size:11px;line-height:1.5;color:#5c6b73">${escapar(LEYENDA)}</p>
-        <p style="margin:8px 0 0;font-size:10px;color:#8a979d">Enviado automáticamente por el sistema de facturación electrónica MEIJSAC.</p>
       </div>
     </div>
   </div>`
 }
 
-function fila(etiqueta: string, valor: string) {
-  return `<tr><td style="padding:6px 0;color:#5c6b73;width:140px">${escapar(etiqueta)}</td><td style="padding:6px 0;font-weight:700">${escapar(valor)}</td></tr>`
-}
-
-export function htmlCorreoReceptor(datos: { cliente: string; numero: string; total: string; fecha: string; empresa: string; ruc: string; direccion: string; telefono: string; logo: string; correo: string; autorizacion: string; autorizado: boolean }) {
-  const saludo = datos.autorizado
-    ? `Estimado/a ${datos.cliente}, ${datos.empresa} le informa que su comprobante electrónico ha sido generado y autorizado.`
-    : `Estimado/a ${datos.cliente}, ${datos.empresa} le informa que su comprobante electrónico no fue autorizado.`
-  const tabla = `<table style="width:100%;border-collapse:collapse;margin-top:16px;font-size:13px">${fila("Emisor", `${datos.empresa} · RUC ${datos.ruc}`)}${fila("Comprobante", `Factura ${datos.numero}`)}${fila("Fecha de emisión", datos.fecha)}${fila("Autorización", datos.autorizacion || "—")}${fila("Total", `$${datos.total}`)}</table>`
-  const contacto = `<p style="margin:16px 0 0;font-size:12px;color:#3d4c54">${escapar([datos.direccion, datos.telefono, datos.correo].filter(Boolean).join(" · "))}</p>`
-  const texto = `${saludo} Emisor: ${datos.empresa}, RUC ${datos.ruc}. Comprobante: Factura ${datos.numero}. Fecha: ${datos.fecha}. Autorización: ${datos.autorizacion || "—"}. Total: $${datos.total}.`
+export function htmlCorreoReceptor(datos: { cliente: string; numero: string; total: string; fecha: string; empresa: string; ruc: string; direccion: string; telefono: string; logo: string }) {
+  const texto = `Hola ${datos.cliente}, te enviamos tu comprobante electrónico No. ${datos.numero}, por un valor de $${datos.total}, fecha ${datos.fecha}, emitido por ${datos.empresa} con RUC ${datos.ruc}. Puedes verificarlo en www.sri.gob.ec.`
   return {
-    texto: `${texto}\n\n${LEYENDA}\n\nEnviado automáticamente por el sistema de facturación electrónica MEIJSAC.`,
-    html: marco({ ...datos, cuerpo: `<p style="margin:0">${escapar(saludo)}</p>${tabla}${contacto}<p style="margin:16px 0 0;font-size:12px;color:#5c6b73">Adjuntos: XML y RIDE PDF guardados en el sistema.</p>` }),
+    texto: `${texto}\n\n${LEYENDA}`,
+    html: marco({ ...datos, cuerpo: `<p style="margin:0">${escapar(texto)}</p><p style="margin:16px 0 0;font-size:12px;color:#5c6b73">Adjuntos: XML autorizado y RIDE PDF.</p>` }),
   }
 }
 
@@ -205,7 +194,7 @@ function transporte() {
   return abrirTransporte(host, user, pass, port)
 }
 
-export async function enviarCorreosFactura(body: Record<string, any>, xmlAutorizado: string, empresaId = "") {
+export async function enviarCorreosFactura(body: Record<string, any>, xmlAutorizado: string) {
   const tipo = String(body.tipoComprobante || body.codDoc || "01")
   const estado = String(body.estadoSRI || "").toUpperCase()
   const autorizado = estado === "AUTORIZADO"
@@ -213,7 +202,7 @@ export async function enviarCorreosFactura(body: Record<string, any>, xmlAutoriz
   if (tipo !== "01" || (!autorizado && !devuelta)) return ""
   const emisor = body.configEmisor && typeof body.configEmisor === "object" ? body.configEmisor : {}
   const cliente = body.cliente && typeof body.cliente === "object" ? body.cliente : {}
-  const empresa = String(emisor.comercial || emisor.nombreComercial || emisor.razon || emisor.razonSocial || "Empresa")
+  const empresa = String(emisor.razon || emisor.razonSocial || "Empresa")
   const ruc = String(emisor.ruc || "")
   const direccion = String(emisor.matriz || emisor.direccion || "")
   const telefono = String(emisor.telefono || emisor.celular || "")
@@ -223,26 +212,20 @@ export async function enviarCorreosFactura(body: Record<string, any>, xmlAutoriz
   const fecha = String(body.fechaEmisionFormato || body.fechaAutorizacion || "")
   const total = dinero(body.totales?.total)
   const motivo = String(body.mensajeSri || "sin motivo informado por el SRI")
-  const autorizacion = String(body.claveAcceso || body.numeroAutorizacion || "").replace(/\D/g, "")
+  const autorizacion = String(body.numeroAutorizacion || "")
   const hora = cuando()
   const destino = correosDe(cliente.email || cliente.correo || cliente.mail)
   const emisorCorreo = correosDe(emisor.email || emisor.correo)[0] || ""
   const llave = llaveResend()
   const from = await remitente(empresa, llave)
-  const clave = autorizacion
-  let xml = String(xmlAutorizado || body.xmlContent || "")
-  if (empresaId && clave.length === 49) {
-    const xmlGuardado = await leerComprobanteArchivado(empresaId, clave, "xml").catch(() => null)
-    if (xmlGuardado?.length) xml = xmlGuardado.toString("utf8")
-  }
+  const xml = String(xmlAutorizado || body.xmlContent || "")
   let pdf: Buffer | null = null
   try { pdf = pdfRide(body, String(body.fechaAutorizacion || fecha)) } catch { pdf = null }
-  if (empresaId && clave.length === 49 && pdf?.length) await guardarPdfArchivado(empresaId, clave, pdf).catch(() => {})
   const adjuntos = [
     xml ? { filename: `factura-${numero || "sri"}.xml`, content: xml, contentType: "application/xml" } : null,
     pdf?.length ? { filename: `factura-${numero || "sri"}.pdf`, content: pdf, contentType: "application/pdf" } : null,
   ].filter(Boolean)
-  const receptor = htmlCorreoReceptor({ cliente: nombreCliente, numero, total, fecha, empresa, ruc, direccion, telefono, logo, correo: emisorCorreo, autorizacion: clave, autorizado })
+  const receptor = htmlCorreoReceptor({ cliente: nombreCliente, numero, total, fecha, empresa, ruc, direccion, telefono, logo })
   const emisorHtml = htmlCorreoEmisor({ cliente: nombreCliente, numero, autorizacion, correo: destino[0] || "sin correo", cuando: hora, autorizado, motivo, empresa, ruc, direccion, telefono, logo })
   const mail = llave ? null : transporte()
   const fallaBase = !llave && !mail
@@ -275,7 +258,7 @@ export async function enviarCorreosFactura(body: Record<string, any>, xmlAutoriz
   if (!destino.length) fallos.push("sin correo del cliente")
   else {
     try {
-      estadoReceptor = await mandar(destino.join(","), `Factura Electrónica ${numero} - ${empresa}`, receptor)
+      estadoReceptor = await mandar(destino.join(","), `Factura No. ${numero} - ${empresa}`, receptor)
       if (estadoReceptor === "Fallido" && fallaBase) fallos.push(fallaBase)
     } catch (error) {
       estadoReceptor = "Fallido"

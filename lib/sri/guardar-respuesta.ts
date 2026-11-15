@@ -66,7 +66,7 @@ export async function guardarRespuestaSri(facturaId: string, body: any, real: Re
     }
   }
   const xmlAutorizado = String(real.autorizacion?.RespuestaAutorizacionComprobante.autorizaciones.autorizacion.comprobante || "")
-  body.correoRegistro = await enviarCorreosFactura(body, xmlAutorizado.startsWith("<") ? xmlAutorizado : String(body.xmlContent || ""), dueña?.empresaId || "").catch(() => "")
+  body.correoRegistro = await enviarCorreosFactura(body, xmlAutorizado.startsWith("<") ? xmlAutorizado : String(body.xmlContent || "")).catch(() => "")
   await prisma.facturaEmitida.update({
     where: { id: facturaId },
     data: { payload: body },

@@ -31,54 +31,26 @@ function lineasDe(body: Record<string, any>, fecha: string) {
   const cliente = body.cliente || {}
   const totales = body.totales || {}
   const numero = [body.establecimiento, body.secuencial].filter(Boolean).join("-")
-  const clave = String(body.claveAcceso || "").replace(/\D/g, "")
-  const dinero = (valor: unknown) => {
-    const n = Number(valor)
-    return `$${(Number.isFinite(n) ? n : 0).toFixed(2)}`
-  }
   const lineas = [
-    "RIDE  FACTURA",
-    emisor.razon || "",
-    emisor.comercial || "",
+    "RIDE - COMPROBANTE ELECTRONICO",
+    `Emisor: ${emisor.razon || ""}`,
     `RUC: ${emisor.ruc || ""}`,
-    `Direccion matriz: ${emisor.matriz || ""}`,
-    `Direccion sucursal: ${emisor.sucursal || emisor.matriz || ""}`,
-    `Obligado a llevar contabilidad: ${emisor.obligado || "NO"}`,
-    "",
-    `Factura No. ${numero}`,
-    `Numero de autorizacion: ${clave}`,
-    `Fecha y hora de autorizacion: ${fecha || "—"}`,
-    `Ambiente: ${clave[23] === "2" ? "PRODUCCION" : "PRUEBAS"}`,
-    "Emision: NORMAL",
-    "",
+    `Numero: ${numero}`,
+    `Clave de acceso: ${String(body.claveAcceso || "").replace(/\D/g, "")}`,
+    `Fecha de autorizacion: ${fecha}`,
+    `Ambiente: ${String(body.claveAcceso || "")[23] === "2" ? "PRODUCCION" : "PRUEBAS"}`,
     `Cliente: ${cliente.razon || body.clienteNombre || ""}`,
     `Identificacion: ${cliente.identificacion || ""}`,
     `Fecha de emision: ${body.fechaEmisionFormato || ""}`,
-    `Direccion: ${cliente.direccion || "—"}`,
-    `Email: ${cliente.email || "—"}`,
-    "",
-    "Cod. principal    Cant.   Descripcion                     Precio     Descuento    Total",
+    `Forma de pago: ${body.formaPago || ""}`,
   ]
   const items = Array.isArray(body.items) ? body.items : []
   for (const item of items) {
-    const cant = Number(item.cant ?? item.cantidad ?? 0)
-    const precio = Number(item.pUnit ?? item.precioUnitario ?? 0)
-    const desc = Number(item.descDolar || 0) || cant * precio * Number(item.descPorc || 0) / 100
-    const total = Number.isFinite(Number(item.total)) ? Number(item.total) : cant * precio - desc
-    lineas.push(`${String(item.codigo || "").slice(0, 14).padEnd(16)} ${cant.toFixed(2).padStart(7)}  ${String(item.descripcion || "").slice(0, 28).padEnd(30)} ${dinero(precio).padStart(10)} ${dinero(desc).padStart(12)} ${dinero(total).padStart(10)}`)
+    lineas.push(`${item.cant ?? item.cantidad ?? ""}  ${item.descripcion || ""}  ${item.total ?? item.pUnit ?? ""}`)
   }
-  lineas.push("")
-  lineas.push(`Forma de pago: ${body.formaPago || ""}`)
-  lineas.push(`Subtotal 15%: ${dinero(totales.base15)}`)
-  lineas.push(`Subtotal 0%: ${dinero(totales.base0)}`)
-  lineas.push(`Subtotal no objeto de IVA: ${dinero(totales.baseNoObjeto)}`)
-  lineas.push(`Subtotal exento de IVA: ${dinero(totales.baseExento)}`)
-  lineas.push(`Subtotal sin impuestos: ${dinero(totales.subtotalSin)}`)
-  lineas.push(`Total descuento: ${dinero(totales.descuento)}`)
-  lineas.push(`ICE: ${dinero(totales.valorICE)}`)
-  lineas.push(`IVA 15%: ${dinero(totales.iva15)}`)
-  lineas.push(`Propina: ${dinero(totales.propina)}`)
-  lineas.push(`VALOR TOTAL: ${dinero(totales.total)}`)
+  lineas.push(`Subtotal: ${totales.subtotalSin ?? ""}`)
+  lineas.push(`IVA: ${totales.iva15 ?? ""}`)
+  lineas.push(`Total: ${totales.total ?? ""}`)
   return lineas
 }
 

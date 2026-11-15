@@ -24,7 +24,7 @@ export async function POST(req: Request) {
   }
   const guardado = payload.sriAutorizacion?.RespuestaAutorizacionComprobante?.autorizaciones?.autorizacion?.comprobante
   const xml = String(guardado || "").startsWith("<") ? String(guardado) : String(payload.xmlContent || "")
-  const correoRegistro = await enviarCorreosFactura(payload, xml, sesion.empresa.id).catch(() => "")
+  const correoRegistro = await enviarCorreosFactura(payload, xml).catch(() => "")
   if (!correoRegistro) return NextResponse.json({ error: "Esta factura todavía no tiene una respuesta del SRI para enviar el correo" }, { status: 409 })
   payload.correoRegistro = correoRegistro
   await prisma.facturaEmitida.update({ where: { id }, data: { payload } })
