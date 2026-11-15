@@ -41,13 +41,47 @@ function numeroDe(body: Record<string, any>) {
   return [serie, sec].filter(Boolean).join("-")
 }
 
-function remitente(empresa: string) {
-  const buzon = String(process.env.SMTP_USER || "").trim()
-  const configurado = String(process.env.SMTP_FROM || "").trim()
-  const elegido = correosDe(buzon)[0] || correosDe(configurado)[0] || ""
-  if (!elegido) return ""
-  const nombre = empresa.replace(/"/g, "").slice(0, 80) || "Facturación"
-  return `"${nombre}" <${elegido}>`
+function nombreRemitente(empresa: string) {
+  return empresa.replace(/["<>]/g, "").replace(/\s+/g, " ").trim().slice(0, 80) || "Facturación"
+}
+
+function llaveResend() {
+  const directa = String(process.env.RESEND_API_KEY || "").trim()
+  if (directa) return directa
+  const host = String(process.env.SMTP_HOST || "")
+  const pass = String(process.env.SMTP_PASS || "").trim()
+  if (/resend/i.test(host) && pass) return pass
+  return ""
+}
+
+async function dominioResend(llave: string) {
+  const respuesta = await fetch("https://api.resend.com/domains", {
+    headers: { Authorization: `Bearer ${llave}` },
+  })
+  const data = await respuesta.json().catch(() => ({}))
+  const lista = Array.isArray(data?.data) ? data.data : []
+  const listo = lista.find((fila: { status?: string; name?: string }) => String(fila?.status || "").toLowerCase() === "verified")
+  return String(listo?.name || "")
+}
+
+function esCorreoPersonal(correo: string) {
+  const dominio = correo.split("@")[1]?.toLowerCase() || ""
+  return ["gmail.com", "googlemail.com", "hotmail.com", "outlook.com", "live.com", "yahoo.com", "yahoo.es", "icloud.com", "me.com"].includes(dominio)
+}
+
+async function remitente(empresa: string, llave: string) {
+  const nombre = nombreRemitente(empresa)
+  const explicito = String(process.env.RESEND_FROM || process.env.EMAIL_FROM || process.env.SMTP_FROM || "").trim()
+  const correoExplicito = correosDe(explicito)[0]
+  const explicitoSirve = Boolean(correoExplicito) && !(llave && esCorreoPersonal(correoExplicito))
+  if (explicitoSirve && explicito.includes("<") && explicito.includes("@")) return explicito
+  if (explicitoSirve && correoExplicito) return `${nombre} <${correoExplicito}>`
+  if (llave) {
+    const dominio = await dominioResend(llave).catch(() => "")
+    if (dominio) return `${nombre} <facturacion@${dominio}>`
+  }
+  const buzon = correosDe(process.env.SMTP_USER)[0]
+  return buzon ? `${nombre} <${buzon}>` : ""
 }
 
 function marco(datos: { empresa: string; ruc: string; direccion: string; telefono: string; logo: string; cuerpo: string }) {
@@ -121,6 +155,28 @@ function abrirTransporte(host: string, user: string, pass: string, port: number)
   })
 }
 
+async function enviarResend(llave: string, correo: { from: string; to: string; replyTo?: string; subject: string; text: string; html: string; attachments: { filename: string; content: string | Buffer }[] }) {
+  const respuesta = await fetch("https://api.resend.com/emails", {
+    method: "POST",
+    headers: { Authorization: `Bearer ${llave}`, "Content-Type": "application/json" },
+    body: JSON.stringify({
+      from: correo.from,
+      to: correo.to.split(",").map((parte) => parte.trim()).filter(Boolean),
+      reply_to: correo.replyTo || undefined,
+      subject: correo.subject,
+      text: correo.text,
+      html: correo.html,
+      attachments: correo.attachments.map((adjunto) => ({
+        filename: adjunto.filename,
+        content: Buffer.isBuffer(adjunto.content) ? adjunto.content.toString("base64") : Buffer.from(adjunto.content).toString("base64"),
+      })),
+    }),
+  })
+  if (respuesta.ok) return
+  const data = await respuesta.json().catch(() => ({}))
+  throw new Error(String(data?.message || data?.error || `Resend respondió ${respuesta.status}`))
+}
+
 function transporte() {
   const hostIngresado = String(process.env.SMTP_HOST || "").trim()
   const user = String(process.env.SMTP_USER || "").trim()
@@ -154,7 +210,8 @@ export async function enviarCorreosFactura(body: Record<string, any>, xmlAutoriz
   const hora = cuando()
   const destino = correosDe(cliente.email || cliente.correo || cliente.mail)
   const emisorCorreo = correosDe(emisor.email || emisor.correo)[0] || ""
-  const from = remitente(empresa)
+  const llave = llaveResend()
+  const from = await remitente(empresa, llave)
   const xml = String(xmlAutorizado || body.xmlContent || "")
   let pdf: Buffer | null = null
   try { pdf = pdfRide(body, String(body.fechaAutorizacion || fecha)) } catch { pdf = null }
@@ -164,15 +221,22 @@ export async function enviarCorreosFactura(body: Record<string, any>, xmlAutoriz
   ].filter(Boolean)
   const receptor = htmlCorreoReceptor({ cliente: nombreCliente, numero, total, fecha, empresa, ruc, direccion, telefono, logo })
   const emisorHtml = htmlCorreoEmisor({ cliente: nombreCliente, numero, autorizacion, correo: destino[0] || "sin correo", cuando: hora, autorizado, motivo, empresa, ruc, direccion, telefono, logo })
-  const mail = transporte()
-  const fallaBase = !from || !mail
-    ? "falta configurar el correo SMTP"
-    : !xml || !pdf?.length
-      ? "faltan el XML o el PDF"
-      : ""
+  const mail = llave ? null : transporte()
+  const fallaBase = !llave && !mail
+    ? "falta la clave de Resend"
+    : !from
+      ? "Resend no tiene un dominio verificado para el remitente"
+      : !xml || !pdf?.length
+        ? "faltan el XML o el PDF"
+        : ""
   const fallos: string[] = []
+  const adjuntosCorreo = adjuntos as { filename: string; content: string | Buffer; contentType: string }[]
   async function mandar(para: string, asunto: string, mensaje: { texto: string; html: string }) {
     if (!para || fallaBase) return "Fallido"
+    if (llave) {
+      await enviarResend(llave, { from, to: para, replyTo: emisorCorreo || undefined, subject: asunto, text: mensaje.texto, html: mensaje.html, attachments: adjuntosCorreo })
+      return "Enviado"
+    }
     await mail!.sendMail({
       from,
       to: para,
@@ -180,7 +244,7 @@ export async function enviarCorreosFactura(body: Record<string, any>, xmlAutoriz
       subject: asunto,
       text: mensaje.texto,
       html: mensaje.html,
-      attachments: adjuntos as { filename: string; content: string | Buffer; contentType: string }[],
+      attachments: adjuntosCorreo,
     })
     return "Enviado"
   }
