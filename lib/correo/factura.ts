@@ -54,14 +54,15 @@ function llaveResend() {
   return ""
 }
 
-async function dominioResend(llave: string) {
+async function dominiosVerificados(llave: string) {
   const respuesta = await fetch("https://api.resend.com/domains", {
     headers: { Authorization: `Bearer ${llave}` },
   })
   const data = await respuesta.json().catch(() => ({}))
   const lista = Array.isArray(data?.data) ? data.data : []
-  const listo = lista.find((fila: { status?: string; name?: string }) => String(fila?.status || "").toLowerCase() === "verified")
-  return String(listo?.name || "")
+  return lista
+    .filter((fila: { status?: string; name?: string }) => String(fila?.status || "").toLowerCase() === "verified" && fila?.name)
+    .map((fila: { name?: string }) => String(fila.name).toLowerCase())
 }
 
 function esCorreoPersonal(correo: string) {
@@ -73,15 +74,16 @@ async function remitente(empresa: string, llave: string) {
   const nombre = nombreRemitente(empresa)
   const explicito = String(process.env.RESEND_FROM || process.env.EMAIL_FROM || process.env.SMTP_FROM || "").trim()
   const correoExplicito = correosDe(explicito)[0]
-  const explicitoSirve = Boolean(correoExplicito) && !(llave && esCorreoPersonal(correoExplicito))
-  if (explicitoSirve && explicito.includes("<") && explicito.includes("@")) return explicito
-  if (explicitoSirve && correoExplicito) return `${nombre} <${correoExplicito}>`
-  if (llave) {
-    const dominio = await dominioResend(llave).catch(() => "")
-    if (dominio) return `${nombre} <facturacion@${dominio}>`
+  const dominioExplicito = correoExplicito?.split("@")[1]?.toLowerCase() || ""
+  if (!llave) {
+    if (correoExplicito && !esCorreoPersonal(correoExplicito)) return `${nombre} <${correoExplicito}>`
+    const buzon = correosDe(process.env.SMTP_USER)[0]
+    return buzon ? `${nombre} <${buzon}>` : ""
   }
-  const buzon = correosDe(process.env.SMTP_USER)[0]
-  return buzon ? `${nombre} <${buzon}>` : ""
+  const permitidos = await dominiosVerificados(llave).catch(() => [])
+  if (correoExplicito && permitidos.includes(dominioExplicito)) return `${nombre} <${correoExplicito}>`
+  if (permitidos[0]) return `${nombre} <facturacion@${permitidos[0]}>`
+  return ""
 }
 
 function marco(datos: { empresa: string; ruc: string; direccion: string; telefono: string; logo: string; cuerpo: string }) {
@@ -132,6 +134,10 @@ function claveSmtp(host: string) {
 
 function motivoSmtp(error: unknown) {
   const texto = String((error as { response?: string; message?: string })?.response || (error as { message?: string })?.message || "")
+  const dominioBloqueado = texto.match(/from\s+([a-z0-9.-]+\.[a-z]{2,})/i)?.[1]
+  if (dominioBloqueado && /not authorized/i.test(texto)) {
+    return `La clave de Resend no puede enviar desde ${dominioBloqueado}. En Resend ese dominio tiene que estar verificado y la clave debe tener permiso para enviarlo`
+  }
   if (/535|534|BadCredentials|Username and Password not accepted|Invalid login/i.test(texto)) {
     return "Gmail rechazó la clave. Hay que usar una contraseña de aplicación de Google, sin espacios"
   }
