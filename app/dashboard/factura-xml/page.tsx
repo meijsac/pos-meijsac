@@ -138,6 +138,7 @@ const Chisme = ({texto, titulo}:{texto:string, titulo:string}) => (
 
 export default function FacturadorXMLReal(){
   const [fecha, setFecha] = useState("")
+  const [vendedorNombre, setVendedorNombre] = useState("")
   const [puntoEmision, setPuntoEmision] = useState({ ambiente: "1" as "1" | "2", nombre: "PRUEBAS", estab: "", pto: "", serie: "", secuencial: "", ultimo: "", indice: -1 })
   const cargarPunto = async (estabElegido?: string) => {
     let cfg: any = {}
@@ -197,11 +198,11 @@ export default function FacturadorXMLReal(){
       }
     } catch {}
   }
-  const guardarSecuencialUsado = (serie: string, usado: string) => {
-    if (!serie || !usado) return
+  const guardarSecuencialUsado = async (serie: string, usado: string) => {
+    if (!serie || !usado) return ""
+    const siguiente = String(Number(String(usado).replace(/\D/g, "")) + 1).padStart(9, "0")
     try {
       const mapa = JSON.parse(localStorage.getItem("meijsac_contador_secuencial") || "{}")
-      const siguiente = String(Number(String(usado).replace(/\D/g, "")) + 1).padStart(9, "0")
       mapa[serie] = siguiente
       localStorage.setItem("meijsac_contador_secuencial", JSON.stringify(mapa))
       const cfg = JSON.parse(localStorage.getItem("meijsac_config_pro") || "{}")
@@ -212,10 +213,17 @@ export default function FacturadorXMLReal(){
       else lista[i] = { ...lista[i], ultimo: siguiente, actualizadoEn: new Date().toISOString() }
       cfg.secuenciales = lista
       localStorage.setItem("meijsac_config_pro", JSON.stringify(cfg))
-      void fetch("/api/configuracion", { method: "POST", credentials: "same-origin", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ secuenciales: lista }) }).catch(() => {})
+      await fetch("/api/configuracion", { method: "POST", credentials: "same-origin", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ secuenciales: lista }) }).catch(() => {})
     } catch {}
+    return siguiente
   }
-  useEffect(() => { cargarPunto() }, [])
+  useEffect(() => {
+    cargarPunto()
+    try {
+      const usuario = JSON.parse(localStorage.getItem("meijsac_user") || "{}")
+      setVendedorNombre(String(usuario?.nombre || ""))
+    } catch {}
+  }, [])
   const [configEmisor, setConfigEmisor] = useState<any>({})
   const [emisorListo, setEmisorListo] = useState(false)
   const [emisorCargando, setEmisorCargando] = useState(true)
@@ -1013,8 +1021,7 @@ const total = subtotalSin + iva15 + ivaDiferenciado + valorICE + valorIRBPNR + p
     const secAhora = puntoEmision.secuencial
     facturaPendiente.establecimiento = serieAhora
     facturaPendiente.secuencial = secAhora
-    guardarSecuencialUsado(serieAhora, secAhora)
-    cargarPunto(cliente.codSucursal)
+    facturaPendiente.atendidoPor = vendedorNombre
     try {
       const guardado = await fetch("/api/facturar", { method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${localStorage.getItem("meijsac_token") || ""}` }, body: JSON.stringify({ ...facturaPendiente, estadoSRI: "PENDIENTE", diferirSri: true }) })
       const guardada = await guardado.json().catch(() => ({}))
@@ -1068,16 +1075,8 @@ const total = subtotalSin + iva15 + ivaDiferenciado + valorICE + valorIRBPNR + p
         const previa = JSON.parse(localStorage.getItem(clave) || "[]")
         localStorage.setItem(clave, JSON.stringify([...previa, listaDoc]))
       })
-      try {
-        const cfg = JSON.parse(localStorage.getItem("meijsac_config_pro") || "{}")
-        const lista = Array.isArray(cfg.secuenciales) ? cfg.secuenciales : []
-        const [estab, pto] = String(serieUsada).split("-")
-        const i = lista.findIndex((s: any) => String(s?.estab || "").padStart(3, "0").slice(-3) === estab && String(s?.pto || "").padStart(3, "0").slice(-3) === pto)
-        if (i < 0) lista.push({ estab, pto, codigo: "01", tipo: "01 FACTURA", ultimo: secUsado, estado: "ACTIVO" })
-        else lista[i] = { ...lista[i], ultimo: secUsado, estado: lista[i].estado || "ACTIVO" }
-        cfg.secuenciales = lista
-        localStorage.setItem("meijsac_config_pro", JSON.stringify(cfg))
-      } catch {}
+      const siguiente = await guardarSecuencialUsado(serieUsada, secUsado)
+      if (siguiente) setPuntoEmision((p) => ({ ...p, secuencial: siguiente, ultimo: siguiente }))
       cargarPunto()
       localStorage.setItem("meijsac_ultima_factura_pendiente", JSON.stringify(facturaPendiente))
       const claveRide = String(guardada.claveAcceso || facturaPendiente.claveAcceso || "").replace(/\D/g, "")
@@ -1199,6 +1198,7 @@ const total = subtotalSin + iva15 + ivaDiferenciado + valorICE + valorIRBPNR + p
         </div>
         <div className="flex gap-4 text-[10px] text-right">
           <div>PUNTO<br/><b>{puntoEmision.serie || "—"}</b></div>
+          <div>VENDEDOR<br/><b>{vendedorNombre || "—"}</b></div>
           <div>SEC<br/><b className="text-[#00f5d4]">{puntoEmision.secuencial || "—"}</b></div>
           <div>FECHA<br/><b suppressHydrationWarning>{fecha || "---"}</b></div>
         </div>

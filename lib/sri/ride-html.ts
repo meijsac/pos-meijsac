@@ -80,6 +80,7 @@ export function htmlRide(data: {
   xmlUrl?: string
   vuelto?: number
   recibido?: number
+  vendedor?: string
 }) {
   const leyendaRegimen = (() => {
     const texto = String(data.regimen || "").toUpperCase()
@@ -145,6 +146,7 @@ export function htmlRide(data: {
       <p style="margin:8px 0 0"><b>FECHA Y HORA DE AUTORIZACIÓN:</b> ${esc(fechaAutorizacion || "—")}</p>
       <p style="margin:0"><b>AMBIENTE:</b> ${esc(data.ambiente)}</p>
       <p style="margin:0"><b>EMISIÓN:</b> NORMAL</p>
+      ${data.vendedor ? `<p style="margin:0"><b>VENDEDOR:</b> ${esc(data.vendedor)}</p>` : ""}
       <p style="font-weight:700;margin:10px 0 4px">CLAVE DE ACCESO:</p>
       ${barras}
       <p style="font-family:monospace;font-size:10px;color:#64748b;margin:4px 0 0">${esc(clave)}</p>
@@ -245,6 +247,7 @@ export function htmlTicket(data: Parameters<typeof htmlRide>[0]) {
   ${leyendaRegimen ? `<p style="text-align:center;margin:2px 0;font-size:9px">${esc(leyendaRegimen)}</p>` : ""}
   <hr>
   <p style="margin:2px 0;font-weight:bold">FACTURA No: <span style="font-weight:normal">${esc(data.numeroFactura)}</span></p>
+  ${data.vendedor ? `<p style="margin:2px 0"><b>VENDEDOR:</b> ${esc(data.vendedor)}</p>` : ""}
   <p style="margin:2px 0"><b>FECHA EMISIÓN:</b> ${esc(data.fechaEmision)}</p>
   <p style="margin:2px 0;text-transform:uppercase"><b>CLIENTE:</b> ${esc(data.cliente)}</p>
   <p style="margin:2px 0"><b>RUC/CÍ:</b> ${esc(data.identificacion)}</p>

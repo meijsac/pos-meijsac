@@ -146,6 +146,7 @@ export async function GET(req: Request, context: { params: Promise<{ clave: stri
     xmlUrl: `/dashboard/factura-xml/pdf/${clave}?xml=1`,
     vuelto,
     recibido,
+    vendedor: String(p.atendidoPor || p.auditoria?.usuario || ""),
   })
   if (pedido.searchParams.get("ticket") === "1") {
     return new NextResponse(htmlTicket({
@@ -171,6 +172,7 @@ export async function GET(req: Request, context: { params: Promise<{ clave: stri
       base15: t.base15, base0: t.base0, baseNoObjeto: t.baseNoObjeto, baseExento: t.baseExento,
       subtotalSin: t.subtotalSin, descuento: t.descuento, ice: t.valorICE, iva: t.iva15,
       propina: t.propina, total: t.total, vuelto, recibido,
+      vendedor: String(p.atendidoPor || p.auditoria?.usuario || ""),
     }), { headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store" } })
   }
   return new NextResponse(html, { headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store" } })
