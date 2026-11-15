@@ -647,6 +647,28 @@ const manejarConsultaSRIExpress = async () => {
   }
 };
 
+  const guardarClienteEmitido = async (comprador: any) => {
+    const identificacion = String(comprador?.identificacion || "").trim()
+    const razonSocial = String(comprador?.razon || "").trim()
+    if (!identificacion || identificacion === "9999999999999" || !razonSocial || razonSocial.toUpperCase() === "CONSUMIDOR FINAL") return
+    await fetch("/api/clientes", {
+      method: "POST",
+      credentials: "same-origin",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        tipoId: comprador.tipoId || comprador.tipoDoc || "05",
+        identificacion,
+        razonSocial,
+        direccion: comprador.direccion || "",
+        email: comprador.email || "",
+        telefono: comprador.telefono || comprador.celular || "",
+        provincia: comprador.provincia || "",
+        ciudad: comprador.ciudad || "",
+        tipoCliente: String(comprador.tipoId || comprador.tipoDoc) === "04" ? "JURIDICA" : "NATURAL",
+      }),
+    }).catch(() => {})
+  }
+
   const guardarNuevoCliente = ()=>{
     if(!nuevoCliForm.identificacion || !nuevoCliForm.razon){ alert("Cédula y Razón obligatorios"); return }
     const guardados = JSON.parse(localStorage.getItem("meijsac_clientes")||"[]")
@@ -1047,6 +1069,7 @@ const total = subtotalSin + iva15 + ivaDiferenciado + valorICE + valorIRBPNR + p
         cargarPunto()
         return
       }
+      await guardarClienteEmitido(facturaPendiente.cliente)
       const serieUsada = guardada.establecimiento || puntoEmision.serie
       const secUsado = guardada.secuencial || puntoEmision.secuencial
       facturaPendiente.establecimiento = serieUsada
