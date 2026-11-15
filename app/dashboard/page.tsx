@@ -136,7 +136,8 @@ function VentasAreaCompact({ series, metricas, filtro }: { series: Serie; metric
 }
 
 export default function DashboardMeijsac(){
-  const [firmaSubida, setFirmaSubida] = useState(false)
+  const [firmaSubida, setFirmaSubida] = useState<boolean | null>(null)
+  const [firmaRevisada, setFirmaRevisada] = useState(false)
   const [mounted, setMounted] = useState(false)
   const [porCobrar, setPorCobrar] = useState(0)
   const [ventas, setVentas] = useState({ hoy: 0, mes: 0, pedidosHoy: 0, pedidosMes: 0 })
@@ -165,13 +166,24 @@ export default function DashboardMeijsac(){
       const firmaGuardada = localStorage.getItem('meijsac_firma') || localStorage.getItem('meijsac_config_pro')
       cfgPro = firmaGuardada ? JSON.parse(firmaGuardada) : null
     } catch { cfgPro = null }
-    if(localStorage.getItem('meijsac_firma') || cfgPro?.firma?.nombre || cfgPro?.firma?.enServidor){
+    const enEsteEquipo = !!(localStorage.getItem("meijsac_firma") || cfgPro?.firma?.nombre || cfgPro?.firma?.enServidor)
+    const cacheFirma = sessionStorage.getItem("meijsac_firma_ok")
+    if (enEsteEquipo || cacheFirma === "1") {
       setFirmaSubida(true)
+      setFirmaRevisada(true)
+    } else if (cacheFirma === "0") {
+      setFirmaSubida(false)
+      setFirmaRevisada(true)
     }
     void fetch("/api/sri/clave-firma", { credentials: "same-origin" })
       .then((r) => r.ok ? r.json() : null)
-      .then((firma) => { if (firma?.guardada) setFirmaSubida(true) })
-      .catch(() => {})
+      .then((firma) => {
+        const hay = Boolean(firma?.guardada) || enEsteEquipo
+        sessionStorage.setItem("meijsac_firma_ok", hay ? "1" : "0")
+        setFirmaSubida(hay)
+        setFirmaRevisada(true)
+      })
+      .catch(() => { if (cacheFirma === "1" || enEsteEquipo) setFirmaRevisada(true) })
 
     try {
       const local = JSON.parse(localStorage.getItem("meijsac_empresa") || "{}")
@@ -279,7 +291,7 @@ export default function DashboardMeijsac(){
 
       <div className="fit-screen">
         {/* AVISO FIRMA - ROJO BAJITO Y PEQUEÑO */}
-{!firmaSubida && (
+{firmaRevisada && firmaSubida === false && (
   <div className="max-w-[1600px] mx-auto mb-3 bg-red-50 border border-red-200 rounded-xl px-3 py-2 flex justify-between items-center">
     <p className="text-[11px] text-red-700">
       <b>⚠️ Falta subir tu firma electrónica</b> <span className="text-red-500">— Sin firma no puedes facturar al SRI.</span>

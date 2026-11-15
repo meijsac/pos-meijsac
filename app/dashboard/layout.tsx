@@ -11,6 +11,23 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const isDashboard = pathname === '/dashboard'
 
   useEffect(() => {
+    ;["/dashboard", "/dashboard/comprobantes", "/dashboard/configuracion", "/dashboard/factura-xml", "/dashboard/clientes", "/dashboard/productos", "/dashboard/caja", "/dashboard/respaldo"].forEach((ruta) => router.prefetch(ruta))
+  }, [pathname, router])
+
+  useEffect(() => {
+    if (!sessionStorage.getItem("meijsac_firma_ok")) {
+      fetch("/api/sri/clave-firma", { credentials: "same-origin" })
+        .then((r) => r.ok ? r.json() : null)
+        .then((firma) => sessionStorage.setItem("meijsac_firma_ok", firma?.guardada ? "1" : "0"))
+        .catch(() => {})
+    }
+    void fetch("/api/empresa/mia", { credentials: "same-origin" })
+      .then((r) => r.ok ? r.json() : null)
+      .then((data) => { if (data?.empresa) guardarEmpresaLocal(data.empresa) })
+      .catch(() => {})
+  }, [])
+
+  useEffect(() => {
     let vivo = true
     const tieneLocal = () => !!(localStorage.getItem("meijsac_empresa") || localStorage.getItem("meijsac_user"))
     const ctrl = new AbortController()
