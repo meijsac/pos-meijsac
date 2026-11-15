@@ -11,7 +11,7 @@ import { firmarXmlEmpresa } from "@/lib/sri/firmar"
 import { ambienteDeEmpresa } from "@/lib/sri/ambiente"
 import { enviarComprobante } from "@/lib/sri/soap"
 import { clasificarEstadoSri } from "@/lib/sri/estado-visible"
-import { elegirSecuencial, mismoAmbienteFactura, puntoActivoFactura, serieDeAmbiente } from "@/lib/sri/punto-emision"
+import { elegirSecuencial, mismoAmbienteFactura, puntoActivoFactura } from "@/lib/sri/punto-emision"
 import { avanzarSecuencialEmpresa } from "@/lib/sri/avanzar-secuencial"
 import { validarEntradaFactura } from "@/lib/factura-entrada"
 import { ambienteDeComprobante } from "@/lib/ambiente-datos"
@@ -38,8 +38,8 @@ export async function POST(req: Request) {
     const ambientePrevio = ambienteDeEmpresa(sesion.empresa)
     if (body?.estadoSRI !== "BORRADOR") {
       const punto = puntoActivoFactura(datosRegistroDe(sesion.empresa.datosRegistro).secuenciales, ambientePrevio)
-      const pedida = String(body?.establecimiento || "").trim()
-      const serie = punto.serie || (/^\d{3}-\d{3}$/.test(pedida) ? pedida : serieDeAmbiente(ambientePrevio))
+      if (!punto.serie) return NextResponse.json({ error: "Configura el punto de emisión y guarda. No hay un secuencial fijo." }, { status: 400 })
+      const serie = punto.serie
       const previas = await prisma.facturaEmitida.findMany({
         where: { empresaId: sesion.empresa.id },
         select: { payload: true },

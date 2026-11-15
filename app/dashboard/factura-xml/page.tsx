@@ -3,7 +3,7 @@ import { useState, useEffect, useRef } from "react"
 import Link from "next/link"
 import ModalCajaMixto from "./components/ModalCajaMixto"
 import ModuloTransporteReducido from "@/components/ModuloTransporteReducido"
-import { elegirSecuencial, puntoActivoFactura, SECUENCIALES_VISIBLES } from "@/lib/sri/punto-emision"
+import { elegirSecuencial, puntoActivoFactura } from "@/lib/sri/punto-emision"
 import { permisosLocales } from "@/lib/permisos-pos"
 import { normalizarComprador } from "@/lib/sri/xml-factura"
 
@@ -151,7 +151,7 @@ export default function FacturadorXMLReal(){
     try { empresaLocal = JSON.parse(localStorage.getItem("meijsac_empresa") || "{}") } catch { empresaLocal = {} }
     const conFactura = (lista: unknown) => puntoActivoFactura(lista, "").punto.serie ? lista : null
     const guardada = conFactura(cfg.secuenciales) || conFactura(empresaLocal.secuenciales)
-    let lista: any[] = (guardada || SECUENCIALES_VISIBLES).map((s: any) => ({ ...s }))
+    let lista: any[] = guardada ? (guardada as any[]).map((s: any) => ({ ...s })) : []
     const aplicar = (filas: any[]) => {
       cfg.secuenciales = filas
       try {
@@ -162,12 +162,18 @@ export default function FacturadorXMLReal(){
     }
     if (guardada) aplicar(lista)
     const pintar = (filas: any[]) => {
+      if (!filas.length) return
       const leido = puntoActivoFactura(filas, cfg.ambiente, estabElegido)
+      const codigo = String(cfg.ambiente || "").toUpperCase().includes("PROD") || String(cfg.ambiente) === "2" ? "2" : "1"
       const usados = new Set<string>()
       for (const clave of ["meijsac_comprobantes_sri", "meijsac_comprobantes_emitidos", "meijsac_enviados_sri"]) {
         try {
           const docs = JSON.parse(localStorage.getItem(clave) || "[]")
           for (const d of docs) {
+            const claveAcceso = String(d?.claveAcceso || "")
+            const envio = String(d?.envioSri || "").toUpperCase()
+            const mismo = claveAcceso.length === 49 ? claveAcceso[23] === codigo : envio.includes("PROD") ? codigo === "2" : envio.includes("PRUEB") ? codigo === "1" : true
+            if (!mismo) continue
             const partes = String(d?.secuencial || "").split("-")
             const est = partes.length >= 3 ? `${partes[0]}-${partes[1]}` : String(d?.establecimiento || "")
             if (est !== leido.punto.serie) continue
@@ -178,7 +184,6 @@ export default function FacturadorXMLReal(){
       }
       const guardado = String(leido.punto.ultimo || "").replace(/\D/g, "").padStart(9, "0").slice(-9)
       const libre = guardado && guardado !== "000000000" && !usados.has(guardado) ? guardado : elegirSecuencial("", guardado, usados)
-      const codigo = String(cfg.ambiente || "").toUpperCase().includes("PROD") || String(cfg.ambiente) === "2" ? "2" : "1"
       setPuntoEmision({
         ambiente: codigo as "1" | "2",
         nombre: codigo === "2" ? "PRODUCCIÓN" : "PRUEBAS",

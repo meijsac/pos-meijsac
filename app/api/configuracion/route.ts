@@ -5,6 +5,7 @@ import { codigoAmbiente } from "@/lib/sri/ambiente"
 import { asegurarPunto } from "@/lib/pos/puntos"
 import { permisosDeUsuario } from "@/lib/permisos-pos"
 import { puede } from "@/lib/seguridad"
+import { aplicarPuntoGuardado } from "@/lib/sri/punto-emision"
 
 async function guardarPuntos(empresaId: string, secuenciales: { estab: string; pto: string }[] | undefined, sucursales: unknown) {
   const lista = Array.isArray(secuenciales) ? secuenciales : []
@@ -31,6 +32,7 @@ function limpiarSecuenciales(lista: unknown) {
       "2": String(s?.porAmbiente?.["2"] || "").replace(/\D/g, "").replace(/^0+$/, "").padStart(9, "0").slice(-9).replace(/^0{9}$/, ""),
     },
     estado: String(s?.estado || "ACTIVO").slice(0, 20) || "ACTIVO",
+    preferida: s?.preferida === true,
     actualizadoEn: String(s?.actualizadoEn || "").slice(0, 40),
   })).filter((s) => s.estab !== "000" && s.pto !== "000")
 }
@@ -54,7 +56,10 @@ export async function POST(request: Request) {
   if (datos?.firma && typeof datos.firma === "object") datos.firma.clave = ""
   const empresa = sesion.empresa
   const prev = datosRegistroDe(empresa.datosRegistro)
-  const secuenciales = limpiarSecuenciales(datos.secuenciales)
+  const ajustados = Array.isArray(datos.secuenciales)
+    ? aplicarPuntoGuardado(datos.secuenciales, prev.secuenciales, datos.sucursales, prev.sucursales)
+    : undefined
+  const secuenciales = limpiarSecuenciales(ajustados)
   const listaGuardada = secuenciales && secuenciales.length ? secuenciales : undefined
   if (sesion.usuario.rol !== "ADMIN") {
     const permisos = permisosDeUsuario(sesion.usuario)

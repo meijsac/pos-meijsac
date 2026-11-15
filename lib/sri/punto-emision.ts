@@ -46,6 +46,71 @@ export function ultimoDelAmbiente(fila: any, ambiente: unknown) {
   return nueve(fila?.ultimo)
 }
 
+function codigoDocumento(fila: any) {
+  return String(fila?.codigo || "01").replace(/\D/g, "").padStart(2, "0").slice(-2)
+}
+
+export function aplicarPuntoGuardado(lista: unknown, prevLista: unknown, sucursales: unknown, prevSucursales: unknown) {
+  const next = (Array.isArray(lista) ? lista : []).map((fila: any) => ({
+    ...(fila || {}),
+    porAmbiente: { ...((fila || {}).porAmbiente || {}) },
+  }))
+  const previos = Array.isArray(prevLista) ? prevLista : []
+  for (const fila of next) {
+    if (fila.preferida === true || fila.puntoEditado) continue
+    const previa = previos.find((p: any) => tres(p?.estab) === tres(fila?.estab) && tres(p?.pto) === tres(fila?.pto) && codigoDocumento(p) === codigoDocumento(fila))
+    if (previa?.preferida === true) fila.preferida = true
+  }
+  const elegidas: any[] = []
+  const tomar = (fila: any, numero: unknown, forzarNumero: boolean) => {
+    const n = nueve(numero)
+    if (forzarNumero && n && n !== "000000000") {
+      fila.porAmbiente = { "1": n, "2": n }
+      fila.ultimo = n
+    }
+    elegidas.push(fila)
+  }
+  if (Array.isArray(sucursales)) {
+    const prev = Array.isArray(prevSucursales) ? prevSucursales : []
+    for (const suc of sucursales as any[]) {
+      const estab = tres(suc?.id)
+      const pto = tres(suc?.ptoEmision)
+      const inicio = nueve(suc?.secuencialInicio)
+      if (estab === "000" || pto === "000") continue
+      const antes = prev.find((p: any) => tres(p?.id) === estab)
+      const inicioAntes = nueve(antes?.secuencialInicio)
+      const cambioPunto = !antes || tres(antes?.ptoEmision) !== pto
+      const cambioSec = Boolean(inicio) && inicio !== inicioAntes
+      if (!antes && pto === "001" && (!inicio || inicio === "000000001")) continue
+      if (!cambioPunto && !cambioSec) continue
+      let fila = next.find((s) => esFactura(s) && tres(s?.estab) === estab && tres(s?.pto) === pto)
+      if (!fila) {
+        fila = { estab, pto, codigo: "01", tipo: "01 FACTURA", ultimo: inicio, estado: "ACTIVO", porAmbiente: { "1": "", "2": "" } }
+        next.push(fila)
+      }
+      const a1 = nueve(fila?.porAmbiente?.["1"])
+      const a2 = nueve(fila?.porAmbiente?.["2"])
+      tomar(fila, inicio || fila.ultimo, Boolean(cambioSec && inicio !== a1 && inicio !== a2))
+    }
+  }
+  for (const fila of next) {
+    if (!fila?.puntoEditado || !esFactura(fila)) continue
+    const n = nueve(fila.ultimo)
+    const a1 = nueve(fila?.porAmbiente?.["1"])
+    const a2 = nueve(fila?.porAmbiente?.["2"])
+    tomar(fila, n, Boolean(n && n !== "000000000" && n !== a1 && n !== a2))
+  }
+  if (elegidas.length) {
+    const unica = elegidas[elegidas.length - 1]
+    for (const fila of next) {
+      if (!esFactura(fila)) continue
+      fila.preferida = fila === unica
+    }
+  }
+  for (const fila of next) delete fila.puntoEditado
+  return next
+}
+
 export function puntoActivoFactura(secuenciales: unknown, _ambiente: unknown, estabElegido?: string): { punto: PuntoFactura; aviso: string } {
   const lista = Array.isArray(secuenciales) ? secuenciales : []
   const facturas = lista
@@ -57,7 +122,9 @@ export function puntoActivoFactura(secuenciales: unknown, _ambiente: unknown, es
   const delEstablecimiento = preferido && preferido !== "000"
     ? facturas.filter(({ fila }) => tres(fila?.estab) === preferido)
     : []
-  const elegida = delAmbiente[0]
+  const guardada = facturas.find(({ fila }) => fila?.preferida === true)
+  const elegida = guardada
+    || delAmbiente[0]
     || delEstablecimiento[0]
     || facturas.find(({ fila }) => String(fila?.estado || "").toUpperCase() === "ACTIVO")
     || facturas[0]

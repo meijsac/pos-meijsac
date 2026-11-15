@@ -360,7 +360,8 @@ export default function ConfiguracionAvanzadaSRI() {
           body: JSON.stringify(cuerpo),
         });
 
-        if (!res.ok) throw new Error(`Error ${res.status}`);
+        const dataGuardada = await res.json().catch(() => ({}))
+        if (!res.ok) throw new Error(dataGuardada.error || `Error ${res.status}`);
         if (equipoListo.current && Array.isArray(payload.usuarios)) {
           const equipo = await fetch("/api/usuarios/equipo", {
             method: "POST",
@@ -372,8 +373,8 @@ export default function ConfiguracionAvanzadaSRI() {
           if (!equipo.ok) throw new Error(dataEquipo.error || "No se pudo guardar el equipo")
           if (Array.isArray(dataEquipo.usuarios)) payload.usuarios = dataEquipo.usuarios
         }
+        const secuencialesGuardados = Array.isArray(dataGuardada.secuenciales) ? dataGuardada.secuenciales : cuerpo.secuenciales
         try {
-          const secuencialesGuardados = cuerpo.secuenciales
           localStorage.setItem("meijsac_config_pro", JSON.stringify({ ...payload, secuenciales: secuencialesGuardados, logoPreview: undefined }, (clave, valor) => clave === "clave" || clave === "password" ? "" : valor))
           const mapa: Record<string, string> = {}
           for (const s of secuencialesGuardados) {
@@ -391,7 +392,7 @@ export default function ConfiguracionAvanzadaSRI() {
         if (!logoGuardado) alert("Configuración guardada")
         const empresa = await empresaPendiente
         const logo = empresa.logo_url || empresa.logoUrl || empresa.marca_ride || payload.logo_url || ""
-        setCfg((p: any) => ({ ...p, ...payload, firma: { ...p?.firma, ...payload.firma, clave: claveFirma || p?.firma?.clave || "" }, logoFile: null, logo_url: logo, logoUrl: logo, marca_ride: logo, logoPreview: logo || p?.logoPreview || "" }))
+        setCfg((p: any) => ({ ...p, ...payload, secuenciales: secuencialesGuardados, firma: { ...p?.firma, ...payload.firma, clave: claveFirma || p?.firma?.clave || "" }, logoFile: null, logo_url: logo, logoUrl: logo, marca_ride: logo, logoPreview: logo || p?.logoPreview || "" }))
         setAvisoLogo(logoGuardado ? "Logotipo guardado correctamente" : "")
       } catch (e:any) {
         if (String(e?.message || "").includes("logo")) setAvisoLogo(e.message)
@@ -762,8 +763,8 @@ base.sucursales = datosReales.sucursales || base.sucursales || [];
                             const alerta = Number(ultimo.slice(-3)) > 950
                             return (
                             <tr key={i} className="border-b border-white/5">
-                              <td className="p-1"><input value={s.estab || ""} maxLength={3} onChange={e=>{const a=[...(cfg.secuenciales || [])]; a[i].estab=e.target.value.replace(/[^0-9]/g,""); setCfg({...cfg, secuenciales:a})}} className="bg-[#11131a] p-1 rounded w-12 text-center border border-white/10 font-bold" /></td>
-                              <td className="p-1"><input value={s.pto || ""} maxLength={3} onChange={e=>{const a=[...(cfg.secuenciales || [])]; a[i].pto=e.target.value.replace(/[^0-9]/g,""); setCfg({...cfg, secuenciales:a})}} className="bg-[#11131a] p-1 rounded w-12 text-center border border-white/10 font-bold" /></td>
+                              <td className="p-1"><input value={s.estab || ""} maxLength={3} onChange={e=>{const a=[...(cfg.secuenciales || [])]; a[i]={...a[i], estab:e.target.value.replace(/[^0-9]/g,""), puntoEditado:true}; setCfg({...cfg, secuenciales:a})}} className="bg-[#11131a] p-1 rounded w-12 text-center border border-white/10 font-bold" /></td>
+                              <td className="p-1"><input value={s.pto || ""} maxLength={3} onChange={e=>{const a=[...(cfg.secuenciales || [])]; a[i]={...a[i], pto:e.target.value.replace(/[^0-9]/g,""), puntoEditado:true}; setCfg({...cfg, secuenciales:a})}} className="bg-[#11131a] p-1 rounded w-12 text-center border border-white/10 font-bold" /></td>
                               <td className="p-1">
                                 <select value={s.codigo||"01"} onChange={e=>{const a=[...(cfg.secuenciales || [])]; a[i].codigo=e.target.value; a[i].tipo={ "01":"01 FACTURA", "04":"04 NOTA CRÉDITO", "03":"03 LIQ. COMPRA", "07":"07 RETENCIÓN", "06":"06 GUÍA REMISIÓN"}[e.target.value]; setCfg({...cfg, secuenciales:a})}} className="bg-[#11131a] p-1 rounded w-full border border-white/10 text-[10px]">
                                   <option value="01">01 FACTURA</option>
@@ -773,7 +774,7 @@ base.sucursales = datosReales.sucursales || base.sucursales || [];
                                   <option value="06">06 GUÍA DE REMISIÓN</option>
                                 </select>
                               </td>
-                              <td className="p-1"><input value={ultimo} onChange={e=>{const a=[...(cfg.secuenciales || [])]; a[i].ultimo=e.target.value; setCfg({...cfg, secuenciales:a})}} className="bg-[#11131a] p-1 rounded w-24 text-center border border-white/10" /></td>
+                              <td className="p-1"><input value={ultimo} onChange={e=>{const a=[...(cfg.secuenciales || [])]; a[i]={...a[i], ultimo:e.target.value, puntoEditado:true}; setCfg({...cfg, secuenciales:a})}} className="bg-[#11131a] p-1 rounded w-24 text-center border border-white/10" /></td>
                               <td className="text-center"><span className={`px-2 py-0.5 rounded text-[9px] ${alerta?"bg-red-600 animate-pulse":"bg-green-600"}`}>{alerta?"¡ALERTA 50!":"ACTIVO"}</span></td>
                               <td className="text-center"><button onClick={()=>setCfg({...cfg, secuenciales:(cfg.secuenciales || []).filter((_:any,idx:number)=>idx!==i)})} className="text-red-400">X</button></td>
                             </tr>
