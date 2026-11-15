@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma"
 import { datosRegistroDe, usuarioConEmpresaDesdeRequest } from "@/lib/empresa-sesion"
 import { codigoAmbiente } from "@/lib/sri/ambiente"
 import { asegurarPunto } from "@/lib/pos/puntos"
+import { permisosDeUsuario } from "@/lib/permisos-pos"
 import { puede } from "@/lib/seguridad"
 
 async function guardarPuntos(empresaId: string, secuenciales: { estab: string; pto: string }[] | undefined, sucursales: unknown) {
@@ -25,6 +26,10 @@ function limpiarSecuenciales(lista: unknown) {
     codigo: String(s?.codigo || "01").replace(/\D/g, "").padStart(2, "0").slice(-2),
     tipo: String(s?.tipo || "").slice(0, 40),
     ultimo: String(s?.ultimo || "").replace(/\D/g, "").padStart(9, "0").slice(-9),
+    porAmbiente: {
+      "1": String(s?.porAmbiente?.["1"] || "").replace(/\D/g, "").replace(/^0+$/, "").padStart(9, "0").slice(-9).replace(/^0{9}$/, ""),
+      "2": String(s?.porAmbiente?.["2"] || "").replace(/\D/g, "").replace(/^0+$/, "").padStart(9, "0").slice(-9).replace(/^0{9}$/, ""),
+    },
     estado: String(s?.estado || "ACTIVO").slice(0, 20) || "ACTIVO",
     actualizadoEn: String(s?.actualizadoEn || "").slice(0, 40),
   })).filter((s) => s.estab !== "000" && s.pto !== "000")
@@ -52,6 +57,8 @@ export async function POST(request: Request) {
   const secuenciales = limpiarSecuenciales(datos.secuenciales)
   const listaGuardada = secuenciales && secuenciales.length ? secuenciales : undefined
   if (sesion.usuario.rol !== "ADMIN") {
+    const permisos = permisosDeUsuario(sesion.usuario)
+    if (permisos && !permisos.modificarSecuenciales) return NextResponse.json({ ok: true, secuenciales: prev.secuenciales || [] })
     if (!puede(sesion.usuario.rol, "facturar") || !listaGuardada) return NextResponse.json({ error: "Solo el administrador cambia la empresa" }, { status: 403 })
     await prisma.empresa.update({
       where: { id: empresa.id },

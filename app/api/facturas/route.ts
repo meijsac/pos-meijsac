@@ -1,7 +1,8 @@
 import { NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
-import { usuarioConEmpresaDesdeRequest } from "@/lib/empresa-sesion"
+import { datosRegistroDe, usuarioConEmpresaDesdeRequest } from "@/lib/empresa-sesion"
 import { accesoEmpresa, ipDe, navegadorDe, puede, sanitizarTexto } from "@/lib/seguridad"
+import { permisosDeUsuario } from "@/lib/permisos-pos"
 import { anotarFacturaCaja } from "@/lib/login-memoria"
 import { FaltanDatosSri, armarXmlFactura } from "@/lib/sri/xml-factura"
 import { validarEsquemaSri } from "@/lib/sri/validar-xsd"
@@ -10,7 +11,8 @@ import { firmarXmlEmpresa } from "@/lib/sri/firmar"
 import { ambienteDeEmpresa } from "@/lib/sri/ambiente"
 import { enviarComprobante } from "@/lib/sri/soap"
 import { clasificarEstadoSri } from "@/lib/sri/estado-visible"
-import { elegirSecuencial, serieDeAmbiente } from "@/lib/sri/punto-emision"
+import { elegirSecuencial, mismoAmbienteFactura, puntoActivoFactura, serieDeAmbiente } from "@/lib/sri/punto-emision"
+import { avanzarSecuencialEmpresa } from "@/lib/sri/avanzar-secuencial"
 import { validarEntradaFactura } from "@/lib/factura-entrada"
 import { ambienteDeComprobante } from "@/lib/ambiente-datos"
 import { marcarVenta } from "@/lib/pos/puntos"
@@ -35,8 +37,9 @@ export async function POST(req: Request) {
     delete body.claveFirma
     const ambientePrevio = ambienteDeEmpresa(sesion.empresa)
     if (body?.estadoSRI !== "BORRADOR") {
+      const punto = puntoActivoFactura(datosRegistroDe(sesion.empresa.datosRegistro).secuenciales, ambientePrevio)
       const pedida = String(body?.establecimiento || "").trim()
-      const serie = /^\d{3}-\d{3}$/.test(pedida) ? pedida : serieDeAmbiente(ambientePrevio)
+      const serie = punto.serie || (/^\d{3}-\d{3}$/.test(pedida) ? pedida : serieDeAmbiente(ambientePrevio))
       const previas = await prisma.facturaEmitida.findMany({
         where: { empresaId: sesion.empresa.id },
         select: { payload: true },
@@ -46,12 +49,14 @@ export async function POST(req: Request) {
       const usados = new Set<string>()
       for (const fila of previas) {
         const p = (fila.payload || {}) as any
+        if (!mismoAmbienteFactura(p, ambientePrevio)) continue
         if (String(p.establecimiento || "") !== serie) continue
         const n = String(p.secuencial || "").replace(/\D/g, "").padStart(9, "0").slice(-9)
         if (n && n !== "000000000") usados.add(n)
       }
       body.establecimiento = serie
-      body.secuencial = elegirSecuencial(String(body.secuencial || ""), String(body.ultimoSecuencial || ""), usados)
+      body.ultimoSecuencial = punto.ultimo || body.ultimoSecuencial
+      body.secuencial = elegirSecuencial(punto.ultimo || String(body.secuencial || ""), String(body.ultimoSecuencial || ""), usados)
     }
     let armado: ReturnType<typeof armarXmlFactura>
     try {
@@ -123,6 +128,7 @@ export async function POST(req: Request) {
         data: { datosRegistro: { ...prev, modo_negocio: body.modo_negocio } },
       })
     }
+    await avanzarSecuencialEmpresa(sesion.empresa.id, ambiente, `${armado.estab}-${armado.pto}`, armado.secuencial).catch(() => {})
     const resultado = await enviarComprobante({ xmlFirmado: xml, claveAcceso: armado.claveAcceso, ambiente })
     const fechaSri = resultado.fechaAutorizacion || ""
     const visible = clasificarEstadoSri(resultado.estado, fechaSri)
@@ -248,7 +254,9 @@ export async function PATCH(req: Request) {
     if (!id) return NextResponse.json({ error: "Falta la factura" }, { status: 400 })
     const ajena = await prisma.facturaEmitida.findUnique({ where: { id } })
     if (ajena && accesoEmpresa(sesion.empresa.id, ajena.empresaId) === 403) return NextResponse.json({ error: "No puedes ver datos de otra empresa" }, { status: 403 })
-    if (body?.accion === "ANULAR" && !puede(sesion.usuario.rol, "anular")) return NextResponse.json({ error: "Tu rol no puede anular" }, { status: 403 })
+    const flags = permisosDeUsuario(sesion.usuario)
+    const puedeAnular = flags ? flags.anulaciones : puede(sesion.usuario.rol, "anular")
+    if (body?.accion === "ANULAR" && !puedeAnular) return NextResponse.json({ error: "Tu rol no puede anular" }, { status: 403 })
     const actual = await prisma.facturaEmitida.findFirst({ where: { id, empresaId: sesion.empresa.id } })
     if (!actual) return NextResponse.json({ error: "Factura no encontrada" }, { status: 404 })
     if (body?.accion === "ANULAR") {

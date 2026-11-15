@@ -182,6 +182,7 @@ model Usuario {
   rol                   String   @default("ADMIN")
   establecimientoCodigo String?  @default("")
   puntoEmisionCodigo    String?  @default("")
+  permisos              Json?
   empresaId             String
   empresa               Empresa  @relation(fields: [empresaId], references: [id], onDelete: Cascade)
   createdAt             DateTime @default(now())

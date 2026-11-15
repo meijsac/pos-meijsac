@@ -4,6 +4,7 @@ import Link from "next/link"
 import ModalCajaMixto from "./components/ModalCajaMixto"
 import ModuloTransporteReducido from "@/components/ModuloTransporteReducido"
 import { elegirSecuencial, puntoActivoFactura, SECUENCIALES_VISIBLES } from "@/lib/sri/punto-emision"
+import { permisosLocales } from "@/lib/permisos-pos"
 import { normalizarComprador } from "@/lib/sri/xml-factura"
 
 function codigosProducto(p: any) {
@@ -139,6 +140,9 @@ const Chisme = ({texto, titulo}:{texto:string, titulo:string}) => (
 export default function FacturadorXMLReal(){
   const [fecha, setFecha] = useState("")
   const [vendedorNombre, setVendedorNombre] = useState("")
+  const [permisos, setPermisos] = useState<ReturnType<typeof permisosLocales>>(null)
+  const puedePrecio = !permisos || permisos.modificarPrecio
+  const puedeDescuento = !permisos || permisos.descuento
   const [puntoEmision, setPuntoEmision] = useState({ ambiente: "1" as "1" | "2", nombre: "PRUEBAS", estab: "", pto: "", serie: "", secuencial: "", ultimo: "", indice: -1 })
   const cargarPunto = async (estabElegido?: string) => {
     let cfg: any = {}
@@ -209,8 +213,9 @@ export default function FacturadorXMLReal(){
       const lista = Array.isArray(cfg.secuenciales) ? cfg.secuenciales : []
       const [estab, pto] = serie.split("-")
       const i = lista.findIndex((s: any) => String(s?.estab || "").replace(/\D/g, "").padStart(3, "0").slice(-3) === estab && String(s?.pto || "").replace(/\D/g, "").padStart(3, "0").slice(-3) === pto)
-      if (i < 0) lista.push({ estab, pto, codigo: "01", tipo: "01 FACTURA", ultimo: siguiente, estado: "ACTIVO", actualizadoEn: new Date().toISOString() })
-      else lista[i] = { ...lista[i], ultimo: siguiente, actualizadoEn: new Date().toISOString() }
+      const codigo = String(cfg.ambiente || "").toUpperCase().includes("PROD") || String(cfg.ambiente) === "2" ? "2" : "1"
+      if (i < 0) lista.push({ estab, pto, codigo: "01", tipo: "01 FACTURA", ultimo: siguiente, estado: "ACTIVO", porAmbiente: { [codigo]: siguiente }, actualizadoEn: new Date().toISOString() })
+      else lista[i] = { ...lista[i], ultimo: siguiente, porAmbiente: { ...(lista[i].porAmbiente || {}), [codigo]: siguiente }, actualizadoEn: new Date().toISOString() }
       cfg.secuenciales = lista
       localStorage.setItem("meijsac_config_pro", JSON.stringify(cfg))
       await fetch("/api/configuracion", { method: "POST", credentials: "same-origin", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ secuenciales: lista }) }).catch(() => {})
@@ -222,6 +227,7 @@ export default function FacturadorXMLReal(){
     try {
       const usuario = JSON.parse(localStorage.getItem("meijsac_user") || "{}")
       setVendedorNombre(String(usuario?.nombre || ""))
+      setPermisos(permisosLocales())
     } catch {}
   }, [])
   const [configEmisor, setConfigEmisor] = useState<any>({})
@@ -1170,9 +1176,9 @@ const total = subtotalSin + iva15 + ivaDiferenciado + valorICE + valorIRBPNR + p
     {/* PEGALO AQUÍ ARRIBA DE TODO */}
     <div className="max-w-7xl mx-auto flex gap-2 mb-4 print:hidden">
       <a href="/dashboard/restaurante" className="bg-[#1e293b] border border-white/10 px-4 py-2 rounded-full text-[11px] font-bold">← Volver a Restaurante</a>
-      <a href="/dashboard" className="bg-white text-black px-4 py-2 rounded-full text-[11px] font-black">← MEIJSAC POS</a>
+      {(!permisos || permisos.verReportes) && <a href="/dashboard" className="bg-white text-black px-4 py-2 rounded-full text-[11px] font-black">← MEIJSAC POS</a>}
       <a href="/dashboard/comprobantes/emitidos" className="bg-[#1e293b] border border-white/10 px-4 py-2 rounded-full text-[11px] font-bold">Historial</a>
-      <a href="/dashboard/productos" className="bg-[#1e293b] border border-white/10 px-4 py-2 rounded-full text-[11px] font-bold">Inventario</a>
+      {(!permisos || permisos.verCostos) && <a href="/dashboard/productos" className="bg-[#1e293b] border border-white/10 px-4 py-2 rounded-full text-[11px] font-bold">Inventario</a>}
       <a href="/dashboard/clientes" className="bg-[#1e293b] border border-white/10 px-4 py-2 rounded-full text-[11px] font-bold">Clientes</a>
       <a href="/dashboard/comprobantes" className="bg-[#1e293b] border border-white/10 px-4 py-2 rounded-full text-[11px] font-bold">Comprobantes</a>
       <button onClick={toggleTema} className="bg-white text-black px-3 py-2 rounded-full text-[10px] font-black ml-auto">{isDark?"☀️ CLARO":"🌙 OSCURO"}</button>
@@ -1440,10 +1446,10 @@ const total = subtotalSin + iva15 + ivaDiferenciado + valorICE + valorIRBPNR + p
             <div className="relative group col-span-1"><Chisme titulo="Cantidad" texto="Cuántas unidades vendes" /><input type="number" value={it.cant} onChange={e=>{ const n=[...items]; n[i].cant=parseFloat(e.target.value)||1; setItems(n); }} className="w-full bg-black p-1 rounded text-xs text-center" /></div>
             <div className="relative group col-span-1">
               <Chisme titulo="Precio + Tarifa" texto="Minorista/Mayorista/Distribuidor en caliente" />
-              <div className="flex"><input type="number" value={it.pUnit} onChange={e=>{ const n=[...items]; n[i].pUnit=parseFloat(e.target.value)||0; setItems(n); }} className="w-full bg-black p-1 rounded-l text-xs" /><select onChange={e=>{ const n=[...items]; const v=e.target.value; if(v==='may') n[i].pUnit=n[i].tarifas?.may||n[i].pUnit; if(v==='dist') n[i].pUnit=n[i].tarifas?.dist||n[i].pUnit; if(v==='min') n[i].pUnit=n[i].tarifas?.min||n[i].pUnit; setItems(n); }} className="bg-[#1e293b] text-[8px] rounded-r px-1"><option value="min">MIN</option><option value="may">MAY</option><option value="dist">DIS</option></select></div>
+              <div className="flex"><input type="number" value={it.pUnit} readOnly={!puedePrecio} onChange={e=>{ if(!puedePrecio) return; const n=[...items]; n[i].pUnit=parseFloat(e.target.value)||0; setItems(n); }} className="w-full bg-black p-1 rounded-l text-xs" /><select disabled={!puedePrecio} onChange={e=>{ const n=[...items]; const v=e.target.value; if(v==='may') n[i].pUnit=n[i].tarifas?.may||n[i].pUnit; if(v==='dist') n[i].pUnit=n[i].tarifas?.dist||n[i].pUnit; if(v==='min') n[i].pUnit=n[i].tarifas?.min||n[i].pUnit; setItems(n); }} className="bg-[#1e293b] text-[8px] rounded-r px-1"><option value="min">MIN</option><option value="may">MAY</option><option value="dist">DIS</option></select></div>
             </div>
-            <div className="relative group col-span-1"><Chisme titulo="Descuento %" texto="Coloca numero de porcentaje de descuento" /><input type="number" value={it.descPorc || 0} onChange={e=>{ const n=[...items]; const porc=parseFloat(e.target.value)||0; n[i].descPorc=porc; const brutoFila=n[i].cant*n[i].pUnit; n[i].descDolar=(brutoFila*porc/100); setItems(n); }} className="w-full bg-black p-1 rounded text-xs" placeholder="%" /></div>
-            <div className="relative group col-span-1"><Chisme titulo="Descuento $" texto="Coloca el valor total de descuento"/><input type="number" value={it.descDolar || 0} onChange={e=>{ const n=[...items]; const dol=parseFloat(e.target.value)||0; n[i].descDolar=dol; const brutoFila=n[i].cant*n[i].pUnit; n[i].descPorc=brutoFila>0?(dol/brutoFila*100):0; setItems(n); }} className="w-full bg-black p-1 rounded text-xs border border-yellow-500/20" placeholder="$" /></div>
+            <div className="relative group col-span-1"><Chisme titulo="Descuento %" texto="Coloca numero de porcentaje de descuento" /><input type="number" value={it.descPorc || 0} readOnly={!puedeDescuento} onChange={e=>{ if(!puedeDescuento) return; const n=[...items]; const tope=permisos?.limiteDescuento ?? 100; const porc=Math.min(tope, parseFloat(e.target.value)||0); n[i].descPorc=porc; const brutoFila=n[i].cant*n[i].pUnit; n[i].descDolar=(brutoFila*porc/100); setItems(n); }} className="w-full bg-black p-1 rounded text-xs" placeholder="%" /></div>
+            <div className="relative group col-span-1"><Chisme titulo="Descuento $" texto="Coloca el valor total de descuento"/><input type="number" value={it.descDolar || 0} readOnly={!puedeDescuento} onChange={e=>{ if(!puedeDescuento) return; const n=[...items]; const dol=parseFloat(e.target.value)||0; const brutoFila=n[i].cant*n[i].pUnit; const tope=permisos?.limiteDescuento ?? 100; const porc=brutoFila>0?Math.min(tope, dol/brutoFila*100):0; n[i].descPorc=porc; n[i].descDolar=brutoFila*porc/100; setItems(n); }} className="w-full bg-black p-1 rounded text-xs border border-yellow-500/20" placeholder="$" /></div>
             <div className="relative group col-span-1"><Chisme titulo="IVA" texto="Cambie el tipo de iva si no lleva inventario" /><select 
     value={it.codigoPorcentaje} 
     onChange={e=>{ 

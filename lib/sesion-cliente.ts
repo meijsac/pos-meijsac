@@ -48,16 +48,19 @@ export function guardarEmpresaLocal(empresa: any, token?: string, usuario?: any)
   if (idNuevo && idPrevio && idNuevo !== idPrevio) limpiarDatosDeEmpresa()
   localStorage.setItem("meijsac_empresa", JSON.stringify(empresa))
   localStorage.setItem("meijsac_registro", JSON.stringify(empresa))
+  let previo: any = null
+  try { previo = JSON.parse(localStorage.getItem("meijsac_user") || "null") } catch { previo = null }
+  const mismaEmpresa = !idNuevo || !previo?.empresaId || String(previo.empresaId) === idNuevo
   localStorage.setItem(
     "meijsac_user",
     JSON.stringify(
-      usuario || {
+      usuario || (mismaEmpresa && previo ? previo : {
         nombre: empresa.usuario,
         empresa: empresa.razonSocial,
         rol: empresa.rol,
         ruc: empresa.ruc,
         empresaId: empresa.id,
-      }
+      })
     )
   )
   sessionStorage.setItem(MARCA, "1")

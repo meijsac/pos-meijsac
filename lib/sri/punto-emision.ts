@@ -29,10 +29,21 @@ export const SECUENCIALES_VISIBLES = [
   { estab: "002", pto: "001", codigo: "04", tipo: "04 NOTA CREDITO", ultimo: "00000005", estado: "ACTIVO" },
 ]
 
-export function serieDeAmbiente(ambiente: unknown) {
+export function codigoAmbienteFactura(ambiente: unknown) {
   const codigo = String(ambiente ?? "").trim().toUpperCase()
-  if (codigo === "2" || codigo.includes("PROD")) return "001-001"
-  return "001-002"
+  if (codigo === "2" || codigo.includes("PROD")) return "2"
+  return "1"
+}
+
+export function serieDeAmbiente(ambiente: unknown) {
+  return codigoAmbienteFactura(ambiente) === "2" ? "001-001" : "001-002"
+}
+
+export function ultimoDelAmbiente(fila: any, ambiente: unknown) {
+  const codigo = codigoAmbienteFactura(ambiente)
+  const propio = nueve(fila?.porAmbiente && typeof fila.porAmbiente === "object" ? fila.porAmbiente[codigo] : "")
+  if (propio && propio !== "000000000") return propio
+  return nueve(fila?.ultimo)
 }
 
 export function puntoActivoFactura(secuenciales: unknown, _ambiente: unknown, estabElegido?: string): { punto: PuntoFactura; aviso: string } {
@@ -40,11 +51,14 @@ export function puntoActivoFactura(secuenciales: unknown, _ambiente: unknown, es
   const facturas = lista
     .map((fila, indice) => ({ fila, indice }))
     .filter(({ fila }) => esFactura(fila))
+  const serieAmbiente = serieDeAmbiente(_ambiente)
+  const delAmbiente = facturas.filter(({ fila }) => `${tres(fila?.estab)}-${tres(fila?.pto)}` === serieAmbiente)
   const preferido = tres(estabElegido || "")
   const delEstablecimiento = preferido && preferido !== "000"
     ? facturas.filter(({ fila }) => tres(fila?.estab) === preferido)
     : []
-  const elegida = delEstablecimiento[0]
+  const elegida = delAmbiente[0]
+    || delEstablecimiento[0]
     || facturas.find(({ fila }) => String(fila?.estado || "").toUpperCase() === "ACTIVO")
     || facturas[0]
   if (!elegida) {
@@ -53,10 +67,10 @@ export function puntoActivoFactura(secuenciales: unknown, _ambiente: unknown, es
       aviso: "No hay un punto de emisión en Configuración",
     }
   }
-  const estab = preferido && preferido !== "000" ? preferido : tres(elegida.fila?.estab)
+  const estab = tres(elegida.fila?.estab)
   const pto = tres(elegida.fila?.pto)
   return {
-    punto: { estab, pto, serie: `${estab}-${pto}`, ultimo: nueve(elegida.fila?.ultimo), indice: elegida.indice },
+    punto: { estab, pto, serie: `${estab}-${pto}`, ultimo: ultimoDelAmbiente(elegida.fila, _ambiente), indice: elegida.indice },
     aviso: "",
   }
 }
@@ -74,6 +88,16 @@ export function siguienteSecuencial(ultimo: string, usados: Set<string>) {
   while (n <= 999999999 && usados.has(String(n).padStart(9, "0"))) n += 1
   if (n > 999999999) return ""
   return String(n).padStart(9, "0")
+}
+
+export function mismoAmbienteFactura(payload: any, ambiente: unknown) {
+  const codigo = codigoAmbienteFactura(ambiente)
+  const clave = String(payload?.claveAcceso || "")
+  if (clave.length === 49) return clave[23] === codigo
+  const envio = String(payload?.envioSri || "").toUpperCase()
+  if (envio.includes("PROD")) return codigo === "2"
+  if (envio.includes("PRUEB")) return codigo === "1"
+  return true
 }
 
 export function secuencialYaUsado(secuencial: string, usados: Set<string>) {

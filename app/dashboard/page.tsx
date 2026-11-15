@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation"
 import { useEffect, useState } from "react"
 import { cargarEmpresaSesion, cerrarSesionEnEsteEquipo } from "@/lib/sesion-cliente"
 import { useAmbienteVivo } from "@/components/SelloAmbiente"
+import { permisosLocales, rutaPermitida, type PermisosPos } from "@/lib/permisos-pos"
 
 const CORPORATE = "#23AAB3"
 
@@ -139,6 +140,8 @@ export default function DashboardMeijsac(){
   const [firmaSubida, setFirmaSubida] = useState<boolean | null>(null)
   const [firmaRevisada, setFirmaRevisada] = useState(false)
   const [mounted, setMounted] = useState(false)
+  const [acceso, setAcceso] = useState<PermisosPos | null>(null)
+  useEffect(() => { setAcceso(permisosLocales()) }, [])
   const [porCobrar, setPorCobrar] = useState(0)
   const [ventas, setVentas] = useState({ hoy: 0, mes: 0, pedidosHoy: 0, pedidosMes: 0 })
   const [docsLegales, setDocsLegales] = useState<{ id: string; tipo: string; nombre: string; fecha_caducidad: string }[]>([])
@@ -421,7 +424,7 @@ export default function DashboardMeijsac(){
         </div>
 
         <div className={`grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-3 max-w-[1600px] mx-auto ${estaBloqueado ? 'pointer-events-none opacity-40 grayscale' : ''}`}>
-          {modules.map((m,i)=>{
+          {modules.filter((m) => rutaPermitida(m.href, acceso)).map((m,i)=>{
             const isSide = m.title === "CONFIGURACIÓN" || m.title === "COMPROBANTES ELECTRÓNICOS"
             // Si es SOFT BLOCK, POS y COMPROBANTES no dejan entrar
             const bloqueadoPorSoft = estaPorVencer && (m.title.includes("COMPROBANTES") || m.title.includes("POS") || m.title.includes("RESTAURANTE"))

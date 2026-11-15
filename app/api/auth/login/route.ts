@@ -94,7 +94,7 @@ export async function POST(req: Request) {
       } catch { /* la cookie firmada igual entra; la siguiente visita recompone la fila */ }
       const empresa = empresaParaCliente(usuario.empresa, usuario)
       return responder({
-        usuario: { nombre: usuario.nombre, empresa: empresa.razonSocial, rol: usuario.rol, ruc: empresa.ruc, empresaId: usuario.empresaId },
+        usuario: { nombre: usuario.nombre, empresa: empresa.razonSocial, rol: usuario.rol, ruc: empresa.ruc, empresaId: usuario.empresaId, permisos: usuario.permisos || null },
         empresa,
         destino: canal === "POS" ? "/dashboard/factura-xml" : "/dashboard",
       }, 200, cookiesSesion(acceso, refresh, segundos))

@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
-import { usuarioConEmpresaDesdeRequest } from "@/lib/empresa-sesion"
+import { datosRegistroDe, usuarioConEmpresaDesdeRequest } from "@/lib/empresa-sesion"
 import { accesoEmpresa, ipDe, navegadorDe, puede, sanitizarTexto } from "@/lib/seguridad"
 import { anotarFacturaCaja } from "@/lib/login-memoria"
 import { FaltanDatosSri, armarXmlFactura } from "@/lib/sri/xml-factura"
@@ -9,7 +9,8 @@ import { firmarXmlEmpresa } from "@/lib/sri/firmar"
 import { ambienteDeEmpresa } from "@/lib/sri/ambiente"
 import { enviarAlSri } from "@/lib/sri/cliente-sri"
 import { guardarRespuestaSri, sriStatusDe } from "@/lib/sri/guardar-respuesta"
-import { elegirSecuencial, serieDeAmbiente } from "@/lib/sri/punto-emision"
+import { elegirSecuencial, mismoAmbienteFactura, puntoActivoFactura, serieDeAmbiente } from "@/lib/sri/punto-emision"
+import { avanzarSecuencialEmpresa } from "@/lib/sri/avanzar-secuencial"
 import { validarEntradaFactura } from "@/lib/factura-entrada"
 import { encolarReenvioSri } from "@/lib/security/cola"
 import { marcarVenta } from "@/lib/pos/puntos"
@@ -36,8 +37,9 @@ export async function POST(req: Request) {
     delete body.claveFirma
     const ambientePrevio = ambienteDeEmpresa(sesion.empresa)
     if (body?.estadoSRI !== "BORRADOR") {
+      const punto = puntoActivoFactura(datosRegistroDe(sesion.empresa.datosRegistro).secuenciales, ambientePrevio)
       const pedida = String(body?.establecimiento || "").trim()
-      const serie = /^\d{3}-\d{3}$/.test(pedida) ? pedida : serieDeAmbiente(ambientePrevio)
+      const serie = punto.serie || (/^\d{3}-\d{3}$/.test(pedida) ? pedida : serieDeAmbiente(ambientePrevio))
       const previas = await prisma.facturaEmitida.findMany({
         where: { empresaId: sesion.empresa.id },
         select: { payload: true },
@@ -47,12 +49,14 @@ export async function POST(req: Request) {
       const usados = new Set<string>()
       for (const fila of previas) {
         const p = (fila.payload || {}) as any
+        if (!mismoAmbienteFactura(p, ambientePrevio)) continue
         if (String(p.establecimiento || "") !== serie) continue
         const n = String(p.secuencial || "").replace(/\D/g, "").padStart(9, "0").slice(-9)
         if (n && n !== "000000000") usados.add(n)
       }
       body.establecimiento = serie
-      body.secuencial = elegirSecuencial(String(body.secuencial || ""), String(body.ultimoSecuencial || ""), usados)
+      body.ultimoSecuencial = punto.ultimo || body.ultimoSecuencial
+      body.secuencial = elegirSecuencial(punto.ultimo || String(body.secuencial || ""), String(body.ultimoSecuencial || ""), usados)
     }
     let armado: ReturnType<typeof armarXmlFactura>
     try {
@@ -126,6 +130,7 @@ export async function POST(req: Request) {
         data: { datosRegistro: { ...prev, modo_negocio: body.modo_negocio } },
       })
     }
+    await avanzarSecuencialEmpresa(sesion.empresa.id, ambiente, `${armado.estab}-${armado.pto}`, armado.secuencial).catch(() => {})
     if (diferirSri) {
       return NextResponse.json({
         id: factura.id,

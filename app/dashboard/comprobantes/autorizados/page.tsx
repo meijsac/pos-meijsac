@@ -5,6 +5,7 @@ import { useAmbienteVivo } from "@/components/SelloAmbiente"
 import { useRouter } from "next/navigation"
 import { etiquetaCobro, marcarPagadoLocal, pasaFiltroCobro } from "@/lib/cobro-etiqueta"
 import { clasificarEstadoSri, estadoEnModal } from "@/lib/sri/estado-visible"
+import { permisosLocales } from "@/lib/permisos-pos"
 
 // === AUMENTADO: COMPONENTE CHISMOSO - NO BORRA NADA ===
 function Chismoso({ children, texto, pos="top" }:{children:any, texto:string, pos?:string}){
@@ -55,6 +56,8 @@ export default function EmitidosPage(){
   const [filtroCobro,setFiltroCobro]=useState("todos")
   const [pagoDoc,setPagoDoc]=useState<ComprobanteHistorialSRI|null>(null)
   const [showAnular,setShowAnular]=useState<ComprobanteHistorialSRI|null>(null)
+  const [puedeAnular, setPuedeAnular] = useState(true)
+  useEffect(() => { const p = permisosLocales(); setPuedeAnular(!p || p.anulaciones) }, [])
   const [claveAnular,setClaveAnular]=useState("")
   const [verSri,setVerSri]=useState<ComprobanteHistorialSRI|null>(null)
   const [consultando,setConsultando]=useState("")
@@ -298,7 +301,7 @@ export default function EmitidosPage(){
               <Chismoso texto={d.tipoComprobante==='07'?'Retención 07 y Guía 06 SIEMPRE en A4 corporativo, SRI no permite ticket':'Ticket 80mm térmico para impresora del chifa - solo facturas 01'}><button onClick={()=>descargarTicket(d)} className={`px-2 py-1 rounded-lg text-[10px] font-bold ${d.tipoComprobante==='01'?'bg-[#00f5d4] text-black hover:scale-105':'bg-white/10 text-white/20 cursor-not-allowed'}`}>🧾 TICK</button></Chismoso>
               <Chismoso texto="XML fuente con firma XAdES-BES y <numeroAutorizacion>. Este es el archivo que audita el SRI y pide el contador para ATS"><button onClick={()=>descargarXML(d)} className="bg-[#3a86ff] text-white px-2 py-1 rounded-lg text-[10px] font-bold hover:scale-105">📁 XML</button></Chismoso>
               <Chismoso texto="Reenvía correo al cliente con PDF+XML si digitó mal el email en caja"><button onClick={()=>{ window.location.href=`mailto:${d.receptorNombre}?subject=Comprobante ${d.secuencial}&body=Adjunto XML y PDF con autorizacion ${d.claveAcceso}`}} className="bg-white/10 px-2 py-1 rounded-lg text-[10px]">✉️</button></Chismoso>
-              <Chismoso texto="¡CUIDADO! No borra, anula en SRI con tu link oficial"><button onClick={()=>setShowAnular(d)} className="bg-red-500/20 text-red-400 border border-red-500/30 px-2 py-1 rounded-lg text-[10px] font-black hover:bg-red-500 hover:text-white">🚫</button></Chismoso>
+              {puedeAnular && <Chismoso texto="¡CUIDADO! No borra, anula en SRI con tu link oficial"><button onClick={()=>setShowAnular(d)} className="bg-red-500/20 text-red-400 border border-red-500/30 px-2 py-1 rounded-lg text-[10px] font-black hover:bg-red-500 hover:text-white">🚫</button></Chismoso>}
             </div>
           </div>
           <div className="px-3 pb-3 text-[10px] leading-relaxed space-y-1">

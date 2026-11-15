@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation"
 import { etiquetaCobro, marcarPagadoLocal, pasaFiltroCobro } from "@/lib/cobro-etiqueta"
 import { esDelAmbiente } from "@/lib/ambiente-datos"
 import { useAmbienteVivo } from "@/components/SelloAmbiente"
+import { permisosLocales } from "@/lib/permisos-pos"
 
 interface ComprobanteHistorialSRI {
   id: string;
@@ -40,6 +41,8 @@ export default function EmitidosPage(){
   const [filtroCobro,setFiltroCobro]=useState("todos")
   const [pagoDoc,setPagoDoc]=useState<ComprobanteHistorialSRI|null>(null)
   const [showAnular,setShowAnular]=useState<ComprobanteHistorialSRI|null>(null)
+  const [puedeAnular, setPuedeAnular] = useState(true)
+  useEffect(() => { const p = permisosLocales(); setPuedeAnular(!p || p.anulaciones) }, [])
   const [claveAnular,setClaveAnular]=useState("")
   const [reenviando,setReenviando]=useState("")
   const [borradores,setBorradores]=useState<any[]>([])
@@ -344,7 +347,7 @@ export default function EmitidosPage(){
               <button onClick={()=>verImprimir(d)} className="bg-teal-400 text-slate-950 px-2.5 py-1 rounded-lg text-[10px] font-bold whitespace-nowrap">Ver / Imprimir</button>
               <button onClick={()=>descargarXML(d)} className="bg-slate-800 text-slate-200 border border-slate-700 px-2.5 py-1 rounded-lg text-[10px]">XML</button>
               {!String(d.fechaAutorizacion || "").trim() && <button onClick={()=>eliminarNoReal(d)} className="text-rose-300 border border-rose-500/40 px-2 py-1 rounded-lg text-[10px] whitespace-nowrap">Eliminar</button>}
-              <button onClick={()=>setShowAnular(d)} title="Anular" className="text-slate-500 hover:text-rose-400 px-1.5 py-1">✕</button>
+              {puedeAnular && <button onClick={()=>setShowAnular(d)} title="Anular" className="text-slate-500 hover:text-rose-400 px-1.5 py-1">✕</button>}
             </div>
           </div>
           {d.correoRegistro ? <p className="px-4 pb-3 text-[10px] text-slate-400">{d.correoRegistro}</p> : null}

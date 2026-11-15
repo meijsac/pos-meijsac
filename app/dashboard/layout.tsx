@@ -4,6 +4,7 @@ import { useRouter, usePathname } from 'next/navigation'
 import { EsisaAvatar } from '@/components/EsisaAvatar'
 import { SelloAmbiente } from '@/components/SelloAmbiente'
 import { guardarEmpresaLocal, limpiarSesionLocal } from '@/lib/sesion-cliente'
+import { permisosLocales, rutaPermitida } from '@/lib/permisos-pos'
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   const router = useRouter()
@@ -37,6 +38,12 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         if (!vivo) return
         if (res.ok) {
           sessionStorage.setItem("meijsac_acceso_ok", "1")
+          const data = await res.json().catch(() => null)
+          if (data?.rol) {
+            const previo = JSON.parse(localStorage.getItem("meijsac_user") || "{}")
+            localStorage.setItem("meijsac_user", JSON.stringify({ ...previo, nombre: data.nombre || previo.nombre, rol: data.rol, permisos: data.permisos ?? null, empresaId: data.empresaId || previo.empresaId }))
+            if (!rutaPermitida(pathname, permisosLocales())) router.replace("/dashboard/factura-xml")
+          }
           if (!tieneLocal()) {
             const data = await fetch("/api/empresa/mia", { credentials: "same-origin" }).then((r) => r.json()).catch(() => null)
             if (data?.empresa) guardarEmpresaLocal(data.empresa)
@@ -58,6 +65,10 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       clearTimeout(timer)
     }
   }, [router])
+
+  useEffect(() => {
+    if (!rutaPermitida(pathname, permisosLocales())) router.replace("/dashboard/factura-xml")
+  }, [pathname, router])
 
   useEffect(() => {
     if (sessionStorage.getItem("meijsac_sri_reintento")) return

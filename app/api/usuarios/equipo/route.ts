@@ -3,6 +3,7 @@ import bcrypt from "bcryptjs"
 import { prisma } from "@/lib/prisma"
 import { usuarioConEmpresaDesdeRequest } from "@/lib/empresa-sesion"
 import { asegurarPunto } from "@/lib/pos/puntos"
+import { permisosNormales } from "@/lib/permisos-pos"
 
 export const dynamic = "force-dynamic"
 
@@ -20,7 +21,7 @@ function tres(valor: unknown) {
   return n ? n.padStart(3, "0").slice(-3) : "001"
 }
 
-function vista(usuario: { id: string; nombre: string; email: string | null; rol: string; establecimientoCodigo: string | null; puntoEmisionCodigo: string | null }) {
+function vista(usuario: { id: string; nombre: string; email: string | null; rol: string; establecimientoCodigo: string | null; puntoEmisionCodigo: string | null; permisos?: unknown }) {
   const rol = usuario.rol === "CAJERO" ? "Cajero" : usuario.rol === "CONTADOR" ? "Contador" : usuario.rol === "BODEGUERO" ? "Bodeguero" : usuario.rol === "VENDEDOR" ? "Vendedor" : "Administrador"
   return {
     id: usuario.id,
@@ -29,6 +30,7 @@ function vista(usuario: { id: string; nombre: string; email: string | null; rol:
     rol,
     establecimiento: usuario.establecimientoCodigo || "001",
     puntoEmision: usuario.puntoEmisionCodigo || "001",
+    permisos: permisosNormales(usuario.permisos),
     activo: true,
     password: "",
   }
@@ -71,7 +73,7 @@ export async function POST(req: Request) {
     if (actual?.rol === "ADMIN") continue
     const password = clave ? await bcrypt.hash(clave, 10) : actual?.password || ""
     if (!password) continue
-    const datos = { nombre, email: email || null, rol, establecimientoCodigo: establecimiento, puntoEmisionCodigo: puntoEmision }
+    const datos = { nombre, email: email || null, rol, establecimientoCodigo: establecimiento, puntoEmisionCodigo: puntoEmision, permisos: permisosNormales(fila?.permisos) }
     const guardado = actual
       ? await prisma.usuario.update({ where: { id: actual.id }, data: clave ? { ...datos, password } : datos })
       : await prisma.usuario.create({ data: { ...datos, password, empresaId } })

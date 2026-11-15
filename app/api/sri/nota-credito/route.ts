@@ -7,6 +7,7 @@ import { enviarAlSri } from "@/lib/sri/cliente-sri"
 import { firmarXmlEmpresa } from "@/lib/sri/firmar"
 import { sanitizarTextoXml as xml } from "@/lib/sri/sanitizar"
 import { ipDe } from "@/lib/seguridad"
+import { permisosDeUsuario } from "@/lib/permisos-pos"
 import { validarEsquemaSri } from "@/lib/sri/validar-xsd"
 import { guardarRespaldo } from "@/lib/sri/respaldo"
 
@@ -132,6 +133,8 @@ export async function POST(req: Request) {
   try {
     const sesion = await usuarioConEmpresaDesdeRequest(req)
     if ("error" in sesion) return NextResponse.json({ autorizado: false, mensaje: sesion.error }, { status: sesion.status })
+    const flags = permisosDeUsuario(sesion.usuario)
+    if (flags && !flags.anulaciones) return NextResponse.json({ autorizado: false, mensaje: "No tienes permiso para notas de crédito" }, { status: 403 })
     const body = await req.json()
     const numero = normalizarNumero(body?.numDocModificado)
     const productos = Array.isArray(body?.productos) ? body.productos : []

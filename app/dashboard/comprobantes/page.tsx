@@ -3,6 +3,7 @@ import Link from "next/link"
 import { useEffect, useState } from "react"
 import { esDelAmbiente } from "@/lib/ambiente-datos"
 import { useAmbienteVivo } from "@/components/SelloAmbiente"
+import { permisosLocales } from "@/lib/permisos-pos"
 
 function Icono({ d, className = "w-5 h-5" }: { d: string; className?: string }) {
   return (
@@ -40,6 +41,8 @@ export default function ComprobantesPage() {
   const [compras, setCompras] = useState(0)
   const codigoVivo = useAmbienteVivo()
   const [firmaVigente, setFirmaVigente] = useState<boolean | null>(null)
+  const [puedeAnular, setPuedeAnular] = useState(true)
+  useEffect(() => { const p = permisosLocales(); setPuedeAnular(!p || p.anulaciones) }, [])
 
   useEffect(() => {
     if (codigoVivo !== "1" && codigoVivo !== "2") return
@@ -101,7 +104,7 @@ export default function ComprobantesPage() {
             <h2 className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Emitir nuevo documento</h2>
           </div>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
-            {EMITIR.map((item) => item.principal ? (
+            {EMITIR.filter((item) => item.codigo !== "04" || puedeAnular).map((item) => item.principal ? (
               <Link key={item.href} href={item.href} className="group relative overflow-hidden bg-gradient-to-b from-[#131F2E] to-[#0F1623] border border-teal-500/40 hover:border-teal-400 rounded-2xl p-6 transition-all duration-300 hover:-translate-y-1 shadow-xl shadow-teal-950/20 flex flex-col justify-between min-h-[165px]">
                 <div className="absolute -top-12 -right-12 w-32 h-32 bg-teal-500/10 rounded-full blur-2xl group-hover:bg-teal-400/20 transition" />
                 <div className="flex justify-between items-start relative z-10">
