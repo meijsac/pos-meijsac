@@ -79,6 +79,12 @@ export async function guardarCopiaDiaria(empresaId: string, clave: string, dia: 
   await subirPrivado(COMPROBANTES, `${base}.pdf`, pdf, "application/pdf")
 }
 
+export async function guardarPdfArchivado(empresaId: string, clave: string, pdf: Buffer) {
+  const limpia = String(clave || "").replace(/\D/g, "")
+  if (!empresaId || limpia.length !== 49 || !pdf.length) return
+  await subirPrivado(COMPROBANTES, `${empresaId}/${limpia}.pdf`, pdf, "application/pdf")
+}
+
 export async function leerComprobanteArchivado(empresaId: string, clave: string, ext: "xml" | "pdf" | "html" | "json") {
   const limpia = String(clave || "").replace(/\D/g, "")
   if (!empresaId || limpia.length !== 49) return null
