@@ -1,6 +1,6 @@
 "use client";
 import { useState, useMemo, useEffect, useRef } from "react";
-import { mensajeCarga, partirLotes } from "@/lib/clientes-masivo";
+import { errorBloqueaGuardado, filaSePuedeGuardar, mensajeCarga, partirLotes } from "@/lib/clientes-masivo";
 
 type TipoId = "04" | "05" | "06" | "07" | "08";
 interface Sucursal { id: string; clienteId: string; codigo: string; nombre: string; direccion: string; provincia: string; ciudad: string; telefono?: string; esMatriz: boolean; }
@@ -244,14 +244,21 @@ export default function ClientesModule() {
   };
 
   const guardarLotes = async () => {
-    if (guardandoRef.current || !vistaMasiva || vistaMasiva.errores > 0) return;
+    if (guardandoRef.current || !vistaMasiva) return;
+    const guardables = vistaMasiva.filas.filter((f) => filaSePuedeGuardar(f.errores));
+    if (!guardables.length) return;
+    const hayFaltantes = guardables.some((f) => f.errores.length > 0);
+    if (hayFaltantes && !confirm("¿Está seguro que desea guardar los clientes con los datos faltantes?")) return;
     guardandoRef.current = true;
     setCargandoMasivo(true);
     setAvisoMasivo("");
-    const filas = vistaMasiva.filas;
+    const filas = guardables;
+    const fallosBloqueados = vistaMasiva.filas
+      .filter((f) => !filaSePuedeGuardar(f.errores))
+      .map((f) => ({ numero: f.numero, motivo: f.errores.filter(errorBloqueaGuardado).join(", ") }));
     const total = filas.length;
     let guardados = 0;
-    const fallos: { numero: number; motivo: string }[] = [];
+    const fallos: { numero: number; motivo: string }[] = [...fallosBloqueados];
     try {
       let avance = 0;
       for (const lote of partirLotes(filas)) {
@@ -535,10 +542,11 @@ export default function ClientesModule() {
             <div className="flex justify-between items-center gap-3 mb-3">
               <div>
                 <p className="text-[#00f5d4] font-black text-[12px]">Vista previa · {vistaMasiva.total} clientes</p>
-                {vistaMasiva.errores > 0 && <p className="text-red-400 font-bold text-[12px]">Hay {vistaMasiva.errores} filas con error, corrígelas</p>}
+                {vistaMasiva.filas.some((f) => !filaSePuedeGuardar(f.errores)) && <p className="text-red-400 font-bold text-[12px]">Las filas en rojo no se guardan: la identificación o la razón social no están bien.</p>}
+                {vistaMasiva.filas.some((f) => filaSePuedeGuardar(f.errores) && f.errores.length > 0) && <p className="text-amber-300 font-bold text-[12px]">Ciudad, teléfono, correo o dirección pueden ir vacíos. Se avisa antes de guardar.</p>}
               </div>
               <div className="flex gap-2">
-                {vistaMasiva.errores === 0 && (
+                {vistaMasiva.filas.some((f) => filaSePuedeGuardar(f.errores)) && (
                   <button disabled={cargandoMasivo} onClick={() => { void guardarLotes() }} className="bg-[#00f5d4] text-black font-black text-[11px] px-4 py-2 rounded-full disabled:opacity-50">{progresoMasivo ? `Guardando ${progresoMasivo.hechos} de ${progresoMasivo.total}...` : "Guardar todos"}</button>
                 )}
                 <button disabled={cargandoMasivo} onClick={() => { setVistaMasiva(null); setArchivoMasivo(null); }} className="bg-white/10 px-4 py-2 rounded-full text-[11px] disabled:opacity-40">Cerrar</button>
@@ -556,7 +564,7 @@ export default function ClientesModule() {
                 <thead className="text-white/40"><tr><th className="text-left p-2">Fila</th><th className="text-left">Tipo</th><th className="text-left">Identificación</th><th className="text-left">Nombre</th><th className="text-left">Email</th><th className="text-left">Estado</th></tr></thead>
                 <tbody>
                   {vistaMasiva.filas.map((f) => (
-                    <tr key={f.numero} className={f.errores.length ? "bg-red-500/20 text-red-200" : "border-b border-white/5"}>
+                    <tr key={f.numero} className={!filaSePuedeGuardar(f.errores) ? "bg-red-500/20 text-red-200" : f.errores.length ? "bg-amber-500/10 text-amber-100" : "border-b border-white/5"}>
                       <td className="p-2">{f.numero}</td>
                       <td>{f.tipo_identificacion}</td>
                       <td>{f.identificacion}</td>

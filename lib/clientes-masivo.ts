@@ -138,6 +138,24 @@ export function erroresDeFila(fila: FilaCliente): string[] {
   return errores
 }
 
+const AVISOS_COMPLEMENTARIOS = new Set([
+  "email vacío",
+  "email sin @",
+  "telefono vacío",
+  "direccion vacía",
+  "ciudad vacía",
+  "es_cliente_frecuente vacío",
+  "es_cliente_frecuente solo acepta SI o NO",
+])
+
+export function errorBloqueaGuardado(error: string) {
+  return !AVISOS_COMPLEMENTARIOS.has(error)
+}
+
+export function filaSePuedeGuardar(errores: string[]) {
+  return !errores.some(errorBloqueaGuardado)
+}
+
 export function revisarTabla(matriz: unknown[][]): { error?: string; filas: FilaRevisada[] } {
   if (!matriz.length) return { error: "El archivo no tiene filas", filas: [] }
   const encabezado = COLUMNAS_CLIENTE.map((_, i) => textoCelda(matriz[0][i]).toLowerCase())

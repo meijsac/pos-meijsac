@@ -2,7 +2,7 @@ import ExcelJS from "exceljs"
 import { NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
 import { usuarioConEmpresaDesdeRequest } from "@/lib/empresa-sesion"
-import { COLUMNAS_CLIENTE, datosGuardables, erroresDeFila, LOTE_CLIENTES, matrizDesdeCsv, revisarTabla, textoCelda, type FilaCliente } from "@/lib/clientes-masivo"
+import { COLUMNAS_CLIENTE, datosGuardables, errorBloqueaGuardado, erroresDeFila, LOTE_CLIENTES, matrizDesdeCsv, revisarTabla, textoCelda, type FilaCliente } from "@/lib/clientes-masivo"
 
 export const dynamic = "force-dynamic"
 export const maxDuration = 60
@@ -44,7 +44,8 @@ async function guardarLote(empresaId: string, filas: (FilaCliente & { numero: nu
   const validas: (FilaCliente & { numero: number })[] = []
   for (const fila of filas) {
     const errores = erroresDeFila(fila)
-    if (errores.length) fallos.push({ numero: fila.numero, motivo: errores.join(", ") })
+    const graves = errores.filter(errorBloqueaGuardado)
+    if (graves.length) fallos.push({ numero: fila.numero, motivo: graves.join(", ") })
     else validas.push(fila)
   }
   const ids = validas.map((f) => f.identificacion)
