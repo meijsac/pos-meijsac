@@ -45,26 +45,24 @@ export default function RetencionCompraPage(){
       .catch(() => {})
   }, [])
   // PARTE A: COMPRA - Sustento
-  const [proveedorRuc, setRuc] = useState("1792000000001");
-  const [proveedorNombre, setNombre] = useState("PROVEEDOR INDUSTRIAL S.A.");
-  const [comprobanteSerie, setSerie] = useState("001-005-000012345");
-  const [fechaEmisionCompra, setFechaCompra] = useState("2026-10-02");
+  const [proveedorRuc, setRuc] = useState("");
+  const [proveedorNombre, setNombre] = useState("");
+  const [comprobanteSerie, setSerie] = useState("");
+  const [fechaEmisionCompra, setFechaCompra] = useState("");
   const [tipoComprobante, setTipoComp] = useState("01");
   const [sustentoCode, setSustento] = useState("01");
-  const [cuentaContable, setCuenta] = useState("5.1.01 - Gasto Arriendo Oficina");
+  const [cuentaContable, setCuenta] = useState("");
 
-  const [subtotalIva15, setSub15] = useState(1200);
-  const [subtotalIva0, setSub0] = useState(200);
-  const [valorIvaCompra, setIvaCompra] = useState(180);
+  const [subtotalIva15, setSub15] = useState(0);
+  const [subtotalIva0, setSub0] = useState(0);
+  const [valorIvaCompra, setIvaCompra] = useState(0);
   const totalFacturaCompra = useMemo(()=> subtotalIva15 + subtotalIva0 + valorIvaCompra, [subtotalIva15, subtotalIva0, valorIvaCompra]);
 
   // PARTE B: RETENCION 07
   const [emitirRetencion, setEmitir] = useState(true);
-  const [secuencialRet, setSecRet] = useState("001-001-000000001");
-  const [periodoFiscal, setPeriodo] = useState("10/2026");
-  const [detalles, setDetalles] = useState<DetalleRet[]>([
-    { id:"1", tipoImpuesto:'1', codigoRetencionSRI:"312", descripcion:"312 - Bienes 1.75%", baseImponibleCalculada:1400, porcentajeAplicado:1.75, valorRetenido:24.50 },
-  ]);
+  const [secuencialRet, setSecRet] = useState("");
+  const [periodoFiscal, setPeriodo] = useState("");
+  const [detalles, setDetalles] = useState<DetalleRet[]>([]);
 
   // C. CONEXION COMPRAS RECIBIDAS + AUTOCOMPLETE CARTERA
   useEffect(()=>{
