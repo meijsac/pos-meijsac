@@ -2,6 +2,9 @@ import { NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
 import { usuarioConEmpresaDesdeRequest } from "@/lib/empresa-sesion"
 
+export const maxDuration = 60
+const LOTE_MAX = 40
+
 function datos(body: any) {
   const codigo = String(body?.codigo || "").trim()
   const nombre = String(body?.nombre || "").trim()
@@ -16,18 +19,6 @@ function datos(body: any) {
     stockMinimo: Number(body?.stockMinimo) || 5,
     ficha: body?.ficha && typeof body.ficha === "object" ? body.ficha : {},
   }
-}
-
-async function guardarUno(empresaId: string, body: any) {
-  const data = datos(body)
-  const id = String(body?.id || "")
-  if (id) {
-    const propio = await prisma.producto.findFirst({ where: { id, empresaId } })
-    if (propio) return prisma.producto.update({ where: { id }, data })
-  }
-  const existe = await prisma.producto.findFirst({ where: { empresaId, codigo: data.codigo } })
-  if (existe) return prisma.producto.update({ where: { id: existe.id }, data })
-  return prisma.producto.create({ data: { ...data, empresaId } })
 }
 
 export async function GET(req: Request) {
@@ -76,10 +67,33 @@ export async function POST(req: Request) {
   const body = await req.json().catch(() => ({}))
   const lista = Array.isArray(body?.productos) ? body.productos : [body]
   if (!lista.length) return NextResponse.json({ error: "No hay productos para guardar" }, { status: 400 })
+  if (lista.length > LOTE_MAX) return NextResponse.json({ error: `Envía hasta ${LOTE_MAX} productos por vez` }, { status: 400 })
   try {
-    const guardados = []
-    for (const item of lista) guardados.push(await guardarUno(sesion.empresa.id, item))
-    return NextResponse.json({ ok: true, guardados: guardados.length, productos: guardados })
+    const porCodigo = new Map<string, ReturnType<typeof datos>>()
+    const errores: string[] = []
+    for (const item of lista) {
+      try {
+        const data = datos(item)
+        porCodigo.set(data.codigo, data)
+      } catch (e: any) {
+        errores.push(e?.message || "Fila inválida")
+      }
+    }
+    const unicos = [...porCodigo.values()]
+    if (!unicos.length) return NextResponse.json({ error: errores[0] || "No hay productos para guardar", errores }, { status: 400 })
+    const ya = await prisma.producto.findMany({
+      where: { empresaId: sesion.empresa.id, codigo: { in: unicos.map((d) => d.codigo) } },
+      select: { id: true, codigo: true },
+    })
+    const ids = new Map(ya.map((p) => [p.codigo, p.id]))
+    const nuevos = unicos.filter((d) => d.codigo && !ids.has(d.codigo)).map((d) => ({ ...d, empresaId: sesion.empresa.id }))
+    if (nuevos.length) await prisma.producto.createMany({ data: nuevos })
+    for (const data of unicos) {
+      const id = ids.get(data.codigo)
+      if (!id) continue
+      await prisma.producto.update({ where: { id }, data })
+    }
+    return NextResponse.json({ ok: true, guardados: unicos.length, errores })
   } catch (e: any) {
     return NextResponse.json({ error: e?.message || "No se pudo guardar" }, { status: 400 })
   }

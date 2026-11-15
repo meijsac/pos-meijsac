@@ -163,19 +163,42 @@ export default function ProductosModule() {
     setGuardando(true)
     setAviso("")
     setErrorGuardado("")
+    const payloads = lista.map(aPayload)
+    const tamano = 40
+    let guardados = 0
+    const fallos: string[] = []
     try {
-      const res = await fetch("/api/productos", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ productos: lista.map(aPayload) }),
-      })
-      const data = await res.json().catch(() => ({}))
-      if (!res.ok) throw new Error(data.error || "No se pudo guardar")
+      for (let i = 0; i < payloads.length; i += tamano) {
+        const lote = payloads.slice(i, i + tamano)
+        const hasta = Math.min(i + lote.length, payloads.length)
+        setAviso(`Guardando ${hasta} de ${payloads.length}`)
+        const ctrl = new AbortController()
+        const timer = window.setTimeout(() => ctrl.abort(), 20000)
+        let res: Response
+        try {
+          res = await fetch("/api/productos", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            signal: ctrl.signal,
+            body: JSON.stringify({ productos: lote }),
+          })
+        } catch {
+          throw new Error(`Se cortó en el producto ${i + 1}. Lo ya guardado quedó. Vuelve a pulsar guardar.`)
+        } finally {
+          window.clearTimeout(timer)
+        }
+        const data = await res.json().catch(() => ({}))
+        if (!res.ok) throw new Error(data.error || `No se pudo guardar a partir del producto ${i + 1}`)
+        guardados += Number(data.guardados || 0)
+        if (Array.isArray(data.errores)) fallos.push(...data.errores.map(String))
+      }
       await recargar()
-      setAviso(`Se guardaron ${data.guardados ?? lista.length} productos correctamente`)
-      return true
+      setAviso(`Se guardaron ${guardados} productos`)
+      if (fallos.length) setErrorGuardado(fallos.slice(0, 8).join(" · "))
+      return fallos.length === 0
     } catch (e: any) {
       setErrorGuardado(e?.message || "No se pudo guardar")
+      await recargar().catch(() => {})
       return false
     } finally {
       setGuardando(false)
@@ -718,7 +741,7 @@ export default function ProductosModule() {
                 const ok = await guardarEnBase(pendientes)
                 if (ok) setPendientes([])
               }} className="w-full mb-3 bg-green-500 text-black font-black text-sm py-4 rounded-xl disabled:opacity-50">
-                {guardando ? "GUARDANDO..." : `GUARDAR PRODUCTOS (${pendientes.length})`}
+                {guardando ? (aviso || "GUARDANDO...") : `GUARDAR PRODUCTOS (${pendientes.length})`}
               </button>
             )}
             {aviso && <p className="mb-2 text-sm font-bold text-green-400">{aviso}</p>}
