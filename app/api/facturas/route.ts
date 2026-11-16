@@ -37,7 +37,7 @@ export async function POST(req: Request) {
     delete body.claveFirma
     const ambientePrevio = ambienteDeEmpresa(sesion.empresa)
     if (body?.estadoSRI !== "BORRADOR") {
-      const punto = puntoActivoFactura(datosRegistroDe(sesion.empresa.datosRegistro).secuenciales, ambientePrevio)
+      const punto = puntoActivoFactura(datosRegistroDe(sesion.empresa.datosRegistro).secuenciales, ambientePrevio).punto
       if (!punto.serie) return NextResponse.json({ error: "Configura el punto de emisión y guarda. No hay un secuencial fijo." }, { status: 400 })
       const serie = punto.serie
       const previas = await prisma.facturaEmitida.findMany({
