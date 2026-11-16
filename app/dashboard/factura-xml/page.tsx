@@ -1428,6 +1428,22 @@ const total = subtotalSin + iva15 + ivaDiferenciado + valorICE + valorIRBPNR + p
 {errorLector && <p className="mt-2 text-sm font-bold text-red-400">{errorLector}</p>}
 {productos.length === 0 && <p className="mt-2 text-sm font-bold text-red-400">No hay productos cargados - revisar API</p>}
 
+        {items.length > 0 && (
+          <div className="grid grid-cols-12 gap-1 mt-3 px-2 text-[8px] font-bold leading-tight text-white/50">
+            <div className="col-span-1">Código</div>
+            <div className="col-span-2">Producto</div>
+            <div className="col-span-1">Detalle</div>
+            <div className="col-span-1 text-center">Cantidad</div>
+            <div className="col-span-1">Precio</div>
+            <div className="col-span-1">Desc. %</div>
+            <div className="col-span-1">Desc. $</div>
+            <div className="col-span-1">Tarifa IVA</div>
+            <div className="col-span-1 text-right">Valor IVA</div>
+            <div className="col-span-1 text-right">Subtotal</div>
+            <div className="col-span-1 text-center">Quitar</div>
+          </div>
+        )}
+
         {items.map((it,i)=>{
           const claveCampo = (nombre: string) => `${i}:${nombre}`
           const visible = (nombre: string, numero: number) => textoFila?.key === claveCampo(nombre) ? textoFila.texto : String(Number.isFinite(numero) ? numero : 0)
