@@ -1,6 +1,10 @@
 import nodemailer from "nodemailer"
+import { prisma } from "@/lib/prisma"
+import { datosRegistroDe } from "@/lib/empresa-sesion"
 import { leerComprobanteArchivado } from "@/lib/security/storage"
 import { facturaPorClave } from "@/lib/sri/buscar-comprobante"
+
+export const FALTA_CORREO_EMPRESA = "Configura el correo de tu empresa en Configuración - Identidad"
 
 const LEYENDA = "Este documento es un comprobante electrónico autorizado por el SRI. Para verificar su autenticidad ingrese a www.sri.gob.ec. Este correo fue generado automáticamente, por favor no responder."
 const PIE = "Enviado automáticamente por el sistema de facturación electrónica MEIJSAC."
@@ -64,41 +68,18 @@ function llaveResend() {
   return ""
 }
 
-async function dominiosVerificados(llave: string) {
-  const respuesta = await fetch("https://api.resend.com/domains", {
-    headers: { Authorization: `Bearer ${llave}` },
+async function correoIdentidad(empresaId: string) {
+  if (!empresaId) return { correo: "", nombre: "" }
+  const empresa = await prisma.empresa.findUnique({
+    where: { id: empresaId },
+    select: { id: true, email: true, razonSocial: true, nombreComercial: true, datosRegistro: true },
   })
-  const data = await respuesta.json().catch(() => ({}))
-  const lista = Array.isArray(data?.data) ? data.data : []
-  return lista
-    .filter((fila: { status?: string; name?: string }) => String(fila?.status || "").toLowerCase() === "verified" && fila?.name)
-    .map((fila: { name?: string }) => String(fila.name).toLowerCase())
-}
-
-function esCorreoPersonal(correo: string) {
-  const dominio = correo.split("@")[1]?.toLowerCase() || ""
-  return ["gmail.com", "googlemail.com", "hotmail.com", "outlook.com", "live.com", "yahoo.com", "yahoo.es", "icloud.com", "me.com"].includes(dominio)
-}
-
-async function remitente(empresa: string, llave: string) {
-  const nombre = nombreRemitente(empresa)
-  const explicito = String(process.env.RESEND_FROM || process.env.EMAIL_FROM || process.env.SMTP_FROM || "").trim()
-  const correoExplicito = correosDe(explicito)[0]
-  const dominioExplicito = correoExplicito?.split("@")[1]?.toLowerCase() || ""
-  if (!llave) {
-    if (correoExplicito && !esCorreoPersonal(correoExplicito)) return `${nombre} <${correoExplicito}>`
-    const buzon = correosDe(process.env.SMTP_USER)[0]
-    return buzon ? `${nombre} <${buzon}>` : ""
+  if (!empresa || empresa.id !== empresaId) return { correo: "", nombre: "" }
+  const extra = datosRegistroDe(empresa.datosRegistro)
+  return {
+    correo: correosDe(empresa.email || extra.email || extra.correo)[0] || "",
+    nombre: String(empresa.nombreComercial || empresa.razonSocial || extra.razonSocial || "").trim(),
   }
-  const permitidos = await dominiosVerificados(llave).catch(() => [])
-  const propio = permitidos.find((dominio) => dominio === "meijsac.com" || dominio.endsWith(".meijsac.com"))
-  if (propio) {
-    if (correoExplicito && dominioExplicito === propio) return `${nombre} <${correoExplicito}>`
-    return `${nombre} <facturacion@${propio}>`
-  }
-  if (correoExplicito && permitidos.includes(dominioExplicito)) return `${nombre} <${correoExplicito}>`
-  if (permitidos[0]) return `${nombre} <facturacion@${permitidos[0]}>`
-  return ""
 }
 
 function marco(datos: { empresa: string; ruc: string; direccion: string; telefono: string; logo: string; cuerpo: string }) {
@@ -382,9 +363,11 @@ export async function enviarCorreosFactura(body: Record<string, any>, xmlAutoriz
   const motivo = String(body.mensajeSri || "sin motivo informado por el SRI")
   const autorizacion = String(body.numeroAutorizacion || "")
   const hora = cuando()
-  const emisorCorreo = correosDe(emisor.email || emisor.correo)[0] || ""
+  const identidad = await correoIdentidad(empresaId)
+  const emisorCorreo = identidad.correo
+  if (!emisorCorreo) return FALTA_CORREO_EMPRESA
   const llave = llaveResend()
-  const from = await remitente(empresa, llave)
+  const from = `${nombreRemitente(identidad.nombre || empresa)} <${emisorCorreo}>`
   const clave = String(body.claveAcceso || "").replace(/\D/g, "")
   const propia = empresaId && clave.length === 49 ? await facturaPorClave(empresaId, clave).catch(() => null) : null
   const guardada = propia && propia.payload && typeof propia.payload === "object" ? propia.payload as Record<string, any> : null
@@ -409,11 +392,9 @@ export async function enviarCorreosFactura(body: Record<string, any>, xmlAutoriz
   const mail = llave ? null : transporte()
   const fallaBase = !llave && !mail
     ? "falta la clave de Resend"
-    : !from
-      ? "Resend no tiene un dominio verificado para el remitente"
-      : !xml || !pdf?.length
-        ? "faltan el XML o el PDF"
-        : ""
+    : !xml || !pdf?.length
+      ? "faltan el XML o el PDF"
+      : ""
   const fallos: string[] = []
   const adjuntosCorreo = adjuntos as { filename: string; content: string | Buffer; contentType: string }[]
   async function mandar(para: string, asunto: string, mensaje: { texto: string; html: string }) {
