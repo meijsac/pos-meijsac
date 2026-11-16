@@ -722,6 +722,7 @@ export default function ProductosModule() {
 
           <div className="bg-[#0f172a]/50 border border-white/10 rounded-xl p-3 flex-1 flex flex-col min-h-0">
             <div className="flex gap-2 items-center mb-3 flex-wrap">
+              <a href="/dashboard/factura-xml" className="bg-[#00f5d4] text-black px-3 py-2 rounded-lg text-[10px] font-black">Facturador</a>
               <div className="relative flex-1">
                 <input value={busqueda} onChange={(e)=>setBusqueda(e.target.value)} placeholder="Buscar artículo por nombre o código..." className="w-full bg-black border border-white/10 rounded-lg px-4 py-2 pl-8 text-[11px] text-white focus:border-[#00f5d4] outline-none" />
                 <span className="absolute left-3 top-2.5 text-[10px] opacity-50">🔍</span>
