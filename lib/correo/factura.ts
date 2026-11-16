@@ -225,13 +225,13 @@ const WIN: Record<string, string> = {
 }
 
 function pdfTexto(valor: unknown) {
-  return String(valor ?? "").normalize("NFC").split("").map((char) => {
+  return String(valor ?? "").normalize("NFC").slice(0, 90).split("").map((char) => {
     if (WIN[char]) return WIN[char]
     if (char === "\\") return "\\\\"
     if (char === "(" || char === ")") return `\\${char}`
     const code = char.charCodeAt(0)
     return code >= 32 && code <= 126 ? char : " "
-  }).join("").slice(0, 90)
+  }).join("")
 }
 
 function dineroPdf(valor: unknown) {
@@ -393,7 +393,7 @@ function pdfIgualAlRide(body: Record<string, any>) {
   const objetos = [
     "<< /Type /Catalog /Pages 2 0 R >>",
     "<< /Type /Pages /Count 1 /Kids [3 0 R] >>",
-    "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Contents 4 0 R /Resources << /Font << /F1 << /Type /Font /Subtype /Type1 /BaseFont /Helvetica >> /F2 << /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold >> >> >> >>",
+    "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Contents 4 0 R /Resources << /Font << /F1 << /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >> /F2 << /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold /Encoding /WinAnsiEncoding >> >> >> >>",
     `<< /Length ${Buffer.byteLength(stream)} >>\nstream\n${stream}\nendstream`,
   ]
   let pdf = "%PDF-1.4\n"
