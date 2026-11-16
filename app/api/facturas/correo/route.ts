@@ -2,7 +2,7 @@ import { NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
 import { usuarioConEmpresaDesdeRequest } from "@/lib/empresa-sesion"
 import { puede } from "@/lib/seguridad"
-import { FALTA_CORREO_EMPRESA, enviarCorreosFactura } from "@/lib/correo/factura"
+import { FALTA_CORREO_EMPRESA, FALTA_DOMINIO_ENVIO, enviarCorreosFactura } from "@/lib/correo/factura"
 
 export const dynamic = "force-dynamic"
 export const maxDuration = 60
@@ -21,7 +21,7 @@ export async function POST(req: Request) {
   const xml = String(guardado || "").startsWith("<") ? String(guardado) : String(payload.xmlContent || "")
   const correoRegistro = await enviarCorreosFactura(payload, xml, sesion.empresa.id).catch(() => "")
   if (!correoRegistro) return NextResponse.json({ error: "Esta factura todavía no tiene una respuesta del SRI para enviar el correo" }, { status: 409 })
-  if (correoRegistro === FALTA_CORREO_EMPRESA) return NextResponse.json({ error: correoRegistro }, { status: 400 })
+  if (correoRegistro === FALTA_CORREO_EMPRESA || correoRegistro === FALTA_DOMINIO_ENVIO) return NextResponse.json({ error: correoRegistro }, { status: 400 })
   payload.correoRegistro = correoRegistro
   await prisma.facturaEmitida.update({ where: { id }, data: { payload } })
   return NextResponse.json({ correoRegistro })

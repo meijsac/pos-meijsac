@@ -5,6 +5,7 @@ import { leerComprobanteArchivado } from "@/lib/security/storage"
 import { facturaPorClave } from "@/lib/sri/buscar-comprobante"
 
 export const FALTA_CORREO_EMPRESA = "Configura el correo de tu empresa en Configuración - Identidad"
+export const FALTA_DOMINIO_ENVIO = "Verifica el dominio de envío en Resend. Un correo de Gmail no puede ser el remitente."
 
 const LEYENDA = "Este documento es un comprobante electrónico autorizado por el SRI. Para verificar su autenticidad ingrese a www.sri.gob.ec. Este correo fue generado automáticamente, por favor no responder."
 const PIE = "Enviado automáticamente por el sistema de facturación electrónica MEIJSAC."
@@ -66,6 +67,30 @@ function llaveResend() {
   const pass = String(process.env.SMTP_PASS || "").trim()
   if (/resend/i.test(host) && pass) return pass
   return ""
+}
+
+async function dominiosVerificados(llave: string) {
+  const respuesta = await fetch("https://api.resend.com/domains", {
+    headers: { Authorization: `Bearer ${llave}` },
+  })
+  const data = await respuesta.json().catch(() => ({}))
+  const lista = Array.isArray(data?.data) ? data.data : []
+  return lista
+    .filter((fila: { status?: string; name?: string }) => String(fila?.status || "").toLowerCase() === "verified" && fila?.name)
+    .map((fila: { name?: string }) => String(fila.name).toLowerCase())
+}
+
+async function remitenteVerificado(llave: string, nombreEmpresa: string, correoEmpresa: string) {
+  const nombre = nombreRemitente(nombreEmpresa)
+  const permitidos = await dominiosVerificados(llave).catch(() => [] as string[])
+  const dominioEmpresa = correoEmpresa.split("@")[1]?.toLowerCase() || ""
+  if (dominioEmpresa && permitidos.includes(dominioEmpresa)) return `${nombre} <${correoEmpresa}>`
+  const explicito = correosDe(process.env.RESEND_FROM || process.env.EMAIL_FROM || "")[0]
+  const dominioExplicito = explicito?.split("@")[1]?.toLowerCase() || ""
+  if (explicito && permitidos.includes(dominioExplicito)) return `${nombre} <${explicito}>`
+  const propio = permitidos.find((dominio) => dominio === "meijsac.com" || dominio.endsWith(".meijsac.com")) || permitidos[0]
+  if (!propio) return ""
+  return `${nombre} <facturas@${propio}>`
 }
 
 async function correoIdentidad(empresaId: string) {
@@ -367,7 +392,8 @@ export async function enviarCorreosFactura(body: Record<string, any>, xmlAutoriz
   const emisorCorreo = identidad.correo
   if (!emisorCorreo) return FALTA_CORREO_EMPRESA
   const llave = llaveResend()
-  const from = `${nombreRemitente(identidad.nombre || empresa)} <${emisorCorreo}>`
+  const from = llave ? await remitenteVerificado(llave, identidad.nombre || empresa, emisorCorreo) : `${nombreRemitente(identidad.nombre || empresa)} <${emisorCorreo}>`
+  if (llave && !from) return FALTA_DOMINIO_ENVIO
   const clave = String(body.claveAcceso || "").replace(/\D/g, "")
   const propia = empresaId && clave.length === 49 ? await facturaPorClave(empresaId, clave).catch(() => null) : null
   const guardada = propia && propia.payload && typeof propia.payload === "object" ? propia.payload as Record<string, any> : null
