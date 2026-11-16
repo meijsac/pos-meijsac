@@ -137,68 +137,33 @@ export default function FacturadorXMLReal(){
   const puedeDescuento = !permisos || permisos.descuento
   const [puntoEmision, setPuntoEmision] = useState({ ambiente: "1" as "1" | "2", nombre: "PRUEBAS", estab: "", pto: "", serie: "", secuencial: "", ultimo: "", indice: -1 })
   const cargarPunto = async (estabElegido?: string) => {
-    let cfg: any = {}
-    try { cfg = JSON.parse(localStorage.getItem("meijsac_config_pro") || "{}") } catch { cfg = {} }
-    let empresaLocal: any = {}
-    try { empresaLocal = JSON.parse(localStorage.getItem("meijsac_empresa") || "{}") } catch { empresaLocal = {} }
-    const conFactura = (lista: unknown) => puntoActivoFactura(lista, "").punto.serie ? lista : null
-    const guardada = conFactura(cfg.secuenciales) || conFactura(empresaLocal.secuenciales)
-    let lista: any[] = guardada ? (guardada as any[]).map((s: any) => ({ ...s })) : []
-    const aplicar = (filas: any[]) => {
-      cfg.secuenciales = filas
-      try {
-        localStorage.setItem("meijsac_config_pro", JSON.stringify(cfg))
-        empresaLocal.secuenciales = filas
-        localStorage.setItem("meijsac_empresa", JSON.stringify(empresaLocal))
-      } catch {}
-    }
-    if (guardada) aplicar(lista)
-    const pintar = (filas: any[]) => {
-      if (!filas.length) return
-      const leido = puntoActivoFactura(filas, cfg.ambiente, estabElegido)
-      const codigo = String(cfg.ambiente || "").toUpperCase().includes("PROD") || String(cfg.ambiente) === "2" ? "2" : "1"
-      const usados = new Set<string>()
-      for (const clave of ["meijsac_comprobantes_sri", "meijsac_comprobantes_emitidos", "meijsac_enviados_sri"]) {
-        try {
-          const docs = JSON.parse(localStorage.getItem(clave) || "[]")
-          for (const d of docs) {
-            const claveAcceso = String(d?.claveAcceso || "")
-            const envio = String(d?.envioSri || "").toUpperCase()
-            const mismo = claveAcceso.length === 49 ? claveAcceso[23] === codigo : envio.includes("PROD") ? codigo === "2" : envio.includes("PRUEB") ? codigo === "1" : true
-            if (!mismo) continue
-            const partes = String(d?.secuencial || "").split("-")
-            const est = partes.length >= 3 ? `${partes[0]}-${partes[1]}` : String(d?.establecimiento || "")
-            if (est !== leido.punto.serie) continue
-            const n = (partes.length >= 3 ? partes[2] : String(d?.secuencial || "")).replace(/\D/g, "").padStart(9, "0").slice(-9)
-            if (n && n !== "000000000") usados.add(n)
-          }
-        } catch {}
-      }
-      const guardado = String(leido.punto.ultimo || "").replace(/\D/g, "").padStart(9, "0").slice(-9)
-      const libre = siguienteSecuencial(guardado && guardado !== "000000000" ? guardado : "0", usados)
-      console.log("[secuencial] facturador", { serie: leido.punto.serie, ultimoGuardado: guardado, siguiente: libre })
-      setPuntoEmision({
-        ambiente: codigo as "1" | "2",
-        nombre: codigo === "2" ? "PRODUCCIÓN" : "PRUEBAS",
-        estab: leido.punto.estab,
-        pto: leido.punto.pto,
-        serie: leido.punto.serie,
-        secuencial: libre,
-        ultimo: guardado,
-        indice: leido.punto.indice,
-      })
-    }
-    pintar(lista)
+    let filas: any[] = []
+    let ambiente = "1"
     try {
-      const res = await fetch("/api/empresa/mia", { credentials: "same-origin", cache: "no-store" })
+      const res = await fetch("/api/configuracion", { credentials: "same-origin", cache: "no-store" })
       const data = await res.json().catch(() => ({}))
-      const remotas = Array.isArray(data?.empresa?.secuenciales) ? data.empresa.secuenciales : []
-      if (conFactura(remotas)) {
-        lista = remotas.map((s: any) => ({ ...s }))
-        aplicar(lista)
-        pintar(lista)
-      }
+      if (Array.isArray(data?.secuenciales)) filas = data.secuenciales
+      ambiente = String(data?.ambiente || "1")
     } catch {}
+    const codigo = String(ambiente).toUpperCase().includes("PROD") || String(ambiente) === "2" ? "2" : "1"
+    const leido = puntoActivoFactura(filas, codigo, estabElegido)
+    if (!leido.punto.serie) {
+      setPuntoEmision({ ambiente: codigo as "1" | "2", nombre: codigo === "2" ? "PRODUCCIÓN" : "PRUEBAS", estab: "", pto: "", serie: "", secuencial: "", ultimo: "", indice: -1 })
+      return
+    }
+    const guardado = String(leido.punto.ultimo || "").replace(/\D/g, "").padStart(9, "0").slice(-9)
+    const libre = siguienteSecuencial(guardado && guardado !== "000000000" ? guardado : "0", new Set())
+    console.log("[secuencial] facturador", { serie: leido.punto.serie, ultimoGuardado: guardado, siguiente: libre })
+    setPuntoEmision({
+      ambiente: codigo as "1" | "2",
+      nombre: codigo === "2" ? "PRODUCCIÓN" : "PRUEBAS",
+      estab: leido.punto.estab,
+      pto: leido.punto.pto,
+      serie: leido.punto.serie,
+      secuencial: libre,
+      ultimo: guardado,
+      indice: leido.punto.indice,
+    })
   }
   const guardarSecuencialUsado = async (serie: string, usado: string) => {
     if (!serie || !usado) return ""

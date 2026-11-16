@@ -5,7 +5,7 @@ import { codigoAmbiente } from "@/lib/sri/ambiente"
 import { asegurarPunto } from "@/lib/pos/puntos"
 import { permisosDeUsuario } from "@/lib/permisos-pos"
 import { puede } from "@/lib/seguridad"
-import { aplicarPuntoGuardado } from "@/lib/sri/punto-emision"
+import { fusionarSecuenciales } from "@/lib/sri/punto-emision"
 
 async function guardarPuntos(empresaId: string, secuenciales: { estab: string; pto: string }[] | undefined, sucursales: unknown) {
   const lista = Array.isArray(secuenciales) ? secuenciales : []
@@ -39,13 +39,13 @@ function limpiarSecuenciales(lista: unknown) {
 
 export const dynamic = "force-dynamic"
 
-export async function GET() {
+export async function GET(request: Request) {
+  const sesion = await usuarioConEmpresaDesdeRequest(request)
+  if ("error" in sesion) return NextResponse.json({ error: sesion.error }, { status: sesion.status })
+  const extra = datosRegistroDe(sesion.empresa.datosRegistro)
   return NextResponse.json({
-    ruc: "",
-    razonSocial: "",
-    nombreComercial: "",
-    regimen: "",
-    obligadoContabilidad: "",
+    secuenciales: Array.isArray(extra.secuenciales) ? extra.secuenciales : [],
+    ambiente: String(sesion.empresa.ambienteSri || extra.ambienteCodigo || extra.ambiente || "1"),
   })
 }
 
@@ -56,25 +56,25 @@ export async function POST(request: Request) {
   if (datos?.firma && typeof datos.firma === "object") datos.firma.clave = ""
   const empresa = sesion.empresa
   const prev = datosRegistroDe(empresa.datosRegistro)
-  const ajustados = Array.isArray(datos.secuenciales)
-    ? aplicarPuntoGuardado(datos.secuenciales, prev.secuenciales, datos.sucursales, prev.sucursales)
-    : undefined
-  const secuenciales = limpiarSecuenciales(ajustados)
-  const listaGuardada = secuenciales && secuenciales.length ? secuenciales : undefined
-  if (Array.isArray(datos.secuenciales)) {
+  const envioLista = Array.isArray(datos.secuenciales)
+  const fusion = fusionarSecuenciales(prev.secuenciales, envioLista ? datos.secuenciales : prev.secuenciales, datos.sucursales ?? prev.sucursales)
+  const listaGuardada = limpiarSecuenciales(fusion) || []
+  if (envioLista) {
     console.log("[secuencial] recibido", datos.secuenciales.map((s: any) => ({ estab: s?.estab, pto: s?.pto, ultimo: s?.ultimo, editado: s?.puntoEditado === true })))
-    console.log("[secuencial] guardado", (listaGuardada || prev.secuenciales || []).map((s: any) => ({ estab: s?.estab, pto: s?.pto, ultimo: s?.ultimo, pruebas: s?.porAmbiente?.["1"], produccion: s?.porAmbiente?.["2"] })))
   }
   if (sesion.usuario.rol !== "ADMIN") {
     const permisos = permisosDeUsuario(sesion.usuario)
-    if (permisos && !permisos.modificarSecuenciales) return NextResponse.json({ ok: true, secuenciales: prev.secuenciales || [] })
-    if (!puede(sesion.usuario.rol, "facturar") || !listaGuardada) return NextResponse.json({ error: "Solo el administrador cambia la empresa" }, { status: 403 })
+    if (permisos && !permisos.modificarSecuenciales) return NextResponse.json({ error: "No tienes permiso para cambiar el secuencial" }, { status: 403 })
+    if (!puede(sesion.usuario.rol, "facturar")) return NextResponse.json({ error: "Solo el administrador cambia la empresa" }, { status: 403 })
     await prisma.empresa.update({
       where: { id: empresa.id },
       data: { datosRegistro: { ...prev, secuenciales: listaGuardada } as any },
     })
     await guardarPuntos(empresa.id, listaGuardada, undefined)
-    return NextResponse.json({ ok: true, secuenciales: listaGuardada })
+    const fresca = await prisma.empresa.findUnique({ where: { id: empresa.id }, select: { datosRegistro: true } })
+    const quedo = datosRegistroDe(fresca?.datosRegistro).secuenciales
+    console.log("[secuencial] guardado", quedo)
+    return NextResponse.json({ ok: true, secuenciales: Array.isArray(quedo) ? quedo : [] })
   }
   const ambienteSri = codigoAmbiente(datos.ambiente ?? prev.ambiente ?? empresa.ambienteSri)
   await prisma.empresa.update({
@@ -101,10 +101,13 @@ export async function POST(request: Request) {
         ciudad: datos.ciudad ?? prev.ciudad ?? "",
         actividad: datos.actividad ?? prev.actividad ?? "",
         modo_negocio: datos.modo_negocio ?? prev.modo_negocio ?? "",
-        ...(listaGuardada ? { secuenciales: listaGuardada } : {}),
+        secuenciales: listaGuardada,
       } as any,
     },
   })
-  await guardarPuntos(empresa.id, listaGuardada || prev.secuenciales, datos.sucursales)
-  return NextResponse.json({ ok: true, secuenciales: listaGuardada || prev.secuenciales || [] })
+  await guardarPuntos(empresa.id, listaGuardada, datos.sucursales)
+  const fresca = await prisma.empresa.findUnique({ where: { id: empresa.id }, select: { datosRegistro: true } })
+  const quedo = datosRegistroDe(fresca?.datosRegistro).secuenciales
+  console.log("[secuencial] guardado", Array.isArray(quedo) ? quedo.map((s: any) => ({ estab: s?.estab, pto: s?.pto, ultimo: s?.ultimo })) : [])
+  return NextResponse.json({ ok: true, secuenciales: Array.isArray(quedo) ? quedo : [] })
 }

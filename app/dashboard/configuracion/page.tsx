@@ -362,6 +362,9 @@ export default function ConfiguracionAvanzadaSRI() {
 
         const dataGuardada = await res.json().catch(() => ({}))
         if (!res.ok) throw new Error(dataGuardada.error || `Error ${res.status}`);
+        const lectura = await fetch("/api/configuracion", { credentials: "same-origin", cache: "no-store" })
+        const leido = await lectura.json().catch(() => ({}))
+        if (!lectura.ok) throw new Error(leido.error || "No se pudo leer el secuencial guardado")
         if (equipoListo.current && Array.isArray(payload.usuarios)) {
           const equipo = await fetch("/api/usuarios/equipo", {
             method: "POST",
@@ -373,8 +376,10 @@ export default function ConfiguracionAvanzadaSRI() {
           if (!equipo.ok) throw new Error(dataEquipo.error || "No se pudo guardar el equipo")
           if (Array.isArray(dataEquipo.usuarios)) payload.usuarios = dataEquipo.usuarios
         }
-        const secuencialesGuardados = Array.isArray(dataGuardada.secuenciales) ? dataGuardada.secuenciales : cuerpo.secuenciales
-        console.log("[secuencial] guardado", (Array.isArray(secuencialesGuardados) ? secuencialesGuardados : []).map((s: any) => ({ estab: s?.estab, pto: s?.pto, ultimo: s?.ultimo })))
+        const secuencialesGuardados = Array.isArray(leido.secuenciales) ? leido.secuenciales : []
+        const puntosGuardados = secuencialesGuardados.filter((s: any) => String(s?.codigo || "01") === "01" || String(s?.tipo || "").toUpperCase().includes("FACTURA"))
+        if ((cuerpo.secuenciales || []).length > 0 && puntosGuardados.length === 0) throw new Error("El punto de emisión no quedó guardado en la base")
+        console.log("[secuencial] leido de la base", puntosGuardados.map((s: any) => ({ estab: s?.estab, pto: s?.pto, ultimo: s?.ultimo })))
         try {
           localStorage.setItem("meijsac_config_pro", JSON.stringify({ ...payload, secuenciales: secuencialesGuardados, logoPreview: undefined }, (clave, valor) => clave === "clave" || clave === "password" ? "" : valor))
           const mapa: Record<string, string> = {}
@@ -390,7 +395,8 @@ export default function ConfiguracionAvanzadaSRI() {
           localStorage.setItem("meijsac_empresa", JSON.stringify(empresaLocal))
         } catch {}
         const empresaPendiente = cargarEmpresaSesion()
-        if (!logoGuardado) alert("Configuración guardada")
+        const textoPuntos = puntosGuardados.map((s: any) => `${s.estab}-${s.pto} último ${s.ultimo}`).join(", ")
+        if (!logoGuardado) alert(textoPuntos ? `Guardado en la base: ${textoPuntos}` : "Configuración guardada")
         const empresa = await empresaPendiente
         const logo = empresa.logo_url || empresa.logoUrl || empresa.marca_ride || payload.logo_url || ""
         setCfg((p: any) => ({ ...p, ...payload, secuenciales: secuencialesGuardados, firma: { ...p?.firma, ...payload.firma, clave: claveFirma || p?.firma?.clave || "" }, logoFile: null, logo_url: logo, logoUrl: logo, marca_ride: logo, logoPreview: logo || p?.logoPreview || "" }))
@@ -497,11 +503,9 @@ base.sucursales = datosReales.sucursales || base.sucursales || [];
           base.logoPreview = logoGuardado;
         }
         try {
-          const mia = await fetch("/api/empresa/mia", { credentials: "same-origin", cache: "no-store" })
-          const miaData = mia.ok ? await mia.json() : null
-          if (Array.isArray(miaData?.empresa?.secuenciales) && miaData.empresa.secuenciales.length) {
-            base.secuenciales = miaData.empresa.secuenciales
-          }
+          const lectura = await fetch("/api/configuracion", { credentials: "same-origin", cache: "no-store" })
+          const leido = lectura.ok ? await lectura.json() : null
+          if (Array.isArray(leido?.secuenciales)) base.secuenciales = leido.secuenciales
         } catch {}
         if (!Array.isArray(base.secuenciales)) base.secuenciales = []
         try {

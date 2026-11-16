@@ -91,6 +91,11 @@ async function remitente(empresa: string, llave: string) {
     return buzon ? `${nombre} <${buzon}>` : ""
   }
   const permitidos = await dominiosVerificados(llave).catch(() => [])
+  const propio = permitidos.find((dominio) => dominio === "meijsac.com" || dominio.endsWith(".meijsac.com"))
+  if (propio) {
+    if (correoExplicito && dominioExplicito === propio) return `${nombre} <${correoExplicito}>`
+    return `${nombre} <facturacion@${propio}>`
+  }
   if (correoExplicito && permitidos.includes(dominioExplicito)) return `${nombre} <${correoExplicito}>`
   if (permitidos[0]) return `${nombre} <facturacion@${permitidos[0]}>`
   return ""

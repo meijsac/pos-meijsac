@@ -110,6 +110,93 @@ export function aplicarPuntoGuardado(lista: unknown, prevLista: unknown, sucursa
   return next
 }
 
+function clavePunto(fila: any) {
+  return `${tres(fila?.estab)}-${tres(fila?.pto)}-${codigoDocumento(fila)}`
+}
+
+export function fusionarSecuenciales(previas: unknown, entrantes: unknown, sucursales?: unknown) {
+  const mapa = new Map<string, any>()
+  for (const fila of Array.isArray(previas) ? previas : []) {
+    const estab = tres(fila?.estab)
+    const pto = tres(fila?.pto)
+    if (estab === "000" || pto === "000") continue
+    const copia = { ...fila, estab, pto, codigo: codigoDocumento(fila) }
+    mapa.set(clavePunto(copia), copia)
+  }
+  const entradas = Array.isArray(entrantes) ? entrantes : []
+  const vigentes = new Set<string>()
+  for (const cruda of entradas) {
+    const estab = tres(cruda?.estab)
+    const pto = tres(cruda?.pto)
+    if (estab === "000" || pto === "000") continue
+    const codigo = codigoDocumento(cruda)
+    const clave = `${estab}-${pto}-${codigo}`
+    vigentes.add(clave)
+    const anterior = mapa.get(clave) || {}
+    const escrito = nueve(cruda?.ultimoEscrito ?? cruda?.ultimo)
+    const editado = cruda?.puntoEditado === true
+    const ultimo = escrito || nueve(anterior.ultimo) || "000000000"
+    const porAmbiente = { ...(anterior.porAmbiente || {}) }
+    if (editado && escrito && escrito !== "000000000") {
+      porAmbiente["1"] = escrito
+      porAmbiente["2"] = escrito
+    }
+    mapa.set(clave, {
+      ...anterior,
+      estab,
+      pto,
+      codigo,
+      tipo: String(cruda?.tipo || anterior.tipo || (codigo === "01" ? "01 FACTURA" : "")).slice(0, 40),
+      ultimo: editado && escrito ? escrito : ultimo,
+      porAmbiente,
+      estado: String(cruda?.estado || anterior.estado || "ACTIVO").slice(0, 20) || "ACTIVO",
+      preferida: anterior.preferida === true,
+      elegida: editado && esFactura({ codigo, tipo: cruda?.tipo, estado: cruda?.estado }),
+    })
+  }
+  if (vigentes.size) {
+    for (const clave of [...mapa.keys()]) {
+      if (!vigentes.has(clave)) mapa.delete(clave)
+    }
+  }
+  if (Array.isArray(sucursales)) {
+    for (const suc of sucursales as any[]) {
+      const estab = tres(suc?.id)
+      const pto = tres(suc?.ptoEmision || "001")
+      if (estab === "000" || pto === "000") continue
+      const clave = `${estab}-${pto}-01`
+      if (mapa.has(clave)) continue
+      const inicio = nueve(suc?.secuencialInicio)
+      const ultimo = inicio && inicio !== "000000000" ? inicio : "000000000"
+      mapa.set(clave, {
+        estab,
+        pto,
+        codigo: "01",
+        tipo: "01 FACTURA",
+        ultimo,
+        estado: "ACTIVO",
+        porAmbiente: { "1": ultimo, "2": ultimo },
+        preferida: true,
+      })
+    }
+  }
+  const lista = [...mapa.values()]
+  const elegida = [...lista].reverse().find((fila) => fila.elegida && esFactura(fila))
+  for (const fila of lista) {
+    if (elegida && esFactura(fila)) fila.preferida = fila === elegida
+    delete fila.elegida
+  }
+  const facturas = lista.filter((fila) => esFactura(fila))
+  if (facturas.length && !facturas.some((fila) => fila.preferida === true)) facturas[0].preferida = true
+  let marcada = false
+  for (const fila of lista) {
+    if (!esFactura(fila) || fila.preferida !== true) continue
+    if (marcada) fila.preferida = false
+    marcada = true
+  }
+  return lista
+}
+
 export function puntoActivoFactura(secuenciales: unknown, _ambiente: unknown, estabElegido?: string): { punto: PuntoFactura; aviso: string } {
   const lista = Array.isArray(secuenciales) ? secuenciales : []
   const facturas = lista
