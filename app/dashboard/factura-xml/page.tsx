@@ -128,16 +128,6 @@ type Item = {
   tarifas?: {min:number, may:number, dist:number}
 }
 
-const Chisme = ({texto, titulo}:{texto:string, titulo:string}) => (
-  <div className="absolute -top-[58px] left-1/2 -translate-x-1/2 hidden group-hover:block z-50">
-    <div className="bg-black border border-[#00f5d4] rounded-xl px-3 py-2 shadow-[0_0_20px_rgba(0,245,212,0.3)] min-w-[220px]">
-      <p className="text-[#00f5d4] font-black text-[11px]">{titulo}</p>
-      <p className="text-white text-[10px] mt-1">— {texto}</p>
-    </div>
-    <div className="w-2 h-2 bg-black border-r border-b border-[#00f5d4] rotate-45 mx-auto -mt-1"></div>
-  </div>
-);
-
 export default function FacturadorXMLReal(){
   const [fecha, setFecha] = useState("")
   const [vendedorNombre, setVendedorNombre] = useState("")
@@ -1472,17 +1462,16 @@ const total = subtotalSin + iva15 + ivaDiferenciado + valorICE + valorIRBPNR + p
 
         {items.map((it,i)=>(
           <div key={i} className="grid grid-cols-12 gap-1 mt-1 p-2 bg-black rounded-xl border border-white/5 items-center">
-            <div className="relative group col-span-1"><Chisme titulo="Código del producto" texto=" " /><input value={it.codigo} onChange={e=>{ const n=[...items]; n[i].codigo=e.target.value; setItems(n); }} className="w-full bg-black p-1 rounded text-[10px] font-mono border border-white/10" placeholder="P001" /></div>
-            <div className="relative group col-span-2"><Chisme titulo="Producto" texto="Nombre del producto" /><input value={it.descripcion} onChange={e=>{ const n=[...items]; n[i].descripcion=e.target.value; setItems(n); }} className="w-full bg-black p-1 rounded text-[11px]" /></div>
-            <div className="relative group col-span-2"><Chisme titulo="Detalle Adicional" texto="coloque información adicional" /><input value={it.detalleAdicional || ""} onChange={e=>{ const n=[...items]; (n[i] as any).detalleAdicional=e.target.value; setItems(n); }} placeholder="Color, garantía..." className="w-full bg-[#11131a] p-1 rounded text-[10px] border border-[#00f5d4]/20" /></div>
-            <div className="relative group col-span-1"><Chisme titulo="Cantidad" texto="Cuántas unidades vendes" /><input type="number" value={it.cant} onChange={e=>{ const n=[...items]; n[i].cant=parseFloat(e.target.value)||1; setItems(n); }} className="w-full bg-black p-1 rounded text-xs text-center" /></div>
+            <div className="relative group col-span-1"><input value={it.codigo} onChange={e=>{ const n=[...items]; n[i].codigo=e.target.value; setItems(n); }} className="w-full bg-black p-1 rounded text-[10px] font-mono border border-white/10" placeholder="P001" /></div>
+            <div className="relative group col-span-2"><input value={it.descripcion} onChange={e=>{ const n=[...items]; n[i].descripcion=e.target.value; setItems(n); }} className="w-full bg-black p-1 rounded text-[11px]" /></div>
+            <div className="relative group col-span-2"><input value={it.detalleAdicional || ""} onChange={e=>{ const n=[...items]; (n[i] as any).detalleAdicional=e.target.value; setItems(n); }} placeholder="Color, garantía..." className="w-full bg-[#11131a] p-1 rounded text-[10px] border border-[#00f5d4]/20" /></div>
+            <div className="relative group col-span-1"><input type="number" value={it.cant} onChange={e=>{ const n=[...items]; n[i].cant=parseFloat(e.target.value)||1; setItems(n); }} className="w-full bg-black p-1 rounded text-xs text-center" /></div>
             <div className="relative group col-span-1">
-              <Chisme titulo="Precio + Tarifa" texto="Minorista/Mayorista/Distribuidor en caliente" />
               <div className="flex"><input type="number" value={it.pUnit} readOnly={!puedePrecio} onChange={e=>{ if(!puedePrecio) return; const n=[...items]; n[i].pUnit=parseFloat(e.target.value)||0; setItems(n); }} className="w-full bg-black p-1 rounded-l text-xs" /><select disabled={!puedePrecio} onChange={e=>{ const n=[...items]; const v=e.target.value; if(v==='may') n[i].pUnit=n[i].tarifas?.may||n[i].pUnit; if(v==='dist') n[i].pUnit=n[i].tarifas?.dist||n[i].pUnit; if(v==='min') n[i].pUnit=n[i].tarifas?.min||n[i].pUnit; setItems(n); }} className="bg-[#1e293b] text-[8px] rounded-r px-1"><option value="min">MIN</option><option value="may">MAY</option><option value="dist">DIS</option></select></div>
             </div>
-            <div className="relative group col-span-1"><Chisme titulo="Descuento %" texto="Coloca numero de porcentaje de descuento" /><input type="number" value={it.descPorc || 0} readOnly={!puedeDescuento} onChange={e=>{ if(!puedeDescuento) return; const n=[...items]; const tope=permisos?.limiteDescuento ?? 100; const porc=Math.min(tope, parseFloat(e.target.value)||0); n[i].descPorc=porc; const brutoFila=n[i].cant*n[i].pUnit; n[i].descDolar=(brutoFila*porc/100); setItems(n); }} className="w-full bg-black p-1 rounded text-xs" placeholder="%" /></div>
-            <div className="relative group col-span-1"><Chisme titulo="Descuento $" texto="Coloca el valor total de descuento"/><input type="number" value={it.descDolar || 0} readOnly={!puedeDescuento} onChange={e=>{ if(!puedeDescuento) return; const n=[...items]; const dol=parseFloat(e.target.value)||0; const brutoFila=n[i].cant*n[i].pUnit; const tope=permisos?.limiteDescuento ?? 100; const porc=brutoFila>0?Math.min(tope, dol/brutoFila*100):0; n[i].descPorc=porc; n[i].descDolar=brutoFila*porc/100; setItems(n); }} className="w-full bg-black p-1 rounded text-xs border border-yellow-500/20" placeholder="$" /></div>
-            <div className="relative group col-span-1"><Chisme titulo="IVA" texto="Cambie el tipo de iva si no lleva inventario" /><select 
+            <div className="relative group col-span-1"><input type="number" value={it.descPorc || 0} readOnly={!puedeDescuento} onChange={e=>{ if(!puedeDescuento) return; const n=[...items]; const tope=permisos?.limiteDescuento ?? 100; const porc=Math.min(tope, parseFloat(e.target.value)||0); n[i].descPorc=porc; const brutoFila=n[i].cant*n[i].pUnit; n[i].descDolar=(brutoFila*porc/100); setItems(n); }} className="w-full bg-black p-1 rounded text-xs" placeholder="%" /></div>
+            <div className="relative group col-span-1"><input type="number" value={it.descDolar || 0} readOnly={!puedeDescuento} onChange={e=>{ if(!puedeDescuento) return; const n=[...items]; const dol=parseFloat(e.target.value)||0; const brutoFila=n[i].cant*n[i].pUnit; const tope=permisos?.limiteDescuento ?? 100; const porc=brutoFila>0?Math.min(tope, dol/brutoFila*100):0; n[i].descPorc=porc; n[i].descDolar=brutoFila*porc/100; setItems(n); }} className="w-full bg-black p-1 rounded text-xs border border-yellow-500/20" placeholder="$" /></div>
+            <div className="relative group col-span-1"><select 
     value={it.codigoPorcentaje} 
     onChange={e=>{ 
       const n=[...items]; 
@@ -1508,8 +1497,8 @@ const total = subtotalSin + iva15 + ivaDiferenciado + valorICE + valorIRBPNR + p
     <option value="7">7 - Exento</option>
   </select>
 </div>
-            <div className="relative group col-span-1"><Chisme titulo="Subtotal" texto="(Cant x Precio) - Descuento $" /><div className="bg-black p-1 rounded text-[#00f5d4] text-[11px] font-bold text-right">${(it.cant*it.pUnit - (it.descDolar||0)).toFixed(2)}</div></div>
-            <div className="relative group col-span-1"><div className="absolute -top-[52px] left-1/2 -translate-x-1/2 hidden group-hover:block z-50"><div className="bg-red-950 border border-red-500 rounded-xl px-3 py-2"><p className="text-red-400 font-black text-[11px]">Borrar</p></div></div><button onClick={()=>setItems(items.filter((_,idx)=>idx!==i))} className="w-full bg-red-500/20 rounded text-red-400 text-xs font-black">X</button></div>
+            <div className="relative group col-span-1"><div className="bg-black p-1 rounded text-[#00f5d4] text-[11px] font-bold text-right">${(it.cant*it.pUnit - (it.descDolar||0)).toFixed(2)}</div></div>
+            <div className="relative group col-span-1"><button onClick={()=>setItems(items.filter((_,idx)=>idx!==i))} className="w-full bg-red-500/20 rounded text-red-400 text-xs font-black">X</button></div>
           </div>
         ))}
       </div>
