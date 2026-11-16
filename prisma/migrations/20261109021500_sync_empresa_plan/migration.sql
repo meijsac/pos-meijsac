@@ -492,26 +492,3 @@ BEGIN
     ALTER TABLE "Cliente" ADD CONSTRAINT "Cliente_creadoPorUsuarioId_fkey" FOREIGN KEY ("creadoPorUsuarioId") REFERENCES "Usuario"("id") ON DELETE SET NULL ON UPDATE CASCADE;
   END IF;
 END $$;
-
-CREATE TABLE IF NOT EXISTS "tickets_internos" (
-  "id" TEXT NOT NULL,
-  "empresaId" TEXT NOT NULL,
-  "estab" TEXT NOT NULL,
-  "pto" TEXT NOT NULL,
-  "numero" INTEGER NOT NULL,
-  "clienteNombre" TEXT NOT NULL DEFAULT '',
-  "clienteIdentificacion" TEXT NOT NULL DEFAULT '',
-  "notaFisica" TEXT NOT NULL DEFAULT '',
-  "pago" TEXT NOT NULL,
-  "total" DOUBLE PRECISION NOT NULL,
-  "detalle" JSONB NOT NULL,
-  "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  CONSTRAINT "tickets_internos_pkey" PRIMARY KEY ("id")
-);
-CREATE UNIQUE INDEX IF NOT EXISTS "tickets_internos_empresa_punto_numero" ON "tickets_internos" ("empresaId", "estab", "pto", "numero");
-CREATE INDEX IF NOT EXISTS "tickets_internos_empresa_fecha" ON "tickets_internos" ("empresaId", "createdAt");
-DO $$ BEGIN
-  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'tickets_internos_empresaId_fkey') THEN
-    ALTER TABLE "tickets_internos" ADD CONSTRAINT "tickets_internos_empresaId_fkey" FOREIGN KEY ("empresaId") REFERENCES "Empresa"("id") ON DELETE CASCADE ON UPDATE CASCADE;
-  END IF;
-END $$;
