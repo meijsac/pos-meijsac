@@ -670,6 +670,7 @@ export default function ProductosModule() {
         <div className="flex gap-2 bg-[#0f172a]/50 p-1.5 rounded-full w-max border border-white/5">
           <button onClick={()=>setTab("FICHA")} className={`px-5 py-2 rounded-full text-[10px] font-bold transition-all ${tab==="FICHA"? "bg-white text-black shadow-lg" : "bg-transparent text-white/50 hover:text-white"}`}>📊 INVENTARIO Y FICHA</button>
           <button onClick={()=>{if(!productoSel) alert("Primero selecciona un producto en la tabla (icono ⚙️) para ver su Kárdex"); else setTab("KARDEX");}} className={`px-5 py-2 rounded-full text-[10px] font-bold transition-all ${tab==="KARDEX"? "bg-[#00f5d4] text-black shadow-[0_0_15px_rgba(0,245,212,0.3)]" : "bg-transparent text-white/50 hover:text-white"}`}>📋 KÁRDEX: {productoSel ? productoSel.nombre : "Seleccione ítem"}</button>
+          <a href="/dashboard/factura-xml" className="bg-[#00f5d4] text-black px-3 py-2 rounded-full text-[10px] font-black">Facturador</a>
         </div>
 
        {tab==="FICHA" && (
@@ -722,7 +723,6 @@ export default function ProductosModule() {
 
           <div className="bg-[#0f172a]/50 border border-white/10 rounded-xl p-3 flex-1 flex flex-col min-h-0">
             <div className="flex gap-2 items-center mb-3 flex-wrap">
-              <a href="/dashboard/factura-xml" className="bg-[#00f5d4] text-black px-3 py-2 rounded-lg text-[10px] font-black">Facturador</a>
               <div className="relative flex-1">
                 <input value={busqueda} onChange={(e)=>setBusqueda(e.target.value)} placeholder="Buscar artículo por nombre o código..." className="w-full bg-black border border-white/10 rounded-lg px-4 py-2 pl-8 text-[11px] text-white focus:border-[#00f5d4] outline-none" />
                 <span className="absolute left-3 top-2.5 text-[10px] opacity-50">🔍</span>
