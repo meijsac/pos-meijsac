@@ -1,5 +1,4 @@
 import nodemailer from "nodemailer"
-import { pdfRide } from "@/lib/sri/ride-archivo"
 import { leerComprobanteArchivado } from "@/lib/security/storage"
 import { facturaPorClave } from "@/lib/sri/buscar-comprobante"
 
@@ -208,12 +207,154 @@ function transporte() {
   return abrirTransporte(host, user, pass, port)
 }
 
-function xmlEmitido(p: Record<string, any>, xmlGuardado: Buffer | null) {
+const WIN: Record<string, string> = {
+  á: "\\341", é: "\\351", í: "\\355", ó: "\\363", ú: "\\372",
+  Á: "\\301", É: "\\311", Í: "\\315", Ó: "\\323", Ú: "\\332",
+  ñ: "\\361", Ñ: "\\321", ü: "\\374", Ü: "\\334", "¿": "\\277", "¡": "\\241",
+}
+
+function pdfTexto(valor: unknown) {
+  return String(valor ?? "").normalize("NFC").split("").map((char) => {
+    if (WIN[char]) return WIN[char]
+    if (char === "\\") return "\\\\"
+    if (char === "(" || char === ")") return `\\${char}`
+    const code = char.charCodeAt(0)
+    return code >= 32 && code <= 126 ? char : " "
+  }).join("").slice(0, 90)
+}
+
+function dineroPdf(valor: unknown) {
+  const n = Number(valor)
+  return `$${(Number.isFinite(n) ? n : 0).toFixed(2)}`
+}
+
+function leyendaRegimen(valor: unknown) {
+  const texto = String(valor || "").toUpperCase()
+  if (texto.includes("POPULAR")) return "CONTRIBUYENTE REGIMEN RIMPE: NEGOCIO POPULAR"
+  if (texto.includes("RIMPE") || texto.includes("EMPRENDEDOR")) return "CONTRIBUYENTE REGIMEN RIMPE: EMPRENDEDOR"
+  return ""
+}
+
+function xmlDelHistorial(p: Record<string, any>, xmlGuardado: Buffer | null) {
   const aut = p.sriAutorizacion?.RespuestaAutorizacionComprobante?.autorizaciones?.autorizacion
   const comp = Array.isArray(aut)
     ? aut.find((fila: { estado?: string }) => fila?.estado === "AUTORIZADO")?.comprobante || aut[0]?.comprobante
     : aut?.comprobante
   return String(comp || p.xmlContent || xmlGuardado?.toString("utf8") || "")
+}
+
+function pdfIgualAlRide(body: Record<string, any>) {
+  const emisor = body.configEmisor || {}
+  const cliente = body.cliente || {}
+  const totales = body.totales || {}
+  const clave = String(body.claveAcceso || "").replace(/\D/g, "")
+  const numero = [body.establecimiento, body.secuencial].filter(Boolean).join("-")
+  const fechaAutorizacion = String(body.fechaAutorizacion || "").trim()
+  const ambiente = clave[23] === "2" ? "PRODUCCION" : "PRUEBAS"
+  const vendedor = String(body.atendidoPor || body.auditoria?.usuario || "")
+  const items = Array.isArray(body.items) ? body.items : []
+  const cmd: string[] = ["0.75 0.8 0.84 RG", "0.12 0.16 0.22 rg"]
+  const t = (x: number, y: number, size: number, bold: boolean, valor: unknown) => {
+    cmd.push(`BT /${bold ? "F2" : "F1"} ${size} Tf 1 0 0 1 ${x} ${y} Tm (${pdfTexto(valor)}) Tj ET`)
+  }
+  const caja = (x: number, y: number, w: number, h: number) => cmd.push(`${x} ${y} ${w} ${h} re S`)
+  caja(32, 640, 268, 170)
+  caja(308, 640, 256, 170)
+  t(40, 790, 11, true, emisor.razon || "")
+  t(40, 774, 9, false, emisor.comercial || "")
+  t(40, 758, 8, false, `Direccion Matriz: ${emisor.matriz || ""}`)
+  t(40, 744, 8, false, `Direccion Sucursal: ${emisor.sucursal || emisor.matriz || ""}`)
+  t(40, 728, 8, true, `OBLIGADO A LLEVAR CONTABILIDAD: ${emisor.obligado || "NO"}`)
+  const leyenda = leyendaRegimen(emisor.regimen)
+  if (leyenda) t(40, 712, 7, true, leyenda)
+  t(316, 790, 10, true, `R.U.C.: ${emisor.ruc || ""}`)
+  t(316, 772, 14, true, "FACTURA")
+  t(316, 754, 10, true, `No. ${numero}`)
+  t(316, 736, 8, true, "NUMERO DE AUTORIZACION:")
+  t(316, 722, 7, false, clave)
+  t(316, 706, 8, false, `FECHA Y HORA DE AUTORIZACION: ${fechaAutorizacion || "-"}`)
+  t(316, 692, 8, false, `AMBIENTE: ${ambiente}`)
+  t(316, 678, 8, false, "EMISION: NORMAL")
+  if (vendedor) t(316, 664, 8, false, `VENDEDOR: ${vendedor}`)
+  t(316, 650, 7, false, `CLAVE DE ACCESO: ${clave}`)
+  caja(32, 548, 532, 80)
+  t(40, 610, 8, true, "Razon Social / Nombres y Apellidos:")
+  t(230, 610, 8, false, cliente.razon || "")
+  t(40, 594, 8, true, "Identificacion:")
+  t(130, 594, 8, false, cliente.identificacion || "")
+  t(300, 594, 8, true, "Fecha de Emision:")
+  t(400, 594, 8, false, body.fechaEmisionFormato || "")
+  t(40, 578, 8, true, "Direccion:")
+  t(100, 578, 8, false, cliente.direccion || "-")
+  t(300, 578, 8, true, "Email:")
+  t(350, 578, 8, false, cliente.email || "-")
+  t(40, 562, 8, true, "Guia de Remision: S/N")
+  caja(32, 520, 532, 18)
+  t(40, 526, 8, true, "Cod. Principal")
+  t(130, 526, 8, true, "Cant.")
+  t(190, 526, 8, true, "Descripcion")
+  t(390, 526, 8, true, "Precio Unitario")
+  t(470, 526, 8, true, "Descuento")
+  t(520, 526, 8, true, "Precio Total")
+  let y = 500
+  for (const item of items.slice(0, 10)) {
+    const cant = Number(item.cant || item.cantidad || 0)
+    const precio = Number(item.pUnit || item.precio || 0)
+    const desc = Number(item.descDolar || 0) || cant * precio * Number(item.descPorc || 0) / 100
+    const total = Number.isFinite(Number(item.total)) ? Number(item.total) : cant * precio - desc
+    t(40, y, 8, false, item.codigo || "")
+    t(130, y, 8, false, cant.toFixed(2))
+    t(190, y, 8, false, item.descripcion || "")
+    t(400, y, 8, false, dineroPdf(precio))
+    t(475, y, 8, false, dineroPdf(desc))
+    t(525, y, 8, false, dineroPdf(total))
+    y -= 14
+  }
+  caja(32, 70, 260, 150)
+  t(40, 200, 8, true, "INFORMACION ADICIONAL")
+  t(40, 184, 8, false, `Forma de Pago: ${body.formaPago || ""}`)
+  const recibido = Number(body.pagos?.efectivoRecibido || body.efectivoRecibido || body.pagos?.entregado || 0)
+  const vuelto = Number(body.pagos?.vuelto || body.vuelto || 0)
+  if (recibido > 0) t(40, 168, 8, false, `Valor recibido: ${dineroPdf(recibido)}`)
+  if (vuelto > 0) t(40, 154, 8, false, `Vuelto entregado: ${dineroPdf(vuelto)}`)
+  if (body.mensajeSri) t(40, 140, 7, false, `Mensaje del SRI: ${body.mensajeSri}`)
+  t(40, 84, 7, true, "Proveedor del sistema: MEIJSAC S.A.S. RUC 1793243789001")
+  caja(308, 70, 256, 200)
+  const filasTotales: [string, unknown][] = [
+    ["SUBTOTAL 15%", totales.base15],
+    ["SUBTOTAL 0%", totales.base0],
+    ["SUBTOTAL NO OBJETO DE IVA", totales.baseNoObjeto],
+    ["SUBTOTAL EXENTO DE IVA", totales.baseExento],
+    ["SUBTOTAL SIN IMPUESTOS", totales.subtotalSin],
+    ["TOTAL DESCUENTO", totales.descuento],
+    ["ICE", totales.valorICE],
+    ["IVA 15%", totales.iva15],
+    ["PROPINA", totales.propina],
+  ]
+  filasTotales.forEach((fila, i) => {
+    t(316, 250 - i * 14, 7, fila[0].includes("SIN IMPUESTOS"), fila[0])
+    t(490, 250 - i * 14, 7, false, dineroPdf(fila[1]))
+  })
+  t(316, 90, 10, true, "VALOR TOTAL")
+  t(470, 90, 10, true, dineroPdf(totales.total))
+  const stream = cmd.join("\n")
+  const objetos = [
+    "<< /Type /Catalog /Pages 2 0 R >>",
+    "<< /Type /Pages /Count 1 /Kids [3 0 R] >>",
+    "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Contents 4 0 R /Resources << /Font << /F1 << /Type /Font /Subtype /Type1 /BaseFont /Helvetica >> /F2 << /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold >> >> >> >>",
+    `<< /Length ${Buffer.byteLength(stream)} >>\nstream\n${stream}\nendstream`,
+  ]
+  let pdf = "%PDF-1.4\n"
+  const offsets = [0]
+  objetos.forEach((objeto, indice) => {
+    offsets.push(Buffer.byteLength(pdf))
+    pdf += `${indice + 1} 0 obj\n${objeto}\nendobj\n`
+  })
+  const xref = Buffer.byteLength(pdf)
+  pdf += `xref\n0 ${objetos.length + 1}\n0000000000 65535 f \n`
+  for (let i = 1; i < offsets.length; i++) pdf += `${String(offsets[i]).padStart(10, "0")} 00000 n \n`
+  pdf += `trailer << /Size ${objetos.length + 1} /Root 1 0 R >>\nstartxref\n${xref}\n%%EOF`
+  return Buffer.from(pdf, "latin1")
 }
 
 export async function enviarCorreosFactura(body: Record<string, any>, xmlAutorizado: string, empresaId = "") {
@@ -244,11 +385,10 @@ export async function enviarCorreosFactura(body: Record<string, any>, xmlAutoriz
   const guardada = propia && propia.payload && typeof propia.payload === "object" ? propia.payload as Record<string, any> : null
   const origen = guardada || (empresaId ? null : body)
   const xmlGuardado = origen && empresaId && clave.length === 49 ? await leerComprobanteArchivado(empresaId, clave, "xml").catch(() => null) : null
-  const pdfGuardado = origen && empresaId && clave.length === 49 ? await leerComprobanteArchivado(empresaId, clave, "pdf").catch(() => null) : null
-  const xml = origen ? xmlEmitido(origen, xmlGuardado) : ""
-  let pdf: Buffer | null = pdfGuardado?.length ? pdfGuardado : null
-  if (!pdf?.length && origen) {
-    try { pdf = pdfRide(origen, String(origen.fechaAutorizacion || fecha)) } catch { pdf = null }
+  const xml = origen ? xmlDelHistorial(origen, xmlGuardado) : ""
+  let pdf: Buffer | null = null
+  if (origen) {
+    try { pdf = pdfIgualAlRide(origen) } catch { pdf = null }
   }
   const clienteDeEsta = guardada && guardada.cliente && typeof guardada.cliente === "object" ? guardada.cliente as Record<string, any> : (empresaId ? {} : cliente)
   const destinoDeEsta = correosDe(clienteDeEsta.email || clienteDeEsta.correo || clienteDeEsta.mail)
