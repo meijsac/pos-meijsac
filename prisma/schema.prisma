@@ -66,6 +66,7 @@ model Empresa {
   firmaElectronica FirmaElectronica?
   certificadoSri   CertificadoSri?
   miembros         EmpresaUsuario[]
+  ticketsInternos  TicketInterno[]
 }
 
 model FirmaElectronica {
@@ -263,6 +264,26 @@ model Producto {
   createdAt   DateTime @default(now())
 
   @@unique([codigo, empresaId])
+}
+
+model TicketInterno {
+  id                     String   @id @default(cuid())
+  empresaId              String
+  empresa                Empresa  @relation(fields: [empresaId], references: [id], onDelete: Cascade)
+  estab                  String
+  pto                    String
+  numero                 Int
+  clienteNombre          String   @default("")
+  clienteIdentificacion  String   @default("")
+  notaFisica             String   @default("")
+  pago                   String
+  total                  Float
+  detalle                Json
+  createdAt              DateTime @default(now())
+
+  @@unique([empresaId, estab, pto, numero])
+  @@index([empresaId, createdAt])
+  @@map("tickets_internos")
 }
 
 model Cliente {
