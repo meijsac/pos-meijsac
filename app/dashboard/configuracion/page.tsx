@@ -3,7 +3,6 @@ import { useState, useEffect, useRef } from "react";
 import Link from "next/link";
 import { feriadosIvaReducido } from '@/lib/iva-feriados.config';
 import { cargarEmpresaSesion } from "@/lib/sesion-cliente";
-import { SECUENCIALES_VISIBLES } from "@/lib/sri/punto-emision";
 import { publicarAmbiente } from "@/components/SelloAmbiente";
 import { errorLogo } from "@/lib/logo-empresa";
 import DocumentosLegales from "./documentos-legales";
@@ -332,6 +331,7 @@ export default function ConfiguracionAvanzadaSRI() {
           if (!guardada.ok) throw new Error(dataClave.error || "No se pudo guardar la contraseña de la firma");
         }
 
+        console.log("[secuencial] enviando", (Array.isArray(payload.secuenciales) ? payload.secuenciales : []).map((s: any) => ({ estab: s?.estab, pto: s?.pto, ultimo: s?.ultimo })))
         const cuerpo = {
           ruc: payload.ruc,
           razonSocial: payload.razonSocial,
@@ -374,6 +374,7 @@ export default function ConfiguracionAvanzadaSRI() {
           if (Array.isArray(dataEquipo.usuarios)) payload.usuarios = dataEquipo.usuarios
         }
         const secuencialesGuardados = Array.isArray(dataGuardada.secuenciales) ? dataGuardada.secuenciales : cuerpo.secuenciales
+        console.log("[secuencial] guardado", (Array.isArray(secuencialesGuardados) ? secuencialesGuardados : []).map((s: any) => ({ estab: s?.estab, pto: s?.pto, ultimo: s?.ultimo })))
         try {
           localStorage.setItem("meijsac_config_pro", JSON.stringify({ ...payload, secuenciales: secuencialesGuardados, logoPreview: undefined }, (clave, valor) => clave === "clave" || clave === "password" ? "" : valor))
           const mapa: Record<string, string> = {}
@@ -446,11 +447,7 @@ if(datosReales.direccion && !datosReales.dirMatriz) datosReales.dirMatriz = dato
     // === SUCURSALES: YA NO FIJAS, VIENEN DEL CLIENTE O VACÍAS ===
     sucursales: datosReales.sucursales || [],
     firma: { nombre: "", clave: "", expira: "", diasRestantes: null, ambiente: "1", ws: "celcer.sri.gob.ec" },
-    secuenciales: [
-      { estab: "001", pto: "001", codigo:"01", tipo: "01 FACTURA", ultimo: "00000125", alerta: 50, estado: "ACTIVO" },
-      { estab: "001", pto: "002", codigo:"01", tipo: "01 FACTURA", ultimo: "00000010", alerta: 50, estado: "ACTIVO" },
-      { estab: "002", pto: "001", codigo:"04", tipo: "04 NOTA CREDITO", ultimo: "00000005", alerta: 50, estado: "ACTIVO" }
-    ],
+    secuenciales: [],
     modoOffline:false,
     colaOffline:[],
     ultimoEnvioOffline:"",
@@ -506,9 +503,7 @@ base.sucursales = datosReales.sucursales || base.sucursales || [];
             base.secuenciales = miaData.empresa.secuenciales
           }
         } catch {}
-        if (!Array.isArray(base.secuenciales) || !base.secuenciales.length) {
-          base.secuenciales = SECUENCIALES_VISIBLES.map((s) => ({ ...s }))
-        }
+        if (!Array.isArray(base.secuenciales)) base.secuenciales = []
         try {
           const firmaRes = await fetch("/api/sri/clave-firma", { credentials: "same-origin" })
           const firmaData = firmaRes.ok ? await firmaRes.json() : null

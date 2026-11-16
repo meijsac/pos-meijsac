@@ -1,6 +1,6 @@
 import { prisma } from "@/lib/prisma"
 import { datosRegistroDe } from "@/lib/empresa-sesion"
-import { codigoAmbienteFactura, ultimoDelAmbiente } from "@/lib/sri/punto-emision"
+import { codigoAmbienteFactura } from "@/lib/sri/punto-emision"
 
 function tres(valor: unknown) {
   return String(valor ?? "").replace(/\D/g, "").padStart(3, "0").slice(-3)
@@ -18,10 +18,10 @@ export async function avanzarSecuencialEmpresa(empresaId: string, ambiente: unkn
   const lista = Array.isArray(prev.secuenciales) ? prev.secuenciales.map((fila: any) => ({ ...fila })) : []
   const codigo = codigoAmbienteFactura(ambiente)
   const [estab, pto] = serie.split("-")
-  const siguiente = String(Number(nueve(usado) || "0") + 1).padStart(9, "0")
+  const guardado = nueve(usado)
+  if (!guardado || guardado === "000000000") return
   const indice = lista.findIndex((fila) => tres(fila?.estab) === tres(estab) && tres(fila?.pto) === tres(pto) && String(fila?.codigo || "01").replace(/\D/g, "").padStart(2, "0").slice(-2) === "01")
-  const actual = indice >= 0 ? Number(ultimoDelAmbiente(lista[indice], ambiente) || "0") : 0
-  const guardado = String(Math.max(actual, Number(siguiente))).padStart(9, "0")
+  console.log("[secuencial] emitido", { empresaId, ambiente: codigo, serie, guardado })
   if (indice < 0) {
     lista.push({ estab: tres(estab), pto: tres(pto), codigo: "01", tipo: "01 FACTURA", ultimo: guardado, estado: "ACTIVO", porAmbiente: { [codigo]: guardado } })
   } else {

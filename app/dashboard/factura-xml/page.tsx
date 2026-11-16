@@ -3,7 +3,7 @@ import { useState, useEffect, useRef } from "react"
 import Link from "next/link"
 import ModalCajaMixto from "./components/ModalCajaMixto"
 import ModuloTransporteReducido from "@/components/ModuloTransporteReducido"
-import { elegirSecuencial, puntoActivoFactura } from "@/lib/sri/punto-emision"
+import { puntoActivoFactura, siguienteSecuencial } from "@/lib/sri/punto-emision"
 import { permisosLocales } from "@/lib/permisos-pos"
 import { cerrarSesionEnEsteEquipo } from "@/lib/sesion-cliente"
 import { normalizarComprador } from "@/lib/sri/xml-factura"
@@ -175,7 +175,8 @@ export default function FacturadorXMLReal(){
         } catch {}
       }
       const guardado = String(leido.punto.ultimo || "").replace(/\D/g, "").padStart(9, "0").slice(-9)
-      const libre = guardado && guardado !== "000000000" && !usados.has(guardado) ? guardado : elegirSecuencial("", guardado, usados)
+      const libre = siguienteSecuencial(guardado && guardado !== "000000000" ? guardado : "0", usados)
+      console.log("[secuencial] facturador", { serie: leido.punto.serie, ultimoGuardado: guardado, siguiente: libre })
       setPuntoEmision({
         ambiente: codigo as "1" | "2",
         nombre: codigo === "2" ? "PRODUCCIÓN" : "PRUEBAS",
@@ -201,21 +202,21 @@ export default function FacturadorXMLReal(){
   }
   const guardarSecuencialUsado = async (serie: string, usado: string) => {
     if (!serie || !usado) return ""
-    const siguiente = String(Number(String(usado).replace(/\D/g, "")) + 1).padStart(9, "0")
+    const usado9 = String(Number(String(usado).replace(/\D/g, "")) || 0).padStart(9, "0")
+    const siguiente = String(Number(usado9) + 1).padStart(9, "0")
     try {
       const mapa = JSON.parse(localStorage.getItem("meijsac_contador_secuencial") || "{}")
-      mapa[serie] = siguiente
+      mapa[serie] = usado9
       localStorage.setItem("meijsac_contador_secuencial", JSON.stringify(mapa))
       const cfg = JSON.parse(localStorage.getItem("meijsac_config_pro") || "{}")
       const lista = Array.isArray(cfg.secuenciales) ? cfg.secuenciales : []
       const [estab, pto] = serie.split("-")
       const i = lista.findIndex((s: any) => String(s?.estab || "").replace(/\D/g, "").padStart(3, "0").slice(-3) === estab && String(s?.pto || "").replace(/\D/g, "").padStart(3, "0").slice(-3) === pto)
       const codigo = String(cfg.ambiente || "").toUpperCase().includes("PROD") || String(cfg.ambiente) === "2" ? "2" : "1"
-      if (i < 0) lista.push({ estab, pto, codigo: "01", tipo: "01 FACTURA", ultimo: siguiente, estado: "ACTIVO", porAmbiente: { [codigo]: siguiente }, actualizadoEn: new Date().toISOString() })
-      else lista[i] = { ...lista[i], ultimo: siguiente, porAmbiente: { ...(lista[i].porAmbiente || {}), [codigo]: siguiente }, actualizadoEn: new Date().toISOString() }
+      if (i < 0) lista.push({ estab, pto, codigo: "01", tipo: "01 FACTURA", ultimo: usado9, estado: "ACTIVO", porAmbiente: { [codigo]: usado9 }, actualizadoEn: new Date().toISOString() })
+      else lista[i] = { ...lista[i], ultimo: usado9, porAmbiente: { ...(lista[i].porAmbiente || {}), [codigo]: usado9 }, actualizadoEn: new Date().toISOString() }
       cfg.secuenciales = lista
       localStorage.setItem("meijsac_config_pro", JSON.stringify(cfg))
-      await fetch("/api/configuracion", { method: "POST", credentials: "same-origin", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ secuenciales: lista }) }).catch(() => {})
     } catch {}
     return siguiente
   }
@@ -1045,6 +1046,7 @@ const total = subtotalSin + iva15 + ivaDiferenciado + valorICE + valorIRBPNR + p
 
     const serieAhora = puntoEmision.serie
     const secAhora = puntoEmision.secuencial
+    console.log("[secuencial] enviando factura", { serie: serieAhora, enPantalla: secAhora, ultimoGuardado: puntoEmision.ultimo })
     facturaPendiente.establecimiento = serieAhora
     facturaPendiente.secuencial = secAhora
     facturaPendiente.atendidoPor = vendedorNombre
@@ -1103,7 +1105,7 @@ const total = subtotalSin + iva15 + ivaDiferenciado + valorICE + valorIRBPNR + p
         localStorage.setItem(clave, JSON.stringify([...previa, listaDoc]))
       })
       const siguiente = await guardarSecuencialUsado(serieUsada, secUsado)
-      if (siguiente) setPuntoEmision((p) => ({ ...p, secuencial: siguiente, ultimo: siguiente }))
+      if (siguiente) setPuntoEmision((p) => ({ ...p, secuencial: siguiente, ultimo: String(secUsado || "").replace(/\D/g, "").padStart(9, "0") }))
       cargarPunto()
       localStorage.setItem("meijsac_ultima_factura_pendiente", JSON.stringify(facturaPendiente))
       const claveRide = String(guardada.claveAcceso || facturaPendiente.claveAcceso || "").replace(/\D/g, "")

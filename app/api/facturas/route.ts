@@ -56,7 +56,8 @@ export async function POST(req: Request) {
       }
       body.establecimiento = serie
       body.ultimoSecuencial = punto.ultimo || body.ultimoSecuencial
-      body.secuencial = elegirSecuencial(punto.ultimo || String(body.secuencial || ""), String(body.ultimoSecuencial || ""), usados)
+      body.secuencial = elegirSecuencial("", String(punto.ultimo || ""), usados)
+      console.log("[secuencial] emision", { serie, ultimoGuardado: punto.ultimo, emite: body.secuencial })
     }
     let armado: ReturnType<typeof armarXmlFactura>
     try {
@@ -120,9 +121,8 @@ export async function POST(req: Request) {
       },
     })
     if (body.modo_negocio === "RESTAURANTE" || body.modo_negocio === "GENERAL") {
-      const prev = sesion.empresa.datosRegistro && typeof sesion.empresa.datosRegistro === "object" && !Array.isArray(sesion.empresa.datosRegistro)
-        ? sesion.empresa.datosRegistro as Record<string, unknown>
-        : {}
+      const fresca = await prisma.empresa.findUnique({ where: { id: sesion.empresa.id }, select: { datosRegistro: true } })
+      const prev = datosRegistroDe(fresca?.datosRegistro)
       await prisma.empresa.update({
         where: { id: sesion.empresa.id },
         data: { datosRegistro: { ...prev, modo_negocio: body.modo_negocio } },

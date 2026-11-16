@@ -61,6 +61,10 @@ export async function POST(request: Request) {
     : undefined
   const secuenciales = limpiarSecuenciales(ajustados)
   const listaGuardada = secuenciales && secuenciales.length ? secuenciales : undefined
+  if (Array.isArray(datos.secuenciales)) {
+    console.log("[secuencial] recibido", datos.secuenciales.map((s: any) => ({ estab: s?.estab, pto: s?.pto, ultimo: s?.ultimo, editado: s?.puntoEditado === true })))
+    console.log("[secuencial] guardado", (listaGuardada || prev.secuenciales || []).map((s: any) => ({ estab: s?.estab, pto: s?.pto, ultimo: s?.ultimo, pruebas: s?.porAmbiente?.["1"], produccion: s?.porAmbiente?.["2"] })))
+  }
   if (sesion.usuario.rol !== "ADMIN") {
     const permisos = permisosDeUsuario(sesion.usuario)
     if (permisos && !permisos.modificarSecuenciales) return NextResponse.json({ ok: true, secuenciales: prev.secuenciales || [] })

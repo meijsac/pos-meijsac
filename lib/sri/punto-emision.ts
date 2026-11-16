@@ -23,12 +23,6 @@ function esFactura(fila: any) {
   return (codigo === "01" || tipo.includes("FACTURA")) && !apagada
 }
 
-export const SECUENCIALES_VISIBLES = [
-  { estab: "001", pto: "001", codigo: "01", tipo: "01 FACTURA", ultimo: "00000125", estado: "ACTIVO" },
-  { estab: "001", pto: "002", codigo: "01", tipo: "01 FACTURA", ultimo: "00000010", estado: "ACTIVO" },
-  { estab: "002", pto: "001", codigo: "04", tipo: "04 NOTA CREDITO", ultimo: "00000005", estado: "ACTIVO" },
-]
-
 export function codigoAmbienteFactura(ambiente: unknown) {
   const codigo = String(ambiente ?? "").trim().toUpperCase()
   if (codigo === "2" || codigo.includes("PROD")) return "2"
@@ -70,6 +64,9 @@ export function aplicarPuntoGuardado(lista: unknown, prevLista: unknown, sucursa
     }
     elegidas.push(fila)
   }
+  for (const fila of next) {
+    if (fila?.puntoEditado) fila.ultimoEscrito = fila.ultimo
+  }
   if (Array.isArray(sucursales)) {
     const prev = Array.isArray(prevSucursales) ? prevSucursales : []
     for (const suc of sucursales as any[]) {
@@ -84,6 +81,7 @@ export function aplicarPuntoGuardado(lista: unknown, prevLista: unknown, sucursa
       if (!antes && pto === "001" && (!inicio || inicio === "000000001")) continue
       if (!cambioPunto && !cambioSec) continue
       let fila = next.find((s) => esFactura(s) && tres(s?.estab) === estab && tres(s?.pto) === pto)
+      if (fila?.puntoEditado) continue
       if (!fila) {
         fila = { estab, pto, codigo: "01", tipo: "01 FACTURA", ultimo: inicio, estado: "ACTIVO", porAmbiente: { "1": "", "2": "" } }
         next.push(fila)
@@ -95,10 +93,8 @@ export function aplicarPuntoGuardado(lista: unknown, prevLista: unknown, sucursa
   }
   for (const fila of next) {
     if (!fila?.puntoEditado || !esFactura(fila)) continue
-    const n = nueve(fila.ultimo)
-    const a1 = nueve(fila?.porAmbiente?.["1"])
-    const a2 = nueve(fila?.porAmbiente?.["2"])
-    tomar(fila, n, Boolean(n && n !== "000000000" && n !== a1 && n !== a2))
+    const n = nueve(fila.ultimoEscrito ?? fila.ultimo)
+    tomar(fila, n, Boolean(n && n !== "000000000"))
   }
   if (elegidas.length) {
     const unica = elegidas[elegidas.length - 1]
@@ -107,7 +103,10 @@ export function aplicarPuntoGuardado(lista: unknown, prevLista: unknown, sucursa
       fila.preferida = fila === unica
     }
   }
-  for (const fila of next) delete fila.puntoEditado
+  for (const fila of next) {
+    delete fila.puntoEditado
+    delete fila.ultimoEscrito
+  }
   return next
 }
 
@@ -143,10 +142,8 @@ export function puntoActivoFactura(secuenciales: unknown, _ambiente: unknown, es
 }
 
 export function elegirSecuencial(pedido: string, ultimo: string, usados: Set<string>) {
-  const pedido9 = nueve(pedido)
-  if (pedido9 && pedido9 !== "000000000" && !usados.has(pedido9)) return pedido9
-  const mayor = Math.max(Number(nueve(ultimo) || "0"), ...[...usados].map((n) => Number(n)), 0)
-  return siguienteSecuencial(String(mayor).padStart(9, "0"), usados)
+  const base = nueve(ultimo) || nueve(pedido)
+  return siguienteSecuencial(base && base !== "000000000" ? base : "0", usados)
 }
 
 export function siguienteSecuencial(ultimo: string, usados: Set<string>) {
