@@ -488,6 +488,7 @@ const toggleTurismoFeriado = (checked: boolean) => {
 
   const [filtroProd, setFiltroProd] = useState("")
   const [items, setItems] = useState<Item[]>([])
+  const [textoFila, setTextoFila] = useState<{ key: string; texto: string } | null>(null)
   
   const [pagos, setPagos] = useState({ efectivo:0, redBancaria:0, tarjeta:0, debito:0, compensacion:0, dineroElec:0, prepago:0, endoso:0 } as any)
   const [propinaCheck, setPropinaCheck] = useState(false)
@@ -1427,17 +1428,66 @@ const total = subtotalSin + iva15 + ivaDiferenciado + valorICE + valorIRBPNR + p
 {errorLector && <p className="mt-2 text-sm font-bold text-red-400">{errorLector}</p>}
 {productos.length === 0 && <p className="mt-2 text-sm font-bold text-red-400">No hay productos cargados - revisar API</p>}
 
-        {items.map((it,i)=>(
+        {items.map((it,i)=>{
+          const claveCampo = (nombre: string) => `${i}:${nombre}`
+          const visible = (nombre: string, numero: number) => textoFila?.key === claveCampo(nombre) ? textoFila.texto : String(Number.isFinite(numero) ? numero : 0)
+          const escribir = (nombre: "cant" | "pUnit" | "descPorc" | "descDolar", texto: string) => {
+            if (texto !== "" && !/^\d*\.?\d*$/.test(texto)) return
+            setTextoFila({ key: claveCampo(nombre), texto })
+            if (texto === "" || texto === ".") return
+            const valor = parseFloat(texto)
+            if (!Number.isFinite(valor)) return
+            const n = [...items]
+            if (nombre === "cant") n[i].cant = valor
+            if (nombre === "pUnit") {
+              if (!puedePrecio) return
+              n[i].pUnit = valor
+            }
+            if (nombre === "descPorc") {
+              if (!puedeDescuento) return
+              const tope = permisos?.limiteDescuento ?? 100
+              const porc = Math.min(tope, valor)
+              n[i].descPorc = porc
+              n[i].descDolar = n[i].cant * n[i].pUnit * porc / 100
+            }
+            if (nombre === "descDolar") {
+              if (!puedeDescuento) return
+              const brutoFila = n[i].cant * n[i].pUnit
+              const tope = permisos?.limiteDescuento ?? 100
+              const porc = brutoFila > 0 ? Math.min(tope, valor / brutoFila * 100) : 0
+              n[i].descPorc = porc
+              n[i].descDolar = brutoFila * porc / 100
+            }
+            setItems(n)
+          }
+          const soltar = (nombre: "cant" | "pUnit" | "descPorc" | "descDolar") => {
+            if (textoFila?.key === claveCampo(nombre) && (textoFila.texto === "" || textoFila.texto === ".")) {
+              const n = [...items]
+              if (nombre === "cant") n[i].cant = n[i].cant > 0 ? n[i].cant : 1
+              if (nombre === "pUnit" && puedePrecio) n[i].pUnit = 0
+              if ((nombre === "descPorc" || nombre === "descDolar") && puedeDescuento) {
+                n[i].descPorc = 0
+                n[i].descDolar = 0
+              }
+              setItems(n)
+            }
+            setTextoFila(null)
+          }
+          const baseFila = it.cant * it.pUnit - (it.descDolar || 0)
+          const tarifaFila = Number(CATALOGO_IVA_SRI[String(it.codigoPorcentaje)]?.tarifa ?? 0)
+          const ivaFila = tarifaFila > 0 ? baseFila * tarifaFila / 100 : 0
+          const subtotalFila = tarifaFila > 0 ? baseFila + ivaFila : baseFila
+          return (
           <div key={i} className="grid grid-cols-12 gap-1 mt-1 p-2 bg-black rounded-xl border border-white/5 items-center">
             <div className="relative group col-span-1"><input value={it.codigo} onChange={e=>{ const n=[...items]; n[i].codigo=e.target.value; setItems(n); }} className="w-full bg-black p-1 rounded text-[10px] font-mono border border-white/10" placeholder="P001" /></div>
             <div className="relative group col-span-2"><input value={it.descripcion} onChange={e=>{ const n=[...items]; n[i].descripcion=e.target.value; setItems(n); }} className="w-full bg-black p-1 rounded text-[11px]" /></div>
-            <div className="relative group col-span-2"><input value={it.detalleAdicional || ""} onChange={e=>{ const n=[...items]; (n[i] as any).detalleAdicional=e.target.value; setItems(n); }} placeholder="Color, garantía..." className="w-full bg-[#11131a] p-1 rounded text-[10px] border border-[#00f5d4]/20" /></div>
-            <div className="relative group col-span-1"><input type="number" value={it.cant} onChange={e=>{ const n=[...items]; n[i].cant=parseFloat(e.target.value)||1; setItems(n); }} className="w-full bg-black p-1 rounded text-xs text-center" /></div>
+            <div className="relative group col-span-1"><input value={it.detalleAdicional || ""} onChange={e=>{ const n=[...items]; (n[i] as any).detalleAdicional=e.target.value; setItems(n); }} placeholder="Color, garantía..." className="w-full bg-[#11131a] p-1 rounded text-[10px] border border-[#00f5d4]/20" /></div>
+            <div className="relative group col-span-1"><input inputMode="decimal" value={visible("cant", it.cant)} onFocus={(e)=>e.currentTarget.select()} onBlur={()=>soltar("cant")} onChange={e=>escribir("cant", e.target.value)} className="w-full bg-black p-1 rounded text-xs text-center" /></div>
             <div className="relative group col-span-1">
-              <div className="flex"><input type="number" value={it.pUnit} readOnly={!puedePrecio} onChange={e=>{ if(!puedePrecio) return; const n=[...items]; n[i].pUnit=parseFloat(e.target.value)||0; setItems(n); }} className="w-full bg-black p-1 rounded-l text-xs" /><select disabled={!puedePrecio} onChange={e=>{ const n=[...items]; const v=e.target.value; if(v==='may') n[i].pUnit=n[i].tarifas?.may||n[i].pUnit; if(v==='dist') n[i].pUnit=n[i].tarifas?.dist||n[i].pUnit; if(v==='min') n[i].pUnit=n[i].tarifas?.min||n[i].pUnit; setItems(n); }} className="bg-[#1e293b] text-[8px] rounded-r px-1"><option value="min">MIN</option><option value="may">MAY</option><option value="dist">DIS</option></select></div>
+              <div className="flex"><input inputMode="decimal" value={visible("pUnit", it.pUnit)} readOnly={!puedePrecio} onFocus={(e)=>e.currentTarget.select()} onBlur={()=>soltar("pUnit")} onChange={e=>escribir("pUnit", e.target.value)} className="w-full bg-black p-1 rounded-l text-xs" /><select disabled={!puedePrecio} onChange={e=>{ const n=[...items]; const v=e.target.value; if(v==='may') n[i].pUnit=n[i].tarifas?.may||n[i].pUnit; if(v==='dist') n[i].pUnit=n[i].tarifas?.dist||n[i].pUnit; if(v==='min') n[i].pUnit=n[i].tarifas?.min||n[i].pUnit; setItems(n); }} className="bg-[#1e293b] text-[8px] rounded-r px-1"><option value="min">MIN</option><option value="may">MAY</option><option value="dist">DIS</option></select></div>
             </div>
-            <div className="relative group col-span-1"><input type="number" value={it.descPorc || 0} readOnly={!puedeDescuento} onChange={e=>{ if(!puedeDescuento) return; const n=[...items]; const tope=permisos?.limiteDescuento ?? 100; const porc=Math.min(tope, parseFloat(e.target.value)||0); n[i].descPorc=porc; const brutoFila=n[i].cant*n[i].pUnit; n[i].descDolar=(brutoFila*porc/100); setItems(n); }} className="w-full bg-black p-1 rounded text-xs" placeholder="%" /></div>
-            <div className="relative group col-span-1"><input type="number" value={it.descDolar || 0} readOnly={!puedeDescuento} onChange={e=>{ if(!puedeDescuento) return; const n=[...items]; const dol=parseFloat(e.target.value)||0; const brutoFila=n[i].cant*n[i].pUnit; const tope=permisos?.limiteDescuento ?? 100; const porc=brutoFila>0?Math.min(tope, dol/brutoFila*100):0; n[i].descPorc=porc; n[i].descDolar=brutoFila*porc/100; setItems(n); }} className="w-full bg-black p-1 rounded text-xs border border-yellow-500/20" placeholder="$" /></div>
+            <div className="relative group col-span-1"><input inputMode="decimal" value={visible("descPorc", it.descPorc || 0)} readOnly={!puedeDescuento} onFocus={(e)=>e.currentTarget.select()} onBlur={()=>soltar("descPorc")} onChange={e=>escribir("descPorc", e.target.value)} className="w-full bg-black p-1 rounded text-xs" placeholder="%" /></div>
+            <div className="relative group col-span-1"><input inputMode="decimal" value={visible("descDolar", it.descDolar || 0)} readOnly={!puedeDescuento} onFocus={(e)=>e.currentTarget.select()} onBlur={()=>soltar("descDolar")} onChange={e=>escribir("descDolar", e.target.value)} className="w-full bg-black p-1 rounded text-xs border border-yellow-500/20" placeholder="$" /></div>
             <div className="relative group col-span-1"><select 
     value={it.codigoPorcentaje} 
     onChange={e=>{ 
@@ -1445,7 +1495,6 @@ const total = subtotalSin + iva15 + ivaDiferenciado + valorICE + valorIRBPNR + p
       const cod = e.target.value;
       n[i].codigoPorcentaje = cod;
       n[i].tarifa = CATALOGO_IVA_SRI[cod].tarifa;
-      // Si es No Objeto (6) o Exento (7) el valor del IVA es 0
       if(cod==="6" || cod==="7"){
         n[i].valorIva = 0;
       }
@@ -1464,10 +1513,12 @@ const total = subtotalSin + iva15 + ivaDiferenciado + valorICE + valorIRBPNR + p
     <option value="7">7 - Exento</option>
   </select>
 </div>
-            <div className="relative group col-span-1"><div className="bg-black p-1 rounded text-[#00f5d4] text-[11px] font-bold text-right">${(it.cant*it.pUnit - (it.descDolar||0)).toFixed(2)}</div></div>
+            <div className="relative group col-span-1"><div className="bg-black p-1 rounded text-white text-[11px] font-bold text-right">${ivaFila.toFixed(2)}</div></div>
+            <div className="relative group col-span-1"><div className="bg-black p-1 rounded text-[#00f5d4] text-[11px] font-bold text-right">${subtotalFila.toFixed(2)}</div></div>
             <div className="relative group col-span-1"><button onClick={()=>setItems(items.filter((_,idx)=>idx!==i))} className="w-full bg-red-500/20 rounded text-red-400 text-xs font-black">X</button></div>
           </div>
-        ))}
+          )
+        })}
       </div>
 
       <div className="grid grid-cols-2 gap-3 mt-3">
