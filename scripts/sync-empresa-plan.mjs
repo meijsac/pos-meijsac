@@ -14,6 +14,7 @@ if (!databaseUrl) {
 const archivosSql = [
   "../prisma/migrations/20261109021500_sync_empresa_plan/migration.sql",
   "../prisma/migrations/20261117030000_optica_historia/migration.sql",
+  "../prisma/migrations/20261117040000_optica_orden/migration.sql",
 ]
 
 // Prisma agrega pgbouncer y connection_limit, que Postgres no entiende.

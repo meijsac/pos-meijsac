@@ -10,10 +10,11 @@ export const MODULOS_ADICIONALES: ModuloAdicional[] = [
   {
     slug: "opticas",
     titulo: "Ópticas",
-    detalle: "Historia clínica y receta",
+    detalle: "Historia clínica, receta y orden",
     documentos: [
       { slug: "historia-clinica", titulo: "Historia clínica" },
       { slug: "receta", titulo: "Receta" },
+      { slug: "orden-trabajo", titulo: "Orden de trabajo" },
     ],
   },
   {

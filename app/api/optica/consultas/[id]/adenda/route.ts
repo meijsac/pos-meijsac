@@ -1,10 +1,12 @@
 import { NextRequest, NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
 import { usuarioConEmpresaDesdeRequest } from "@/lib/empresa-sesion"
+import { veHistoriaClinica } from "@/lib/optica/acceso"
 
 export async function POST(req: NextRequest, contexto: { params: Promise<{ id: string }> }) {
   const sesion = await usuarioConEmpresaDesdeRequest(req)
   if ("error" in sesion) return NextResponse.json({ error: sesion.error }, { status: sesion.status })
+  if (!veHistoriaClinica(sesion.usuario)) return NextResponse.json({ error: "La nota aclaratoria es solo del optometrista" }, { status: 403 })
   const { id } = await contexto.params
   const consulta = await prisma.opticaConsulta.findFirst({ where: { id, empresaId: sesion.empresa.id } })
   if (!consulta) return NextResponse.json({ error: "Esa consulta no está en esta óptica" }, { status: 404 })

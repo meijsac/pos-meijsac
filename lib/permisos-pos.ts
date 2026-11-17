@@ -8,6 +8,7 @@ export type PermisosPos = {
   verCostos: boolean
   verReportes: boolean
   modificarSecuenciales: boolean
+  verHistoriaClinica: boolean
 }
 
 export function permisosNormales(valor: unknown): PermisosPos {
@@ -23,6 +24,7 @@ export function permisosNormales(valor: unknown): PermisosPos {
     verCostos: !!fila.verCostos,
     verReportes: !!fila.verReportes,
     modificarSecuenciales: !!fila.modificarSecuenciales,
+    verHistoriaClinica: !!fila.verHistoriaClinica,
   }
 }
 
@@ -49,5 +51,6 @@ export function rutaPermitida(ruta: string, permisos: PermisosPos | null) {
   if (ruta.startsWith("/dashboard/reportes") || ruta.startsWith("/dashboard/contabilidad") || ruta.startsWith("/dashboard/cxc") || ruta.startsWith("/dashboard/respaldo")) return permisos.verReportes
   if (ruta.startsWith("/dashboard/productos")) return permisos.verCostos
   if (ruta.startsWith("/dashboard/nota-credito")) return permisos.anulaciones
+  if (ruta.startsWith("/dashboard/comprobantes-adicionales/opticas/historia-clinica")) return permisos.verHistoriaClinica
   return true
 }

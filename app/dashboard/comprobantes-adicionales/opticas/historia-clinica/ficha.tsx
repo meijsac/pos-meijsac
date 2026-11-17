@@ -19,8 +19,16 @@ type Paciente = {
 type Consulta = {
   id: string
   fechaHora: string
+  estado?: string
   motivo: string
+  plan?: string
   usuarioNombre: string
+  anamnesis?: { usa_lentes?: boolean; tiempo_uso?: string; ultimo_control?: string; antecedentes_oculares?: string; antecedentes_sistemicos?: string; alergias?: string }
+  lensometria?: { od?: Ojo; oi?: Ojo }
+  refraccion?: { od?: Ojo & { avFinal?: string; dip?: string; altura?: string }; oi?: Ojo & { avFinal?: string; dip?: string; altura?: string }; material_sugerido?: string }
+  agudeza?: { vl_sc?: Vista; vl_cc?: Vista; ph?: Vista; vp_sc?: Vista; vp_cc?: Vista }
+  examen?: { biomicroscopia?: string; oftalmoscopia?: string }
+  motilidad?: { cover_test_vl?: string; cover_test_vp?: string; ppc?: string; versiones?: string }
   diagnosticos: { codigo_cie10?: string; descripcion?: string }[]
   adendas: { id: string; texto: string; createdAt: string; usuarioNombre: string }[]
 }
@@ -65,9 +73,9 @@ function Ojos({ od, oi, onOd, onOi }: { od: Ojo; oi: Ojo; onOd: (ojo: Ojo) => vo
   )
 }
 
-async function pedir(url: string, cuerpo?: unknown) {
+async function pedir(url: string, cuerpo?: unknown, metodo = cuerpo ? "POST" : "GET") {
   const res = await fetch(url, {
-    method: cuerpo ? "POST" : "GET",
+    method: metodo,
     headers: cuerpo ? { "Content-Type": "application/json" } : undefined,
     body: cuerpo ? JSON.stringify(cuerpo) : undefined,
   })
@@ -84,6 +92,9 @@ export function FichaOptica() {
   const [aviso, setAviso] = useState("")
   const [error, setError] = useState("")
   const [usuario, setUsuario] = useState("")
+  const [sucursales, setSucursales] = useState<{ id: string; codigo: string; nombre: string }[]>([])
+  const [sucursalId, setSucursalId] = useState("")
+  const [editId, setEditId] = useState("")
   const [unicodigo, setUnicodigo] = useState("")
   const [cedulaProfesional, setCedulaProfesional] = useState("")
   const [registroAcess, setRegistroAcess] = useState("")
@@ -124,7 +135,10 @@ export function FichaOptica() {
     setConsultas(data.consultas || [])
   }
 
-  useEffect(() => { cargar().catch((e) => setError(e.message)) }, [])
+  useEffect(() => {
+    cargar().catch((e) => setError(e.message))
+    pedir("/api/optica/sucursales").then((data) => setSucursales(data.sucursales || [])).catch(() => {})
+  }, [])
 
   async function guardarPaciente() {
     setGuardando(true)
@@ -147,7 +161,7 @@ export function FichaOptica() {
     setGuardando(true)
     setError("")
     try {
-      await pedir("/api/optica/consultas", {
+      const cuerpo = {
         pacienteId: paciente.id,
         motivo,
         anamnesis,
@@ -160,16 +174,62 @@ export function FichaOptica() {
         plan,
         profesional: { nombre: usuario, cedula: cedulaProfesional, registroAcess, registroSenescyt },
         unicodigo,
-      })
+        sucursalId,
+      }
+      if (editId) await pedir(`/api/optica/consultas/${editId}`, cuerpo, "PATCH")
+      else await pedir("/api/optica/consultas", { ...cuerpo, pacienteId: paciente.id })
+      setEditId("")
       setMotivo("")
       setPlan("")
       setDiagnosticos([])
-      setAviso("Consulta guardada. No se puede borrar.")
+      setAviso("Consulta guardada y abierta. Ciérrala para emitir la receta. No se puede borrar.")
       await abrir(paciente)
     } catch (e) {
       setError(e instanceof Error ? e.message : "No se pudo guardar")
     } finally {
       setGuardando(false)
+    }
+  }
+
+  function ojoGuardado(valor?: Partial<Ojo>): Ojo {
+    return { esf: Number(valor?.esf || 0).toFixed(2), cil: Number(valor?.cil || 0).toFixed(2), eje: String(valor?.eje || 0), add: Number(valor?.add || 0).toFixed(2) }
+  }
+
+  function continuarConsulta(consulta: Consulta) {
+    const vista = (fila?: Vista) => ({ od: fila?.od || "", oi: fila?.oi || "", ao: fila?.ao || "" })
+    setEditId(consulta.id)
+    setMotivo(consulta.motivo || "")
+    setPlan(consulta.plan || "")
+    setAnamnesis({
+      usaLentes: !!consulta.anamnesis?.usa_lentes,
+      tiempoUso: consulta.anamnesis?.tiempo_uso || "",
+      ultimoControl: consulta.anamnesis?.ultimo_control || "",
+      antecedentesOculares: consulta.anamnesis?.antecedentes_oculares || "",
+      antecedentesSistemicos: consulta.anamnesis?.antecedentes_sistemicos || "",
+      alergias: consulta.anamnesis?.alergias || "",
+    })
+    setLenteOd(ojoGuardado(consulta.lensometria?.od))
+    setLenteOi(ojoGuardado(consulta.lensometria?.oi))
+    setRxOd(ojoGuardado(consulta.refraccion?.od))
+    setRxOi(ojoGuardado(consulta.refraccion?.oi))
+    setExtraOd({ prisma: "", dip: String(consulta.refraccion?.od?.dip || ""), altura: String(consulta.refraccion?.od?.altura || ""), avFinal: consulta.refraccion?.od?.avFinal || "" })
+    setExtraOi({ prisma: "", dip: String(consulta.refraccion?.oi?.dip || ""), altura: String(consulta.refraccion?.oi?.altura || ""), avFinal: consulta.refraccion?.oi?.avFinal || "" })
+    setMaterial(consulta.refraccion?.material_sugerido || "")
+    setAgudeza({ vlSc: vista(consulta.agudeza?.vl_sc), vlCc: vista(consulta.agudeza?.vl_cc), ph: vista(consulta.agudeza?.ph), vpSc: vista(consulta.agudeza?.vp_sc), vpCc: vista(consulta.agudeza?.vp_cc) })
+    setExamen({ biomicroscopia: consulta.examen?.biomicroscopia || "", oftalmoscopia: consulta.examen?.oftalmoscopia || "" })
+    setMotilidad({ coverVl: consulta.motilidad?.cover_test_vl || "", coverVp: consulta.motilidad?.cover_test_vp || "", ppc: consulta.motilidad?.ppc || "", versiones: consulta.motilidad?.versiones || "" })
+    setDiagnosticos((consulta.diagnosticos || []).map((d) => ({ codigo: d.codigo_cie10 || "", descripcion: d.descripcion || "" })).filter((d) => d.codigo))
+  }
+
+  async function cerrarConsulta(id: string) {
+    if (!paciente) return
+    setError("")
+    try {
+      await pedir(`/api/optica/consultas/${id}/cerrar`, {})
+      setAviso("Consulta cerrada. La receta quedó en la orden de trabajo.")
+      await abrir(paciente)
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "No se pudo cerrar")
     }
   }
 
@@ -226,7 +286,11 @@ export function FichaOptica() {
           {paciente ? (
             <section className="bg-[#111827] border border-slate-800 rounded-2xl p-4 space-y-4">
               <h2 className="font-black">Consulta de {paciente.nombres} {paciente.apellidos}</h2>
-              <p className="text-xs text-slate-400">La guarda {usuario || "el usuario de esta sesión"}.</p>
+              <p className="text-xs text-slate-400">La guarda {usuario || "el usuario de esta sesión"}. Mientras esté abierta se puede corregir. Al cerrarla sale la receta y ya no se modifica.</p>
+              <select value={sucursalId} onChange={(e) => setSucursalId(e.target.value)} className={campo}>
+                <option value="">Sucursal de la atención</option>
+                {sucursales.map((fila) => <option key={fila.codigo + fila.id} value={fila.id}>{fila.codigo} {fila.nombre}</option>)}
+              </select>
               <input value={motivo} onChange={(e) => setMotivo(e.target.value)} placeholder="Motivo de consulta" className={campo} />
               <div className="grid sm:grid-cols-2 gap-2">
                 <label className="text-sm flex items-center gap-2"><input type="checkbox" checked={anamnesis.usaLentes} onChange={(e) => setAnamnesis({ ...anamnesis, usaLentes: e.target.checked })} />Usa lentes</label>
@@ -295,19 +359,21 @@ export function FichaOptica() {
                 <input value={registroAcess} onChange={(e) => setRegistroAcess(e.target.value)} placeholder="Registro ACESS" className={campo} />
                 <input value={registroSenescyt} onChange={(e) => setRegistroSenescyt(e.target.value)} placeholder="Registro SENESCYT" className={campo} />
               </div>
-              <button type="button" disabled={guardando} onClick={guardarConsulta} className="bg-teal-400 text-slate-950 font-black text-xs px-4 py-2 rounded-xl">Guardar consulta</button>
+              <button type="button" disabled={guardando} onClick={guardarConsulta} className="bg-teal-400 text-slate-950 font-black text-xs px-4 py-2 rounded-xl">{editId ? "Actualizar consulta abierta" : "Guardar consulta abierta"}</button>
             </section>
           ) : null}
 
           <section className="space-y-3">
             {consultas.map((consulta) => (
               <article key={consulta.id} className="bg-[#111827] border border-slate-800 rounded-2xl p-4 space-y-2">
-                <b>{new Date(consulta.fechaHora).toLocaleString("es-EC", { timeZone: "America/Guayaquil" })}</b>
+                <b>{new Date(consulta.fechaHora).toLocaleString("es-EC", { timeZone: "America/Guayaquil" })} · {consulta.estado === "CERRADA" ? "Cerrada" : "Abierta"}</b>
                 <p className="text-sm">{consulta.motivo}</p>
                 <p className="text-xs text-slate-400">Atendió {consulta.usuarioNombre}. {(consulta.diagnosticos || []).map((d) => d.codigo_cie10).filter(Boolean).join(", ")}</p>
                 <div className="flex gap-3 text-xs font-bold">
                   <a className="text-teal-300" target="_blank" href={`/dashboard/comprobantes-adicionales/opticas/imprimir/${consulta.id}`}>PDF historia</a>
                   <a className="text-teal-300" target="_blank" href={`/dashboard/comprobantes-adicionales/opticas/imprimir/${consulta.id}?tipo=receta`}>PDF receta</a>
+                  {consulta.estado !== "CERRADA" ? <button type="button" onClick={() => continuarConsulta(consulta)} className="text-teal-300">Continuar</button> : null}
+                  {consulta.estado !== "CERRADA" ? <button type="button" onClick={() => cerrarConsulta(consulta.id)} className="text-amber-300">Cerrar y emitir receta</button> : null}
                 </div>
                 {consulta.adendas.map((adenda) => <p key={adenda.id} className="text-xs text-slate-300">Nota {new Date(adenda.createdAt).toLocaleString("es-EC", { timeZone: "America/Guayaquil" })} · {adenda.usuarioNombre}: {adenda.texto}</p>)}
                 <div className="flex gap-2">

@@ -68,6 +68,7 @@ model Empresa {
   miembros         EmpresaUsuario[]
   opticaPacientes  OpticaPaciente[]
   opticaConsultas  OpticaConsulta[]
+  opticaOrdenes    OpticaOrden[]
   opticaConfig     OpticaConfig?
 }
 
@@ -120,6 +121,8 @@ model EstablecimientoSri {
   createdAt DateTime     @default(now())
   empresa   Empresa      @relation(fields: [empresaId], references: [id], onDelete: Cascade)
   puntos    PuntoVenta[]
+  opticaConsultas OpticaConsulta[]
+  opticaOrdenes   OpticaOrden[]
 
   @@unique([empresaId, codigo])
   @@map("establecimientos_sri")
@@ -292,6 +295,7 @@ model Cliente {
   creadoPorUsuarioId String?
   creadoPor          Usuario?   @relation(fields: [creadoPorUsuarioId], references: [id], onDelete: SetNull)
   sucursales         Sucursal[]
+  opticaOrdenes      OpticaOrden[]
   createdAt          DateTime   @default(now())
   updatedAt       DateTime   @updatedAt
 
@@ -476,6 +480,7 @@ model OpticaPaciente {
   createdAt           DateTime         @default(now()) @map("created_at")
   updatedAt           DateTime         @updatedAt @map("updated_at")
   consultas           OpticaConsulta[]
+  ordenes             OpticaOrden[]
 
   @@unique([empresaId, identificacion])
   @@index([empresaId])
@@ -491,7 +496,10 @@ model OpticaConsulta {
   usuarioId       String?        @map("usuario_id")
   usuario         Usuario?       @relation(fields: [usuarioId], references: [id], onDelete: SetNull)
   usuarioNombre   String         @map("usuario_nombre")
+  sucursalId      String?        @map("sucursal_id")
+  sucursal        EstablecimientoSri? @relation(fields: [sucursalId], references: [id], onDelete: SetNull)
   fechaHora       DateTime       @default(now()) @map("fecha_hora")
+  estado          String         @default("CERRADA")
   cerrada         Boolean        @default(true)
   motivo          String         @default("")
   anamnesis       Json
@@ -507,6 +515,7 @@ model OpticaConsulta {
   pacienteResumen Json           @map("paciente_resumen")
   createdAt       DateTime       @default(now()) @map("created_at")
   adendas         OpticaAdenda[]
+  orden           OpticaOrden?
 
   @@index([empresaId, fechaHora])
   @@index([pacienteId])
@@ -526,4 +535,30 @@ model OpticaAdenda {
 
   @@index([consultaId])
   @@map("optica_adenda")
+}
+
+model OpticaOrden {
+  id                   String          @id @default(cuid())
+  empresaId            String          @map("empresa_id")
+  empresa              Empresa         @relation(fields: [empresaId], references: [id], onDelete: Cascade)
+  sucursalId           String?         @map("sucursal_id")
+  sucursal             EstablecimientoSri? @relation(fields: [sucursalId], references: [id], onDelete: SetNull)
+  consultaId           String?         @unique @map("consulta_id")
+  consulta             OpticaConsulta? @relation(fields: [consultaId], references: [id], onDelete: SetNull)
+  pacienteId           String          @map("paciente_id")
+  paciente             OpticaPaciente  @relation(fields: [pacienteId], references: [id], onDelete: Cascade)
+  clienteFacturacionId String?         @map("cliente_facturacion_id")
+  clienteFacturacion   Cliente?        @relation(fields: [clienteFacturacionId], references: [id], onDelete: SetNull)
+  facturaId            String?         @map("factura_id")
+  formula              Json
+  tipoLente            String          @default("") @map("tipo_lente")
+  material             String          @default("")
+  observaciones        String          @default("")
+  armazonNombre        String          @default("") @map("armazon_nombre")
+  lunaNombre           String          @default("") @map("luna_nombre")
+  estado               String          @default("PENDIENTE_COTIZAR")
+  createdAt            DateTime        @default(now()) @map("created_at")
+
+  @@index([empresaId])
+  @@map("optica_orden")
 }

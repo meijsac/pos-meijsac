@@ -16,7 +16,7 @@ type Consulta = {
   refraccion: { od: Ojo; oi: Ojo; material_sugerido?: string }
   diagnosticos: { codigo_cie10?: string; descripcion?: string }[]
   profesional: { nombre?: string; cedula?: string; registro_acess?: string; registro_senescyt?: string }
-  establecimiento: { nombre?: string; ruc?: string; ciudad?: string; unicodigo_acess?: string }
+  establecimiento: { nombre?: string; ruc?: string; ciudad?: string; direccion?: string; sucursal?: string; logoUrl?: string; unicodigo_acess?: string }
   pacienteResumen: { nombres?: string; apellidos?: string; identificacion?: string; fecha_nacimiento?: string }
   adendas: { id: string; texto: string; createdAt: string; usuarioNombre: string }[]
 }
@@ -53,8 +53,9 @@ export default function ImprimirOpticaPage() {
   return (
     <main style={{ fontFamily: "Arial, sans-serif", color: "#111", background: "#fff", padding: 28, maxWidth: 800, margin: "0 auto" }}>
       <button type="button" onClick={() => window.print()} style={{ marginBottom: 16 }}>Imprimir</button>
+      {local.logoUrl ? <img src={String(local.logoUrl)} alt="" style={{ maxHeight: 64, maxWidth: 180 }} /> : null}
       <h1 style={{ fontSize: 18, marginBottom: 4 }}>{local.nombre || "Óptica"}</h1>
-      <p style={{ margin: 0 }}>RUC {local.ruc || "—"} · {local.ciudad || ""} · Unicódigo ACESS {local.unicodigo_acess || "—"}</p>
+      <p style={{ margin: 0 }}>RUC {local.ruc || "—"} · {String(local.direccion || "")} {local.ciudad || ""} · Sucursal {String(local.sucursal || "—")} · Unicódigo ACESS {local.unicodigo_acess || "—"}</p>
       <h2 style={{ fontSize: 16 }}>{receta ? "Receta óptica" : "Historia clínica optométrica"}</h2>
       <p><b>{paciente.apellidos} {paciente.nombres}</b><br />Identificación {paciente.identificacion || "—"} · Nacimiento {paciente.fecha_nacimiento || "—"}<br />Fecha {fecha}</p>
       {receta ? null : <p><b>Motivo:</b> {consulta.motivo}</p>}

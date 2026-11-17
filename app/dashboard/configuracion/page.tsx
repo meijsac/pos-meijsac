@@ -929,7 +929,7 @@ base.sucursales = datosReales.sucursales || base.sucursales || [];
                         <div className="flex justify-between items-center mb-3">
                           <p className="text-[10px] font-bold text-white">Usuarios del POS ({(cfg?.usuarios || []).length})</p>
                           <button onClick={()=>{
-                            const nuevo = { id: Date.now().toString(), nombre:"", email:"", rol:"Cajero", establecimiento:"001", puntoEmision:"002", bodega:"Bodega Principal", activo:true, permisos:{ descuento:false, limiteDescuento:5, modificarPrecio:false, anulaciones:false, verCostos:false, verReportes:false, modificarSecuenciales:false, obligarApertura:true, reaperturaCaja:false }};
+                            const nuevo = { id: Date.now().toString(), nombre:"", email:"", rol:"Cajero", establecimiento:"001", puntoEmision:"002", bodega:"Bodega Principal", activo:true, permisos:{ descuento:false, limiteDescuento:5, modificarPrecio:false, anulaciones:false, verCostos:false, verReportes:false, modificarSecuenciales:false, verHistoriaClinica:false, obligarApertura:true, reaperturaCaja:false }};
                             setCfg((p:any)=>({...p, usuarios:[...(p?.usuarios||[]), nuevo], usuarioSel: nuevo.id}));
                           }} className="bg-[#00f5d4] text-black text-[9px] font-bold px-3 py-1 rounded-full">+ NUEVO</button>
                         </div>
@@ -1001,6 +1001,7 @@ base.sucursales = datosReales.sucursales || base.sucursales || [];
                                   {k:'verCostos', label:'Permitir Ver Costos de Compra y Utilidad', desc:'Costo proveedor y margen - privado del dueño'},
                                   {k:'verReportes', label:'Acceso a Reportes Financieros y Dashboard', desc:'Totales mes, gráficas, cierres globales'},
                                   {k:'modificarSecuenciales', label:'Permitir Modificar Secuenciales / Config SRI', desc:'CRÍTICO - solo administrador'},
+                                  {k:'verHistoriaClinica', label:'Optometrista: ver y cerrar la historia clínica', desc:'Sin esta marca solo ve la receta y la orden de trabajo'},
                                 ].map((p:any)=>(
                                   <label key={p.k} className="flex items-center justify-between py-1 cursor-pointer">
                                     <div><p className="text-[10px] text-white">{p.label}</p><p className="text-[7px] text-white/30">{p.desc}</p></div>
