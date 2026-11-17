@@ -39,6 +39,8 @@ export async function PATCH(req: NextRequest, contexto: { params: Promise<{ id: 
   const saneado = sanearConsulta(body)
   if ("error" in saneado) return NextResponse.json({ error: saneado.error }, { status: 400 })
   const datos = saneado.datos
+  const config = await prisma.opticaConfig.findUnique({ where: { empresaId: sesion.empresa.id } })
+  const local = actual.establecimiento && typeof actual.establecimiento === "object" && !Array.isArray(actual.establecimiento) ? actual.establecimiento as Record<string, unknown> : {}
   const sucursalId = String(body.sucursalId || "")
   const sucursal = sucursalId ? await prisma.establecimientoSri.findFirst({ where: { id: sucursalId, empresaId: sesion.empresa.id } }) : null
   try {
@@ -55,7 +57,13 @@ export async function PATCH(req: NextRequest, contexto: { params: Promise<{ id: 
         refraccion: datos.refraccion,
         diagnosticos: datos.diagnosticos,
         plan: datos.plan,
-        profesional: { ...datos.profesional, nombre: datos.profesional.nombre || sesion.usuario.nombre },
+        profesional: {
+          nombre: sesion.usuario.nombre,
+          cedula: config?.cedulaProfesional || "",
+          registro_acess: config?.registroAcess || "",
+          registro_senescyt: config?.registroSenescyt || "",
+        },
+        establecimiento: { ...local, unicodigo_acess: config?.unicodigo || "" },
       },
     })
     return NextResponse.json({ consulta })

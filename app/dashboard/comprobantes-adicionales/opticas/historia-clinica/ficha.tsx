@@ -47,9 +47,9 @@ function mover(actual: string, delta: number, min: number, max: number, decimale
 function Paso({ valor, onChange, paso, min, max, decimales }: { valor: string; onChange: (valor: string) => void; paso: number; min: number; max: number; decimales: number }) {
   return (
     <div className="flex items-center gap-1">
-      <button type="button" onClick={() => onChange(mover(valor, -paso, min, max, decimales))} className="w-6 h-7 rounded bg-slate-800 text-white">-</button>
-      <input value={valor} onChange={(e) => onChange(e.target.value)} className="w-16 bg-black border border-slate-700 rounded px-1 py-1 text-center text-xs" />
-      <button type="button" onClick={() => onChange(mover(valor, paso, min, max, decimales))} className="w-6 h-7 rounded bg-slate-800 text-white">+</button>
+      <button type="button" onClick={() => onChange(mover(valor, -paso, min, max, decimales))} className="w-6 h-7 rounded bg-slate-100 border border-slate-300 text-slate-900">-</button>
+      <input value={valor} onChange={(e) => onChange(e.target.value)} className="w-16 bg-white border border-slate-300 rounded px-1 py-1 text-center text-xs text-slate-900" />
+      <button type="button" onClick={() => onChange(mover(valor, paso, min, max, decimales))} className="w-6 h-7 rounded bg-slate-100 border border-slate-300 text-slate-900">+</button>
     </div>
   )
 }
@@ -57,18 +57,18 @@ function Paso({ valor, onChange, paso, min, max, decimales }: { valor: string; o
 function Ojos({ od, oi, onOd, onOi }: { od: Ojo; oi: Ojo; onOd: (ojo: Ojo) => void; onOi: (ojo: Ojo) => void }) {
   const fila = (lado: "OD" | "OI", ojo: Ojo, cambiar: (ojo: Ojo) => void) => (
     <div className="grid grid-cols-5 gap-2 items-end">
-      <b className="text-xs text-teal-300">{lado}</b>
-      <label className="text-[10px] text-slate-400">Esf<Paso valor={ojo.esf} paso={0.25} min={-30} max={30} decimales={2} onChange={(esf) => cambiar({ ...ojo, esf })} /></label>
-      <label className="text-[10px] text-slate-400">Cil<Paso valor={ojo.cil} paso={0.25} min={-30} max={30} decimales={2} onChange={(cil) => cambiar({ ...ojo, cil })} /></label>
-      <label className="text-[10px] text-slate-400">Eje<Paso valor={ojo.eje} paso={5} min={0} max={180} decimales={0} onChange={(eje) => cambiar({ ...ojo, eje })} /></label>
-      <label className="text-[10px] text-slate-400">Add<Paso valor={ojo.add} paso={0.25} min={0} max={4} decimales={2} onChange={(add) => cambiar({ ...ojo, add })} /></label>
+      <b className="text-xs text-teal-700">{lado}</b>
+      <label className="text-[10px] text-slate-600">Esf<Paso valor={ojo.esf} paso={0.25} min={-30} max={30} decimales={2} onChange={(esf) => cambiar({ ...ojo, esf })} /></label>
+      <label className="text-[10px] text-slate-600">Cil<Paso valor={ojo.cil} paso={0.25} min={-30} max={30} decimales={2} onChange={(cil) => cambiar({ ...ojo, cil })} /></label>
+      <label className="text-[10px] text-slate-600">Eje<Paso valor={ojo.eje} paso={5} min={0} max={180} decimales={0} onChange={(eje) => cambiar({ ...ojo, eje })} /></label>
+      <label className="text-[10px] text-slate-600">Add<Paso valor={ojo.add} paso={0.25} min={0} max={4} decimales={2} onChange={(add) => cambiar({ ...ojo, add })} /></label>
     </div>
   )
   return (
     <div className="space-y-2">
       {fila("OD", od, onOd)}
       {fila("OI", oi, onOi)}
-      <button type="button" onClick={() => onOi({ ...od })} className="text-[11px] font-bold text-teal-300">Copiar ojo derecho al izquierdo</button>
+      <button type="button" onClick={() => onOi({ ...od })} className="text-[11px] font-bold text-teal-700">Copiar ojo derecho al izquierdo</button>
     </div>
   )
 }
@@ -118,14 +118,16 @@ export function FichaOptica() {
   const [nota, setNota] = useState<Record<string, string>>({})
   const [guardando, setGuardando] = useState(false)
 
-  async function cargar(q = "") {
+  async function cargar(q = "", conConfig = false) {
     const data = await pedir(`/api/optica/pacientes${q ? `?q=${encodeURIComponent(q)}` : ""}`)
     setPacientes(data.pacientes || [])
     setUsuario(data.usuario?.nombre || "")
-    setUnicodigo(data.config?.unicodigo || "")
-    setCedulaProfesional(data.config?.cedulaProfesional || "")
-    setRegistroAcess(data.config?.registroAcess || "")
-    setRegistroSenescyt(data.config?.registroSenescyt || "")
+    if (conConfig) {
+      setUnicodigo(data.config?.unicodigo || "")
+      setCedulaProfesional(data.config?.cedulaProfesional || "")
+      setRegistroAcess(data.config?.registroAcess || "")
+      setRegistroSenescyt(data.config?.registroSenescyt || "")
+    }
   }
 
   async function abrir(fila: Paciente) {
@@ -136,7 +138,7 @@ export function FichaOptica() {
   }
 
   useEffect(() => {
-    cargar().catch((e) => setError(e.message))
+    cargar("", true).catch((e) => setError(e.message))
     pedir("/api/optica/sucursales").then((data) => setSucursales(data.sucursales || [])).catch(() => {})
   }, [])
 
@@ -151,6 +153,23 @@ export function FichaOptica() {
       setAviso("Paciente guardado")
     } catch (e) {
       setError(e instanceof Error ? e.message : "No se pudo guardar")
+    } finally {
+      setGuardando(false)
+    }
+  }
+
+  async function guardarDatosOptica() {
+    setGuardando(true)
+    setError("")
+    try {
+      const data = await pedir("/api/optica/config", { unicodigo, cedulaProfesional, registroAcess, registroSenescyt }, "PATCH")
+      setUnicodigo(data.config?.unicodigo || "")
+      setCedulaProfesional(data.config?.cedulaProfesional || "")
+      setRegistroAcess(data.config?.registroAcess || "")
+      setRegistroSenescyt(data.config?.registroSenescyt || "")
+      setAviso("Datos de la óptica guardados. Quedan para todas las consultas.")
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "No se pudieron guardar los datos")
     } finally {
       setGuardando(false)
     }
@@ -172,8 +191,6 @@ export function FichaOptica() {
         refraccion: { od: { ...rxOd, ...extraOd }, oi: { ...rxOi, ...extraOi }, material },
         diagnosticos,
         plan,
-        profesional: { nombre: usuario, cedula: cedulaProfesional, registroAcess, registroSenescyt },
-        unicodigo,
         sucursalId,
       }
       if (editId) await pedir(`/api/optica/consultas/${editId}`, cuerpo, "PATCH")
@@ -247,26 +264,38 @@ export function FichaOptica() {
   }
 
   const coincidencias = CIE10_OPTICA.filter((fila) => `${fila.codigo} ${fila.descripcion}`.toLowerCase().includes(buscaCie.trim().toLowerCase())).slice(0, 6)
-  const campo = "w-full bg-black border border-slate-700 rounded-lg px-3 py-2 text-sm"
+  const campo = "w-full bg-white border border-slate-300 rounded-lg px-3 py-2 text-sm text-slate-900"
+  const tarjeta = "bg-white border border-slate-200 rounded-2xl p-4 shadow-sm"
 
   return (
-    <Marco titulo="Ópticas · Historia clínica">
-      <p className="text-sm text-slate-300">La consulta guardada no se elimina. Si hay un error, se agrega una nota con fecha y usuario. El PDF queda listo para el sello del optometrista.</p>
-      {error ? <p className="text-sm font-bold text-red-300">{error}</p> : null}
-      {aviso ? <p className="text-sm font-bold text-teal-300">{aviso}</p> : null}
+    <Marco titulo="Ópticas · Historia clínica" claro>
+      <p className="text-sm text-slate-600">La consulta guardada no se elimina. Si hay un error, se agrega una nota con fecha y usuario. El PDF queda listo para el sello del optometrista.</p>
+      {error ? <p className="text-sm font-bold text-red-700">{error}</p> : null}
+      {aviso ? <p className="text-sm font-bold text-teal-700">{aviso}</p> : null}
+      <section className={`${tarjeta} space-y-3`}>
+        <h2 className="font-black text-slate-950">Datos de la óptica</h2>
+        <p className="text-xs text-slate-600">Unicódigo ACESS, cédula del optometrista, registro ACESS y registro SENESCYT se registran una sola vez. No se vuelven a pedir en cada paciente.</p>
+        <div className="grid sm:grid-cols-2 gap-2">
+          <input value={unicodigo} onChange={(e) => setUnicodigo(e.target.value)} placeholder="Unicódigo ACESS" className={campo} />
+          <input value={cedulaProfesional} onChange={(e) => setCedulaProfesional(e.target.value)} placeholder="Cédula del optometrista" className={campo} />
+          <input value={registroAcess} onChange={(e) => setRegistroAcess(e.target.value)} placeholder="Registro ACESS" className={campo} />
+          <input value={registroSenescyt} onChange={(e) => setRegistroSenescyt(e.target.value)} placeholder="Registro SENESCYT" className={campo} />
+        </div>
+        <button type="button" disabled={guardando} onClick={guardarDatosOptica} className="bg-teal-600 text-white font-black text-xs px-4 py-2 rounded-xl">Guardar datos de la óptica</button>
+      </section>
       <div className="grid lg:grid-cols-[280px_1fr] gap-6">
         <div className="space-y-3">
           <input value={busqueda} onChange={(e) => { setBusqueda(e.target.value); cargar(e.target.value).catch(() => {}) }} placeholder="Buscar paciente" className={campo} />
           {pacientes.map((fila) => (
-            <button key={fila.id} type="button" onClick={() => abrir(fila)} className={`w-full text-left rounded-xl border px-3 py-2 ${paciente?.id === fila.id ? "border-teal-400 bg-teal-400/10" : "border-slate-800 bg-[#111827]"}`}>
-              <b className="block text-sm">{fila.apellidos} {fila.nombres}</b>
-              <span className="text-[11px] text-slate-400">{fila.identificacion}</span>
+            <button key={fila.id} type="button" onClick={() => abrir(fila)} className={`w-full text-left rounded-xl border px-3 py-2 ${paciente?.id === fila.id ? "border-teal-600 bg-teal-50" : "border-slate-200 bg-white"}`}>
+              <b className="block text-sm text-slate-950">{fila.apellidos} {fila.nombres}</b>
+              <span className="text-[11px] text-slate-500">{fila.identificacion}</span>
             </button>
           ))}
         </div>
         <div className="space-y-6">
-          <section className="bg-[#111827] border border-slate-800 rounded-2xl p-4 space-y-3">
-            <h2 className="font-black">Nuevo paciente</h2>
+          <section className={`${tarjeta} space-y-3`}>
+            <h2 className="font-black text-slate-950">Nuevo paciente</h2>
             <div className="grid sm:grid-cols-2 gap-2">
               <select value={nuevo.tipoDocumento} onChange={(e) => setNuevo({ ...nuevo, tipoDocumento: e.target.value })} className={campo}><option value="CEDULA">Cédula</option><option value="PASAPORTE">Pasaporte</option></select>
               <input value={nuevo.identificacion} onChange={(e) => setNuevo({ ...nuevo, identificacion: e.target.value })} placeholder="Identificación" className={campo} />
@@ -279,14 +308,14 @@ export function FichaOptica() {
               <input value={nuevo.direccion} onChange={(e) => setNuevo({ ...nuevo, direccion: e.target.value })} placeholder="Dirección" className={`${campo} sm:col-span-2`} />
               <input value={nuevo.ocupacion} onChange={(e) => setNuevo({ ...nuevo, ocupacion: e.target.value })} placeholder="Ocupación" className={`${campo} sm:col-span-2`} />
             </div>
-            <label className="flex gap-2 text-sm text-slate-200"><input type="checkbox" checked={nuevo.consentimiento} onChange={(e) => setNuevo({ ...nuevo, consentimiento: e.target.checked })} />{TEXTO_DATOS_OPTICA}</label>
-            <button type="button" disabled={guardando} onClick={guardarPaciente} className="bg-teal-400 text-slate-950 font-black text-xs px-4 py-2 rounded-xl">Guardar paciente</button>
+            <label className="flex gap-2 text-sm text-slate-700"><input type="checkbox" checked={nuevo.consentimiento} onChange={(e) => setNuevo({ ...nuevo, consentimiento: e.target.checked })} />{TEXTO_DATOS_OPTICA}</label>
+            <button type="button" disabled={guardando} onClick={guardarPaciente} className="bg-teal-600 text-white font-black text-xs px-4 py-2 rounded-xl">Guardar paciente</button>
           </section>
 
           {paciente ? (
-            <section className="bg-[#111827] border border-slate-800 rounded-2xl p-4 space-y-4">
-              <h2 className="font-black">Consulta de {paciente.nombres} {paciente.apellidos}</h2>
-              <p className="text-xs text-slate-400">La guarda {usuario || "el usuario de esta sesión"}. Mientras esté abierta se puede corregir. Al cerrarla sale la receta y ya no se modifica.</p>
+            <section className={`${tarjeta} space-y-4`}>
+              <h2 className="font-black text-slate-950">Consulta de {paciente.nombres} {paciente.apellidos}</h2>
+              <p className="text-xs text-slate-600">La guarda {usuario || "el usuario de esta sesión"}. Mientras esté abierta se puede corregir. Al cerrarla sale la receta y ya no se modifica.</p>
               <select value={sucursalId} onChange={(e) => setSucursalId(e.target.value)} className={campo}>
                 <option value="">Sucursal de la atención</option>
                 {sucursales.map((fila) => <option key={fila.codigo + fila.id} value={fila.id}>{fila.codigo} {fila.nombre}</option>)}
@@ -314,7 +343,7 @@ export function FichaOptica() {
                   ["vpCc", "Cerca con corrección"],
                 ] as const).map(([clave, titulo]) => (
                   <div key={clave} className="grid grid-cols-4 gap-2 mb-2 items-center">
-                    <span className="text-[11px] text-slate-400">{titulo}</span>
+                    <span className="text-[11px] text-slate-600">{titulo}</span>
                     {(["od", "oi", "ao"] as const).map((lado) => (
                       <input key={lado} value={agudeza[clave][lado]} onChange={(e) => setAgudeza({ ...agudeza, [clave]: { ...agudeza[clave], [lado]: e.target.value } })} placeholder={lado.toUpperCase()} className={campo} />
                     ))}
@@ -347,38 +376,32 @@ export function FichaOptica() {
                 <input value={buscaCie} onChange={(e) => setBuscaCie(e.target.value)} placeholder="Buscar hipermetropía, miopía, H52..." className={campo} />
                 <div className="flex flex-wrap gap-2 mt-2">
                   {coincidencias.map((fila) => (
-                    <button key={fila.codigo} type="button" onClick={() => setDiagnosticos((prev) => prev.some((d) => d.codigo === fila.codigo) ? prev : [...prev, fila])} className="text-[11px] border border-slate-700 rounded-full px-2 py-1">{fila.codigo} {fila.descripcion}</button>
+                    <button key={fila.codigo} type="button" onClick={() => setDiagnosticos((prev) => prev.some((d) => d.codigo === fila.codigo) ? prev : [...prev, fila])} className="text-[11px] border border-slate-300 rounded-full px-2 py-1 text-slate-800">{fila.codigo} {fila.descripcion}</button>
                   ))}
                 </div>
                 <div className="mt-2 text-sm">{diagnosticos.map((fila) => <span key={fila.codigo} className="inline-block mr-2">{fila.codigo} {fila.descripcion}</span>)}</div>
               </div>
               <textarea value={plan} onChange={(e) => setPlan(e.target.value)} placeholder="Plan" className={campo} />
-              <div className="grid sm:grid-cols-2 gap-2">
-                <input value={unicodigo} onChange={(e) => setUnicodigo(e.target.value)} placeholder="Unicódigo ACESS" className={campo} />
-                <input value={cedulaProfesional} onChange={(e) => setCedulaProfesional(e.target.value)} placeholder="Cédula del optometrista" className={campo} />
-                <input value={registroAcess} onChange={(e) => setRegistroAcess(e.target.value)} placeholder="Registro ACESS" className={campo} />
-                <input value={registroSenescyt} onChange={(e) => setRegistroSenescyt(e.target.value)} placeholder="Registro SENESCYT" className={campo} />
-              </div>
-              <button type="button" disabled={guardando} onClick={guardarConsulta} className="bg-teal-400 text-slate-950 font-black text-xs px-4 py-2 rounded-xl">{editId ? "Actualizar consulta abierta" : "Guardar consulta abierta"}</button>
+              <button type="button" disabled={guardando} onClick={guardarConsulta} className="bg-teal-600 text-white font-black text-xs px-4 py-2 rounded-xl">{editId ? "Actualizar consulta abierta" : "Guardar consulta abierta"}</button>
             </section>
           ) : null}
 
           <section className="space-y-3">
             {consultas.map((consulta) => (
-              <article key={consulta.id} className="bg-[#111827] border border-slate-800 rounded-2xl p-4 space-y-2">
-                <b>{new Date(consulta.fechaHora).toLocaleString("es-EC", { timeZone: "America/Guayaquil" })} · {consulta.estado === "CERRADA" ? "Cerrada" : "Abierta"}</b>
-                <p className="text-sm">{consulta.motivo}</p>
-                <p className="text-xs text-slate-400">Atendió {consulta.usuarioNombre}. {(consulta.diagnosticos || []).map((d) => d.codigo_cie10).filter(Boolean).join(", ")}</p>
+              <article key={consulta.id} className={`${tarjeta} space-y-2`}>
+                <b className="text-slate-950">{new Date(consulta.fechaHora).toLocaleString("es-EC", { timeZone: "America/Guayaquil" })} · {consulta.estado === "CERRADA" ? "Cerrada" : "Abierta"}</b>
+                <p className="text-sm text-slate-800">{consulta.motivo}</p>
+                <p className="text-xs text-slate-500">Atendió {consulta.usuarioNombre}. {(consulta.diagnosticos || []).map((d) => d.codigo_cie10).filter(Boolean).join(", ")}</p>
                 <div className="flex gap-3 text-xs font-bold">
-                  <a className="text-teal-300" target="_blank" href={`/dashboard/comprobantes-adicionales/opticas/imprimir/${consulta.id}`}>PDF historia</a>
-                  <a className="text-teal-300" target="_blank" href={`/dashboard/comprobantes-adicionales/opticas/imprimir/${consulta.id}?tipo=receta`}>PDF receta</a>
-                  {consulta.estado !== "CERRADA" ? <button type="button" onClick={() => continuarConsulta(consulta)} className="text-teal-300">Continuar</button> : null}
-                  {consulta.estado !== "CERRADA" ? <button type="button" onClick={() => cerrarConsulta(consulta.id)} className="text-amber-300">Cerrar y emitir receta</button> : null}
+                  <a className="text-teal-700" target="_blank" href={`/dashboard/comprobantes-adicionales/opticas/imprimir/${consulta.id}`}>PDF historia</a>
+                  <a className="text-teal-700" target="_blank" href={`/dashboard/comprobantes-adicionales/opticas/imprimir/${consulta.id}?tipo=receta`}>PDF receta</a>
+                  {consulta.estado !== "CERRADA" ? <button type="button" onClick={() => continuarConsulta(consulta)} className="text-teal-700">Continuar</button> : null}
+                  {consulta.estado !== "CERRADA" ? <button type="button" onClick={() => cerrarConsulta(consulta.id)} className="text-amber-700">Cerrar y emitir receta</button> : null}
                 </div>
-                {consulta.adendas.map((adenda) => <p key={adenda.id} className="text-xs text-slate-300">Nota {new Date(adenda.createdAt).toLocaleString("es-EC", { timeZone: "America/Guayaquil" })} · {adenda.usuarioNombre}: {adenda.texto}</p>)}
+                {consulta.adendas.map((adenda) => <p key={adenda.id} className="text-xs text-slate-600">Nota {new Date(adenda.createdAt).toLocaleString("es-EC", { timeZone: "America/Guayaquil" })} · {adenda.usuarioNombre}: {adenda.texto}</p>)}
                 <div className="flex gap-2">
                   <input value={nota[consulta.id] || ""} onChange={(e) => setNota({ ...nota, [consulta.id]: e.target.value })} placeholder="Nota aclaratoria" className={campo} />
-                  <button type="button" onClick={() => agregarNota(consulta.id)} className="text-xs font-bold px-3 rounded-xl bg-slate-800">Agregar</button>
+                  <button type="button" onClick={() => agregarNota(consulta.id)} className="text-xs font-bold px-3 rounded-xl bg-slate-100 border border-slate-300 text-slate-900">Agregar</button>
                 </div>
               </article>
             ))}

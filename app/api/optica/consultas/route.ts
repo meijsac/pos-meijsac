@@ -31,9 +31,12 @@ export async function POST(req: NextRequest) {
   const saneado = sanearConsulta(body)
   if ("error" in saneado) return NextResponse.json({ error: saneado.error }, { status: 400 })
   const datos = saneado.datos
+  const config = await prisma.opticaConfig.findUnique({ where: { empresaId: sesion.empresa.id } })
   const profesional = {
-    ...datos.profesional,
-    nombre: datos.profesional.nombre || sesion.usuario.nombre,
+    nombre: sesion.usuario.nombre,
+    cedula: config?.cedulaProfesional || "",
+    registro_acess: config?.registroAcess || "",
+    registro_senescyt: config?.registroSenescyt || "",
   }
   const sucursalId = String(body.sucursalId || "")
   const sucursal = sucursalId
@@ -66,7 +69,7 @@ export async function POST(req: NextRequest) {
         logoUrl: String(extra.logo_url || extra.logoUrl || extra.marca_ride || ""),
         ciudad: String(extra.ciudad || extra.canton || ""),
         sucursal: sucursal ? `${sucursal.codigo} ${sucursal.nombre}` : String(body.sucursalNombre || ""),
-        unicodigo_acess: datos.unicodigo,
+        unicodigo_acess: config?.unicodigo || "",
       },
       pacienteResumen: {
         nombres: paciente.nombres,
@@ -74,22 +77,6 @@ export async function POST(req: NextRequest) {
         identificacion: paciente.identificacion,
         fecha_nacimiento: paciente.fechaNacimiento ? paciente.fechaNacimiento.toISOString().slice(0, 10) : "",
       },
-    },
-  })
-  await prisma.opticaConfig.upsert({
-    where: { empresaId: sesion.empresa.id },
-    update: {
-      unicodigo: datos.unicodigo,
-      registroAcess: profesional.registro_acess,
-      registroSenescyt: profesional.registro_senescyt,
-      cedulaProfesional: profesional.cedula,
-    },
-    create: {
-      empresaId: sesion.empresa.id,
-      unicodigo: datos.unicodigo,
-      registroAcess: profesional.registro_acess,
-      registroSenescyt: profesional.registro_senescyt,
-      cedulaProfesional: profesional.cedula,
     },
   })
   return NextResponse.json({ consulta })

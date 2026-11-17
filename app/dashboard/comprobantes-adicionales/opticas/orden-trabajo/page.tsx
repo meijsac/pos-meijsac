@@ -44,7 +44,7 @@ export default function OrdenOpticaPage() {
   const [error, setError] = useState("")
   const [pacienteId, setPacienteId] = useState("")
   const [externa, setExterna] = useState({ esfOd: "0.00", cilOd: "0.00", ejeOd: "0", esfOi: "0.00", cilOi: "0.00", ejeOi: "0", material: "", tipoLente: "" })
-  const campo = "w-full bg-black border border-slate-700 rounded-lg px-3 py-2 text-sm"
+  const campo = "w-full bg-white border border-slate-300 rounded-lg px-3 py-2 text-sm text-slate-900"
 
   async function cargar() {
     const data = await pedir("/api/optica/ordenes")
@@ -85,10 +85,10 @@ export default function OrdenOpticaPage() {
   }
 
   return (
-    <Marco titulo="Ópticas · Orden de trabajo">
-      <p className="text-sm text-slate-300">Aquí llega la fórmula cuando se cierra la consulta. También se abre una orden si el cliente trae una receta de afuera. Elegir el armazón no cambia el inventario ni emite la factura.</p>
-      {error ? <p className="text-sm font-bold text-red-300">{error}</p> : null}
-      <section className="bg-[#111827] border border-slate-800 rounded-2xl p-4 space-y-3">
+    <Marco titulo="Ópticas · Orden de trabajo" claro>
+      <p className="text-sm text-slate-600">Aquí llega la fórmula cuando se cierra la consulta. También se abre una orden si el cliente trae una receta de afuera. Elegir el armazón no cambia el inventario ni emite la factura.</p>
+      {error ? <p className="text-sm font-bold text-red-700">{error}</p> : null}
+      <section className="bg-white border border-slate-200 rounded-2xl p-4 space-y-3 shadow-sm">
         <h2 className="font-black">Receta externa, sin historia clínica</h2>
         <select value={pacienteId} onChange={(e) => setPacienteId(e.target.value)} className={campo}>
           <option value="">Paciente</option>
@@ -104,7 +104,7 @@ export default function OrdenOpticaPage() {
         </div>
         <input value={externa.tipoLente} onChange={(e) => setExterna({ ...externa, tipoLente: e.target.value })} placeholder="Tipo de lente" className={campo} />
         <input value={externa.material} onChange={(e) => setExterna({ ...externa, material: e.target.value })} placeholder="Material y filtros" className={campo} />
-        <button type="button" onClick={crearExterna} className="bg-teal-400 text-slate-950 font-black text-xs px-4 py-2 rounded-xl">Crear orden</button>
+        <button type="button" onClick={crearExterna} className="bg-teal-600 text-white font-black text-xs px-4 py-2 rounded-xl">Crear orden</button>
       </section>
       <div className="space-y-3">
         {ordenes.map((orden) => (
@@ -123,22 +123,22 @@ function OrdenFila({ orden, guardar, campo }: { orden: Orden; guardar: (id: stri
   const [clientes, setClientes] = useState<Cliente[]>([])
   const [productos, setProductos] = useState<Producto[]>([])
   return (
-    <article className="bg-[#111827] border border-slate-800 rounded-2xl p-4 space-y-2">
+    <article className="bg-white border border-slate-200 rounded-2xl p-4 space-y-2 shadow-sm">
       <b>{orden.paciente?.apellidos} {orden.paciente?.nombres}</b>
       <p className="text-sm">OD {signo(orden.formula?.od?.esf)} {signo(orden.formula?.od?.cil)} x {orden.formula?.od?.eje ?? 0} · OI {signo(orden.formula?.oi?.esf)} {signo(orden.formula?.oi?.cil)} x {orden.formula?.oi?.eje ?? 0}</p>
-      <p className="text-xs text-slate-400">{orden.clienteFacturacion ? `Paga ${orden.clienteFacturacion.razonSocial}` : "Sin cliente de facturación"} {orden.facturaId ? "· Factura vinculada" : ""}</p>
+      <p className="text-xs text-slate-500">{orden.clienteFacturacion ? `Paga ${orden.clienteFacturacion.razonSocial}` : "Sin cliente de facturación"} {orden.facturaId ? "· Factura vinculada" : ""}</p>
       <select value={orden.estado} onChange={(e) => guardar(orden.id, { estado: e.target.value })} className={campo}>
         {ESTADOS.map(([valor, nombre]) => <option key={valor} value={valor}>{nombre}</option>)}
       </select>
       <input value={armazon} onChange={async (e) => { setArmazon(e.target.value); const data = await fetch(`/api/productos?q=${encodeURIComponent(e.target.value)}`).then((r) => r.json()).catch(() => []); setProductos(Array.isArray(data) ? data.slice(0, 5) : []) }} placeholder="Buscar armazón en inventario" className={campo} />
-      <div className="flex flex-wrap gap-2">{productos.map((producto) => <button type="button" key={producto.nombre} onClick={() => { setArmazon(producto.nombre); guardar(orden.id, { armazonNombre: producto.nombre }) }} className="text-[11px] border border-slate-700 rounded-full px-2 py-1">{producto.nombre}</button>)}</div>
+      <div className="flex flex-wrap gap-2">{productos.map((producto) => <button type="button" key={producto.nombre} onClick={() => { setArmazon(producto.nombre); guardar(orden.id, { armazonNombre: producto.nombre }) }} className="text-[11px] border border-slate-300 rounded-full px-2 py-1 text-slate-800">{producto.nombre}</button>)}</div>
       <input value={luna} onChange={(e) => setLuna(e.target.value)} placeholder="Lunas" className={campo} />
-      <button type="button" onClick={() => guardar(orden.id, { armazonNombre: armazon, lunaNombre: luna })} className="text-xs font-bold text-teal-300">Guardar armazón y lunas</button>
+      <button type="button" onClick={() => guardar(orden.id, { armazonNombre: armazon, lunaNombre: luna })} className="text-xs font-bold text-teal-700">Guardar armazón y lunas</button>
       <input value={cliente} onChange={async (e) => { const texto = e.target.value; setCliente(texto); const data = await fetch(`/api/clientes?q=${encodeURIComponent(texto)}`).then((r) => r.json()).catch(() => []); const lista = Array.isArray(data) ? data : []; setClientes(lista.filter((fila) => `${fila.razonSocial || ""} ${fila.identificacion || ""}`.toLowerCase().includes(texto.toLowerCase())).slice(0, 5)) }} placeholder="Quién paga, si es otra persona" className={campo} />
-      <div className="flex flex-wrap gap-2">{clientes.map((fila) => <button type="button" key={fila.id} onClick={() => guardar(orden.id, { clienteFacturacionId: fila.id })} className="text-[11px] border border-slate-700 rounded-full px-2 py-1">{fila.razonSocial}</button>)}</div>
+      <div className="flex flex-wrap gap-2">{clientes.map((fila) => <button type="button" key={fila.id} onClick={() => guardar(orden.id, { clienteFacturacionId: fila.id })} className="text-[11px] border border-slate-300 rounded-full px-2 py-1 text-slate-800">{fila.razonSocial}</button>)}</div>
       <div className="flex gap-2">
         <input value={secuencial} onChange={(e) => setSecuencial(e.target.value)} placeholder="Secuencial de la factura ya emitida" className={campo} />
-        <button type="button" onClick={() => guardar(orden.id, { secuencial })} className="text-xs font-bold px-3 rounded-xl bg-slate-800">Vincular</button>
+        <button type="button" onClick={() => guardar(orden.id, { secuencial })} className="text-xs font-bold px-3 rounded-xl bg-slate-100 border border-slate-300 text-slate-900">Vincular</button>
       </div>
     </article>
   )
