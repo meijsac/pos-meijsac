@@ -11,10 +11,10 @@ if (!databaseUrl) {
   process.exit(1)
 }
 
-const sql = readFileSync(
-  new URL("../prisma/migrations/20261109021500_sync_empresa_plan/migration.sql", import.meta.url),
-  "utf8"
-)
+const archivosSql = [
+  "../prisma/migrations/20261109021500_sync_empresa_plan/migration.sql",
+  "../prisma/migrations/20261117030000_optica_historia/migration.sql",
+]
 
 // Prisma agrega pgbouncer y connection_limit, que Postgres no entiende.
 // node-postgres, sin lista de valores, usa el protocolo simple: no crea prepared statements.
@@ -29,7 +29,10 @@ const client = new pg.Client({
 })
 await client.connect()
 try {
-  await client.query(sql)
+  for (const archivo of archivosSql) {
+    const sql = readFileSync(new URL(archivo, import.meta.url), "utf8")
+    await client.query(sql)
+  }
 } finally {
   await client.end()
 }

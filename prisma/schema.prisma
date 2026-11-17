@@ -66,6 +66,9 @@ model Empresa {
   firmaElectronica FirmaElectronica?
   certificadoSri   CertificadoSri?
   miembros         EmpresaUsuario[]
+  opticaPacientes  OpticaPaciente[]
+  opticaConsultas  OpticaConsulta[]
+  opticaConfig     OpticaConfig?
 }
 
 model FirmaElectronica {
@@ -189,6 +192,8 @@ model Usuario {
   sesiones              SesionUsuario[]
   facturas              FacturaEmitida[]
   clientesCreados       Cliente[]
+  opticaConsultas       OpticaConsulta[]
+  opticaAdendas         OpticaAdenda[]
 }
 
 model SesionUsuario {
@@ -438,4 +443,87 @@ model CatalogoSriCambio {
   despues String   @default("")
 
   @@map("catalogos_sri_cambios")
+}
+
+model OpticaConfig {
+  empresaId         String   @id @map("empresa_id")
+  empresa           Empresa  @relation(fields: [empresaId], references: [id], onDelete: Cascade)
+  unicodigo         String   @default("")
+  registroAcess     String   @default("") @map("registro_acess")
+  registroSenescyt  String   @default("") @map("registro_senescyt")
+  cedulaProfesional String   @default("") @map("cedula_profesional")
+  updatedAt         DateTime @updatedAt @map("updated_at")
+
+  @@map("optica_config")
+}
+
+model OpticaPaciente {
+  id                  String           @id @default(cuid())
+  empresaId           String           @map("empresa_id")
+  empresa             Empresa          @relation(fields: [empresaId], references: [id], onDelete: Cascade)
+  tipoDocumento       String           @default("CEDULA") @map("tipo_documento")
+  identificacion      String
+  nombres             String
+  apellidos           String
+  fechaNacimiento     DateTime?        @map("fecha_nacimiento") @db.Date
+  sexo                String           @default("")
+  telefono            String           @default("")
+  email               String           @default("")
+  direccion           String           @default("")
+  ocupacion           String           @default("")
+  consentimientoAt    DateTime?        @map("consentimiento_at")
+  consentimientoTexto String           @default("") @map("consentimiento_texto")
+  createdAt           DateTime         @default(now()) @map("created_at")
+  updatedAt           DateTime         @updatedAt @map("updated_at")
+  consultas           OpticaConsulta[]
+
+  @@unique([empresaId, identificacion])
+  @@index([empresaId])
+  @@map("optica_paciente")
+}
+
+model OpticaConsulta {
+  id              String         @id @default(cuid())
+  empresaId       String         @map("empresa_id")
+  empresa         Empresa        @relation(fields: [empresaId], references: [id], onDelete: Cascade)
+  pacienteId      String         @map("paciente_id")
+  paciente        OpticaPaciente @relation(fields: [pacienteId], references: [id], onDelete: Cascade)
+  usuarioId       String?        @map("usuario_id")
+  usuario         Usuario?       @relation(fields: [usuarioId], references: [id], onDelete: SetNull)
+  usuarioNombre   String         @map("usuario_nombre")
+  fechaHora       DateTime       @default(now()) @map("fecha_hora")
+  cerrada         Boolean        @default(true)
+  motivo          String         @default("")
+  anamnesis       Json
+  lensometria     Json
+  agudeza         Json
+  examen          Json
+  motilidad       Json
+  refraccion      Json
+  diagnosticos    Json
+  plan            String         @default("")
+  profesional     Json
+  establecimiento Json
+  pacienteResumen Json           @map("paciente_resumen")
+  createdAt       DateTime       @default(now()) @map("created_at")
+  adendas         OpticaAdenda[]
+
+  @@index([empresaId, fechaHora])
+  @@index([pacienteId])
+  @@map("optica_consulta")
+}
+
+model OpticaAdenda {
+  id            String         @id @default(cuid())
+  empresaId     String         @map("empresa_id")
+  consultaId    String         @map("consulta_id")
+  consulta      OpticaConsulta @relation(fields: [consultaId], references: [id], onDelete: Cascade)
+  usuarioId     String?        @map("usuario_id")
+  usuario       Usuario?       @relation(fields: [usuarioId], references: [id], onDelete: SetNull)
+  usuarioNombre String         @map("usuario_nombre")
+  texto         String
+  createdAt     DateTime       @default(now()) @map("created_at")
+
+  @@index([consultaId])
+  @@map("optica_adenda")
 }
