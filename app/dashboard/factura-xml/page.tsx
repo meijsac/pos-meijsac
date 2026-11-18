@@ -325,6 +325,7 @@ export default function FacturadorXMLReal(){
 
   const [esOperadora, setEsOperadora] = useState(false)
   const [placaVehiculo, setPlacaVehiculo] = useState("")
+  const [clientesCoincidentes, setClientesCoincidentes] = useState<any[]>([])
   const [cliente, setCliente] = useState<any>({
     tipoDoc:"07", identificacion:"9999999999999", razon:"CONSUMIDOR FINAL",
     tipold: "",
@@ -1094,6 +1095,26 @@ const total = subtotalSin + iva15 + ivaDiferenciado + valorICE + valorIRBPNR + p
       return
     }
   }
+      const elegirClienteGuardado = async (c: any) => {
+    const idCliente = String(c.identificacion || "").replace(/\D/g, "")
+    const tipoCliente = idCliente.length === 13 ? "04" : idCliente.length === 10 ? "05" : (c.tipoId || "06")
+    setClientesCoincidentes([])
+    setCliente((f:any) => ({
+      ...f,
+      tipoDoc: tipoCliente,
+      identificacion: idCliente,
+      razon: c.razonSocial || "",
+      direccion: c.direccion || "",
+      provincia: c.provincia || "",
+      ciudad: c.ciudad || "",
+      email: c.email || "",
+      telefono: c.telefono || "",
+      celular: c.telefono || "",
+      tipoCliente: c.tipoCliente || "",
+      regimen: c.regimen || "",
+    }))
+    if (c.id) await cargarSucursalesFactura(c.id)
+  }
       const buscarEnClientesDB = async () => {
     const idTexto = String(cliente.identificacion || "").trim()
     const nombreTexto = String(cliente.razon || "").trim()
@@ -1122,37 +1143,28 @@ const total = subtotalSin + iva15 + ivaDiferenciado + valorICE + valorIRBPNR + p
       const res = await fetch(`/api/clientes?empresaId=${empresaId}&q=${encodeURIComponent(idBusqueda || consultaNombre)}`)
       const data = await res.json()
       const lista = Array.isArray(data) ? data : []
-      const c = lista.find((x: any) => {
+      const coincide = (x: any) => {
         const id = String(x.identificacion || "").replace(/\D/g, "")
         if (!id || id === "9999999999999") return false
-        const razon = String(x.razonSocial || "").toLowerCase()
+        const razon = `${x.razonSocial || ""} ${x.nombreComercial || ""}`.toLowerCase()
         const porNombre = consultaNombre ? razon.includes(consultaNombre) : false
         const porId = idBusqueda ? (id === idBusqueda || (idBusqueda.length === 10 && id === `${idBusqueda}001`) || (idBusqueda.length === 13 && id === idBusqueda.slice(0, 10))) : false
         if (consultaNombre && idBusqueda) return porNombre && porId
         return porNombre || porId
-      })
-
+      }
+      const encontrados = lista.filter(coincide)
+      if (consultaNombre && !idBusqueda) {
+        setClientesCoincidentes(encontrados)
+        if (!encontrados.length) setCliente(volverConsumidor)
+        return
+      }
+      setClientesCoincidentes([])
+      const c = encontrados[0]
       if (!c) {
         setCliente(volverConsumidor)
         return
       }
-      const idCliente = String(c.identificacion || "").replace(/\D/g, "")
-      const tipoCliente = idCliente.length === 13 ? "04" : idCliente.length === 10 ? "05" : (c.tipoId || "06")
-      setCliente((f:any) => ({
-        ...f,
-        tipoDoc: tipoCliente,
-        identificacion: idCliente,
-        razon: c.razonSocial || "",
-        direccion: c.direccion || "",
-        provincia: c.provincia || "",
-        ciudad: c.ciudad || "",
-        email: c.email || "",
-        telefono: c.telefono || "",
-        celular: c.telefono || "",
-        tipoCliente: c.tipoCliente || "",
-        regimen: c.regimen || "",
-      }))
-      if (c.id) await cargarSucursalesFactura(c.id)
+      await elegirClienteGuardado(c)
     } catch (e) {
       console.error(e);
       alert("Error DB");
@@ -1240,6 +1252,16 @@ const total = subtotalSin + iva15 + ivaDiferenciado + valorICE + valorIRBPNR + p
   </button>
 </div>
             <input value={cliente.razon} onChange={e=>setCliente({...cliente,razon:e.target.value})} placeholder="Nombre / Razón Social" className="col-span-3 bg-black p-2 rounded-lg text-white text-[11px] border border-white/10" />
+            {clientesCoincidentes.length > 0 && (
+              <div className="col-span-3 bg-black border border-white/10 rounded-lg max-h-40 overflow-auto">
+                {clientesCoincidentes.map((c) => (
+                  <button type="button" key={c.id} onClick={() => { void elegirClienteGuardado(c) }} className="w-full text-left px-2 py-2 text-[11px] border-b border-white/5 hover:bg-white/10">
+                    <b>{c.razonSocial}</b>
+                    <span className="text-white/50"> · {c.identificacion}</span>
+                  </button>
+                ))}
+              </div>
+            )}
             <input value={cliente.email} onChange={e=>setCliente({...cliente,email:e.target.value})} placeholder="Correo electrónico" className="col-span-3 bg-black p-2 rounded-lg text-white text-[11px] border border-white/10" />
             <input value={cliente.direccion} onChange={e=>setCliente({...cliente,direccion:e.target.value})} placeholder="Dirección" className="col-span-3 bg-black p-2 rounded-lg text-white text-[11px] border border-white/10" />
           </div>
