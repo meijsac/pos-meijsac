@@ -1170,6 +1170,7 @@ const total = subtotalSin + iva15 + ivaDiferenciado + valorICE + valorIRBPNR + p
       {(!permisos || permisos.verCostos) && <a href="/dashboard/productos" className="bg-[#1e293b] border border-white/10 px-4 py-2 rounded-full text-[11px] font-bold">Inventario</a>}
       <a href="/dashboard/clientes" className="bg-[#1e293b] border border-white/10 px-4 py-2 rounded-full text-[11px] font-bold">Clientes</a>
       <a href="/dashboard/comprobantes" className="bg-[#1e293b] border border-white/10 px-4 py-2 rounded-full text-[11px] font-bold">Comprobantes</a>
+      <a href="/dashboard/reportes" className="bg-[#1e293b] border border-white/10 px-4 py-2 rounded-full text-[11px] font-bold">Reportes</a>
       {mostrarSalir && <button type="button" onClick={() => { void cerrarSesionEnEsteEquipo() }} className="bg-red-500 text-white px-4 py-2 rounded-full text-[11px] font-bold">Cerrar sesión</button>}
       <button onClick={toggleTema} className="bg-white text-black px-3 py-2 rounded-full text-[10px] font-black ml-auto">{isDark?"☀️ CLARO":"🌙 OSCURO"}</button>
     </div>
