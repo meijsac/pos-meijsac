@@ -63,10 +63,10 @@ async function buscarProductosEnBase(texto: string) {
   const q = texto.trim()
   if (!q) return []
   const lista = await cargarCatalogo()
-  if (lista) return lista.filter((p) => coincideProducto(p, q)).slice(0, 8)
+  if (lista) return lista.filter((p) => coincideProducto(p, q))
   const res = await fetch(`/api/productos?q=${encodeURIComponent(q)}`)
   const data = await res.json().catch(() => [])
-  return Array.isArray(data) ? data.map(productoDeApi).slice(0, 8) : []
+  return Array.isArray(data) ? data.map(productoDeApi) : []
 }
 
 function productoExacto(productos: any[], texto: string) {
@@ -1409,7 +1409,7 @@ const total = subtotalSin + iva15 + ivaDiferenciado + valorICE + valorIRBPNR + p
       if (!escrito) { setSugerencias([]); setIndiceLector(-1); return }
       const res = await buscarProductosEnBase(escrito)
       if (id !== busquedaId.current) return
-      setSugerencias(res.slice(0, 8))
+      setSugerencias(res)
       setIndiceLector(res.length ? 0 : -1)
       if (!res.length) setErrorLector("No encontrado")
     }}
@@ -1434,7 +1434,7 @@ const total = subtotalSin + iva15 + ivaDiferenciado + valorICE + valorIRBPNR + p
   <button type="button" onMouseDown={(e)=>e.preventDefault()} onClick={()=> buscarYAgregarPorCodigoTexto(textoLector.current || codigoRapido, true)} className="bg-teal-400 text-slate-950 px-4 py-3 rounded-lg font-semibold text-xs">+ Agregar</button>
 
   {sugerencias.length>0 && (
-    <div className="absolute top-full left-0 mt-2 w-[85%] bg-[#0f172a] border border-[#00f5d4]/40 rounded-xl z-[100] overflow-hidden shadow-2xl">
+    <div className="absolute top-full left-0 mt-2 w-[85%] max-h-72 overflow-y-auto bg-[#0f172a] border border-[#00f5d4]/40 rounded-xl z-[100] shadow-2xl">
       {sugerencias.map((p:any, idx:number)=>(
         <div key={`${p.codigo}-${idx}`} onMouseDown={(e)=>e.preventDefault()} onMouseEnter={()=>setIndiceLector(idx)} onClick={()=>agregarDesdeLector(p)}
           className={`p-3 cursor-pointer flex justify-between items-center border-b border-white/5 ${idx===indiceLector ? "bg-[#00f5d4]/20" : "hover:bg-white/10"}`}>
