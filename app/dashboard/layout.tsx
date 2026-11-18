@@ -77,6 +77,13 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   }, [])
 
   useEffect(() => {
+    const enFacturador = pathname.startsWith("/dashboard/factura-xml")
+    if (enFacturador) {
+      const pulso = () => { fetch("/api/auth/sesion", { credentials: "same-origin" }).catch(() => {}) }
+      pulso()
+      const reloj = window.setInterval(pulso, 10 * 60 * 1000)
+      return () => window.clearInterval(reloj)
+    }
     let timer = 0
     const armar = () => {
       window.clearTimeout(timer)
@@ -94,7 +101,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       window.clearTimeout(timer)
       eventos.forEach((evento) => window.removeEventListener(evento, armar))
     }
-  }, [router])
+  }, [router, pathname])
 
   return (
     <div className="min-h-screen bg-[#0a0a0a] text-white">
