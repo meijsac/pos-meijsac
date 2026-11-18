@@ -8,15 +8,35 @@ import { puede } from "@/lib/seguridad"
 import { fusionarSecuenciales } from "@/lib/sri/punto-emision"
 
 async function guardarPuntos(empresaId: string, secuenciales: { estab: string; pto: string }[] | undefined, sucursales: unknown) {
-  const lista = Array.isArray(secuenciales) ? secuenciales : []
-  for (const fila of lista) {
-    await asegurarPunto(empresaId, fila.estab, fila.pto).catch(() => null)
+  const puntos = new Map<string, { estab: string; pto: string; nombre: string; direccion: string }>()
+  const agregar = (estab: unknown, pto: unknown, nombre = "", direccion = "") => {
+    const codigoEstab = String(estab ?? "").replace(/\D/g, "").padStart(3, "0").slice(-3)
+    const codigoPto = String(pto ?? "").replace(/\D/g, "").padStart(3, "0").slice(-3)
+    if (codigoEstab === "000" || codigoPto === "000") return
+    const clave = `${codigoEstab}-${codigoPto}`
+    const previo = puntos.get(clave)
+    if (!previo) puntos.set(clave, { estab: codigoEstab, pto: codigoPto, nombre, direccion })
+    else if (nombre && !previo.nombre) {
+      previo.nombre = nombre
+      previo.direccion = direccion || previo.direccion
+    }
   }
-  if (!Array.isArray(sucursales)) return
-  for (const fila of sucursales) {
-    const s = fila as { id?: string; nombre?: string; dir?: string; ptoEmision?: string }
-    await asegurarPunto(empresaId, s.id, s.ptoEmision || "001", String(s.nombre || ""), String(s.dir || "")).catch(() => null)
+  for (const fila of Array.isArray(secuenciales) ? secuenciales : []) agregar(fila.estab, fila.pto)
+  if (Array.isArray(sucursales)) {
+    for (const fila of sucursales) {
+      const s = fila as { id?: string; nombre?: string; dir?: string; ptoEmision?: string }
+      agregar(s.id, s.ptoEmision || "001", String(s.nombre || ""), String(s.dir || ""))
+    }
   }
+  const porEstab = new Map<string, { estab: string; pto: string; nombre: string; direccion: string }[]>()
+  for (const fila of puntos.values()) {
+    const grupo = porEstab.get(fila.estab) || []
+    grupo.push(fila)
+    porEstab.set(fila.estab, grupo)
+  }
+  await Promise.all([...porEstab.values()].map(async (grupo) => {
+    for (const fila of grupo) await asegurarPunto(empresaId, fila.estab, fila.pto, fila.nombre, fila.direccion).catch(() => null)
+  }))
 }
 
 function limpiarSecuenciales(lista: unknown) {

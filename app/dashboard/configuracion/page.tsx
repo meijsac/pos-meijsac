@@ -198,6 +198,7 @@ export default function ConfiguracionAvanzadaSRI() {
     }, [tab]);
     const [cfg, setCfg] = useState<any>(null);
     const equipoListo = useRef(false);
+    const equipoInicial = useRef("");
     const [logs, setLogs] = useState<any[]>([]);
     const [infoFirma, setInfoFirma] = useState<any>(null);
     const [claveIngreso, setClaveIngreso] = useState("");
@@ -362,21 +363,28 @@ export default function ConfiguracionAvanzadaSRI() {
 
         const dataGuardada = await res.json().catch(() => ({}))
         if (!res.ok) throw new Error(dataGuardada.error || `Error ${res.status}`);
-        const lectura = await fetch("/api/configuracion", { credentials: "same-origin", cache: "no-store" })
-        const leido = await lectura.json().catch(() => ({}))
-        if (!lectura.ok) throw new Error(leido.error || "No se pudo leer el secuencial guardado")
-        if (equipoListo.current && Array.isArray(payload.usuarios)) {
+        let secuencialesGuardados = Array.isArray(dataGuardada.secuenciales) ? dataGuardada.secuenciales : null
+        if (!secuencialesGuardados) {
+          const lectura = await fetch("/api/configuracion", { credentials: "same-origin", cache: "no-store" })
+          const leido = await lectura.json().catch(() => ({}))
+          if (!lectura.ok) throw new Error(leido.error || "No se pudo leer el secuencial guardado")
+          secuencialesGuardados = Array.isArray(leido.secuenciales) ? leido.secuenciales : []
+        }
+        const usuariosActuales = Array.isArray(payload.usuarios) ? payload.usuarios : []
+        if (equipoListo.current && JSON.stringify(usuariosActuales) !== equipoInicial.current) {
           const equipo = await fetch("/api/usuarios/equipo", {
             method: "POST",
             credentials: "same-origin",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ usuarios: payload.usuarios }),
+            body: JSON.stringify({ usuarios: usuariosActuales }),
           })
           const dataEquipo = await equipo.json().catch(() => ({}))
           if (!equipo.ok) throw new Error(dataEquipo.error || "No se pudo guardar el equipo")
-          if (Array.isArray(dataEquipo.usuarios)) payload.usuarios = dataEquipo.usuarios
+          if (Array.isArray(dataEquipo.usuarios)) {
+            payload.usuarios = dataEquipo.usuarios
+            equipoInicial.current = JSON.stringify(dataEquipo.usuarios)
+          }
         }
-        const secuencialesGuardados = Array.isArray(leido.secuenciales) ? leido.secuenciales : []
         const puntosGuardados = secuencialesGuardados.filter((s: any) => String(s?.codigo || "01") === "01" || String(s?.tipo || "").toUpperCase().includes("FACTURA"))
         if ((cuerpo.secuenciales || []).length > 0 && puntosGuardados.length === 0) throw new Error("El punto de emisión no quedó guardado en la base")
         console.log("[secuencial] leido de la base", puntosGuardados.map((s: any) => ({ estab: s?.estab, pto: s?.pto, ultimo: s?.ultimo })))
@@ -418,15 +426,23 @@ export default function ConfiguracionAvanzadaSRI() {
       ;(async () => {
         const reg = JSON.parse(localStorage.getItem("meijsac_registro") || "{}");
         const emp = JSON.parse(localStorage.getItem("meijsac_empresa") || "{}");
-        const clientes = JSON.parse(localStorage.getItem("meijsac_clientes") || "[]");
-        const clienteActual = emp?.ruc ? (clientes.find((c:any)=> c.ruc === emp.ruc) || {}) : {};
+        let clienteActual: any = {}
+        if (!emp?.razonSocial && !emp?.razon && emp?.ruc) {
+          const clientes = JSON.parse(localStorage.getItem("meijsac_clientes") || "[]");
+          clienteActual = Array.isArray(clientes) ? (clientes.find((c: any) => c.ruc === emp.ruc) || {}) : {}
+        }
         let datosReales: any = { ...reg, ...emp, ...clienteActual };
-        try {
-          const empresa = await cargarEmpresaSesion()
-          const conValor = Object.fromEntries(Object.entries(empresa).filter(([, v]) => v !== "" && v != null))
+        const [empresaCargada, lectura, firmaRes, equipo] = await Promise.all([
+          cargarEmpresaSesion().catch((e: any) => ({ __error: e?.message || "No se pudo cargar la empresa" })),
+          fetch("/api/configuracion", { credentials: "same-origin", cache: "no-store" }).then(async (res) => res.ok ? res.json() : null).catch(() => null),
+          fetch("/api/sri/clave-firma", { credentials: "same-origin" }).then(async (res) => res.ok ? res.json() : null).catch(() => null),
+          fetch("/api/usuarios/equipo", { credentials: "same-origin" }).then(async (res) => res.ok ? res.json() : null).catch(() => null),
+        ])
+        if (empresaCargada && !empresaCargada.__error) {
+          const conValor = Object.fromEntries(Object.entries(empresaCargada).filter(([, v]) => v !== "" && v != null))
           datosReales = { ...datosReales, ...conValor }
-        } catch (e: any) {
-          if (!datosReales.ruc) alert(e?.message || "No se pudo cargar la empresa")
+        } else if (!datosReales.ruc) {
+          alert(empresaCargada?.__error || "No se pudo cargar la empresa")
         }
         if (!vivo) return
 if(datosReales.razon && !datosReales.razonSocial) datosReales.razonSocial = datosReales.razon;
@@ -502,29 +518,18 @@ base.sucursales = datosReales.sucursales || base.sucursales || [];
           base.marca_ride = logoGuardado;
           base.logoPreview = logoGuardado;
         }
-        try {
-          const lectura = await fetch("/api/configuracion", { credentials: "same-origin", cache: "no-store" })
-          const leido = lectura.ok ? await lectura.json() : null
-          if (Array.isArray(leido?.secuenciales)) base.secuenciales = leido.secuenciales
-        } catch {}
+        if (Array.isArray(lectura?.secuenciales)) base.secuenciales = lectura.secuenciales
         if (!Array.isArray(base.secuenciales)) base.secuenciales = []
-        try {
-          const firmaRes = await fetch("/api/sri/clave-firma", { credentials: "same-origin" })
-          const firmaData = firmaRes.ok ? await firmaRes.json() : null
-          if (firmaData?.guardada) {
-            base.firma = { ...(base.firma || {}), nombre: firmaData.nombre || base.firma?.nombre || "firma.p12", expira: firmaData.expira || base.firma?.expira || "", clave: "", enServidor: true }
-            recordarFirmaLocal(base.firma)
-          }
-        } catch {}
-        setCfg(base);
-        try {
-          const equipo = await fetch("/api/usuarios/equipo", { credentials: "same-origin" })
-          const dataEquipo = equipo.ok ? await equipo.json() : null
-          if (vivo && Array.isArray(dataEquipo?.usuarios)) {
-            equipoListo.current = true
-            setCfg((p: any) => ({ ...(p || base), usuarios: dataEquipo.usuarios }))
-          }
-        } catch {}
+        if (firmaRes?.guardada) {
+          base.firma = { ...(base.firma || {}), nombre: firmaRes.nombre || base.firma?.nombre || "firma.p12", expira: firmaRes.expira || base.firma?.expira || "", clave: "", enServidor: true }
+          recordarFirmaLocal(base.firma)
+        }
+        if (Array.isArray(equipo?.usuarios)) {
+          base.usuarios = equipo.usuarios
+          equipoListo.current = true
+          equipoInicial.current = JSON.stringify(equipo.usuarios)
+        }
+        if (vivo) setCfg(base);
         setLogs(JSON.parse(localStorage.getItem("meijsac_logs") || "[]"));
       })()
       return () => { vivo = false }
