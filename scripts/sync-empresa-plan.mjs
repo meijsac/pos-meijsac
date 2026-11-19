@@ -16,6 +16,7 @@ const archivosSql = [
   "../prisma/migrations/20261117030000_optica_historia/migration.sql",
   "../prisma/migrations/20261117040000_optica_orden/migration.sql",
   "../prisma/migrations/20261118210000_proforma/migration.sql",
+  "../prisma/migrations/20261118220000_restaurante_estado/migration.sql",
 ]
 
 // Prisma agrega pgbouncer y connection_limit, que Postgres no entiende.

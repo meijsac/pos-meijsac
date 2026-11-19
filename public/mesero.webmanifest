@@ -1,0 +1,8 @@
+{
+  "name": "MEIJSAC Mesero",
+  "short_name": "Mesero",
+  "start_url": "/dashboard/restaurante/mesero",
+  "display": "standalone",
+  "background_color": "#080c14",
+  "theme_color": "#080c14"
+}

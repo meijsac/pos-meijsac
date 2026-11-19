@@ -1,8 +1,9 @@
 "use client"
-import { useState, useEffect } from "react"
+import { useState, useEffect, useRef } from "react"
+import { guardarRestaurante, leerLocal, leerRestaurante, nombreUsuario, sonarListo } from "@/lib/restaurante/sync"
 
 type Mods = { termino?:string, acomp?:string, nota?:string }
-type Item = { id:number, nombre:string, precio:number, cat:string, mods:Mods, cant:number }
+type Item = { id:number, uid?: string, nombre:string, precio:number, cat:string, destino?: string, mods:Mods, cant:number, estado?: string }
 type Mesa = { id:number, nombre:string, zona:string, estado:"LIBRE"|"OCUPADA"|"CUENTA"|"SUCIA", mesero:string, inicio:string|null, items:Item[], tiempo:number }
 
 const MENU = [
@@ -22,20 +23,35 @@ export default function AppMesero(){
   const [platoSel, setPlatoSel] = useState<Item|null>(null)
   const [nota, setNota] = useState("")
 
+  const vistos = useRef<Set<string> | null>(null)
+  const silencio = useRef(0)
+
   useEffect(()=>{
-    const data = JSON.parse(localStorage.getItem("meijsac_restaurante_mesas")||"[]")
-    if(data.length>0){
-      setMesas(data)
-    } else {
-      const init = Array.from({length:12},(_,i)=>({ id:i+1, nombre:`Mesa ${i+1}`, zona: i<6?"Salón":"Terraza", estado:"LIBRE", mesero:"", inicio:null, items:[], tiempo:0 } as Mesa))
-      localStorage.setItem("meijsac_restaurante_mesas", JSON.stringify(init)) // FIX: esto faltaba, por eso se eliminaban
-      setMesas(init)
-    }
+    const local = leerLocal("meijsac_restaurante_mesas")
+    const base = local.length ? local : Array.from({length:12},(_,i)=>({ id:i+1, nombre:`Mesa ${i+1}`, zona: i<6?"Salón":"Terraza", estado:"LIBRE", mesero:"", inicio:null, items:[], tiempo:0, capacidad:4 } as Mesa))
+    setMesas(base as Mesa[])
+    leerRestaurante().then((remoto) => {
+      if (remoto?.mesas.length) setMesas(remoto.mesas as Mesa[])
+      else void guardarRestaurante({ mesas: base })
+    }).catch(() => {})
+    const reloj = setInterval(() => {
+      leerRestaurante().then((remoto) => {
+        if (!remoto) return
+        if (Date.now() >= silencio.current && remoto.mesas.length) setMesas(remoto.mesas as Mesa[])
+        const listos = remoto.tickets.filter((ticket) => (ticket as { estado?: string }).estado === "LISTO").map((ticket) => String((ticket as { id?: string }).id))
+        if (!vistos.current) { vistos.current = new Set(listos); return }
+        if (listos.some((id) => !vistos.current?.has(id))) sonarListo()
+        listos.forEach((id) => vistos.current?.add(id))
+      }).catch(() => {})
+    }, 2000)
+    return () => clearInterval(reloj)
   },[])
 
   const guardar = (lista:Mesa[]) => {
+    silencio.current = Date.now() + 2500
     localStorage.setItem("meijsac_restaurante_mesas", JSON.stringify(lista))
     setMesas(lista)
+    void guardarRestaurante({ mesas: lista })
   }
 
   const seleccionarMesa = (id:number) => {
@@ -64,34 +80,40 @@ export default function AppMesero(){
       alert("Selecciona término de carne")
       return
     }
-    const itemFinal: Item = {...platoSel, mods:{...mods, nota}, cant:1 }
+    const ahora = new Date().toISOString()
+    const mesero = nombreUsuario() || "Mesero"
+    const itemFinal: Item = {...platoSel, uid: `${Date.now()}`, mods:{...mods, nota}, cant:1, estado: "PENDIENTE", destino: platoSel.cat === "BEBIDAS" ? "BARRA" : "PARRILLA" }
 
-    // 1. Ocupa mesa
     const lista = mesas.map(m=>{
       if(m.id!==mesaActiva) return m
-      const nueva = m.estado==="LIBRE"? {...m, estado:"OCUPADA" as const, inicio:new Date().toISOString(), mesero:"Yo", tiempo:0} : m
+      const nueva = m.estado==="LIBRE"? {...m, estado:"OCUPADA" as const, inicio:new Date().toISOString(), mesero, tiempo:0} : { ...m, mesero: m.mesero || mesero }
       return {...nueva, items:[...nueva.items, itemFinal]}
     })
     guardar(lista)
 
-    // 2. ENVIO POR PLATO - 1 ticket = 1 plato
+    const mesa = mesas.find((m) => m.id === mesaActiva)
     const ticket = {
       id: Date.now(),
       mesa: mesaActiva,
       mesaId: mesaActiva,
+      nombre: mesa?.nombre || `Mesa ${mesaActiva}`,
+      zona: mesa?.zona || "",
       plato: itemFinal.nombre,
-      items: [itemFinal],
+      destino: itemFinal.destino,
+      items: [{ ...itemFinal, enviadoEn: ahora }],
       mods: itemFinal.mods,
+      mesero,
       hora: new Date().toLocaleTimeString(),
-      estado:"EN_COLA",
+      estado:"PENDIENTE",
       tiempo:0,
-      timestamp: Date.now()
+      timestamp: Date.now(),
+      enviadoEn: ahora,
     }
-    const kds = JSON.parse(localStorage.getItem("meijsac_kds")||"[]")
-    const cola = JSON.parse(localStorage.getItem("meijsac_cola_cocina")||"[]")
-    kds.push(ticket); cola.push(ticket)
+    const kds = leerLocal("meijsac_kds")
+    kds.push(ticket)
     localStorage.setItem("meijsac_kds", JSON.stringify(kds))
-    localStorage.setItem("meijsac_cola_cocina", JSON.stringify(cola))
+    localStorage.setItem("meijsac_cola_cocina", JSON.stringify(kds))
+    void guardarRestaurante({ tickets: kds })
 
     if(navigator.vibrate) navigator.vibrate([100,50,100])
     setPlatoSel(null)
@@ -104,6 +126,7 @@ export default function AppMesero(){
   if(mesaActiva===null){
     return (
       <div className="min-h-screen bg-[#080c14] text-white p-3">
+        <link rel="manifest" href="/mesero.webmanifest" />
         <div className="bg-[#1e293b] p-4 rounded-2xl flex justify-between items-center mb-3">
           <div><h1 className="font-black text-sm">APP MESERO 📱</h1><p className="text-[10px] opacity-50">Selecciona una mesa para tomar pedido</p></div>
           <div className="text-[10px] bg-[#00f5d4]/20 text-[#00f5d4] px-2 py-1 rounded-full">{mesas.filter(m=>m.estado==="OCUPADA").length} Ocupadas</div>
@@ -141,7 +164,7 @@ export default function AppMesero(){
       <div className="p-3 space-y-2 max-h-[35vh] overflow-y-auto bg-black/20">
         {mesa?.items.map((it,idx)=>(
           <div key={idx} className="bg-[#1e293b] p-3 rounded-xl flex justify-between border border-white/5">
-            <div><div className="font-bold text-sm">{it.nombre}</div><div className="text-[10px] text-yellow-300">{it.mods.termino} {it.mods.acomp} {it.mods.nota && `"${it.mods.nota}"`}</div></div>
+            <div><div className="font-bold text-sm">{it.nombre}</div><div className="text-[10px] text-yellow-300">{it.mods.termino} {it.mods.acomp} {it.mods.nota && `"${it.mods.nota}"`}</div><div className="text-[10px] text-white/50">{it.estado || "PENDIENTE"}</div></div>
             {/* sin precio para mesero */}
             <div className="font-black text-[#00f5d4] text-xs">x{it.cant}</div>
           </div>

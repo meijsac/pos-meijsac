@@ -1,13 +1,19 @@
 "use client"
 import { useEffect, useState } from "react"
 import Link from "next/link"
+import { leerRestaurante } from "@/lib/restaurante/sync"
 
 export default function RestauranteHub(){
   const [ocupadas, setOcupadas] = useState(0)
 
   useEffect(()=>{
-    const m = localStorage.getItem("meijsac_restaurante_mesas")
-    if(m) try{ setOcupadas(JSON.parse(m).filter((x:any)=>x.estado==="OCUPADA").length) }catch{}
+    leerRestaurante().then((remoto) => {
+      let mesas = remoto?.mesas?.length ? remoto.mesas : []
+      if (!mesas.length) {
+        try { mesas = JSON.parse(localStorage.getItem("meijsac_restaurante_mesas") || "[]") } catch { mesas = [] }
+      }
+      if (Array.isArray(mesas)) setOcupadas(mesas.filter((x: { estado?: string }) => x.estado === "OCUPADA").length)
+    }).catch(() => {})
   },[])
 
   return (

@@ -57,6 +57,7 @@ model Empresa {
   movimientos     MovimientoInventario[]
   facturas        FacturaEmitida[]
   proformas       Proforma[]
+  restauranteEstado RestauranteEstado?
   documentosLegales DocumentoLegal[]
   kardex          KardexMovimiento[]
   transferencias  TransferenciaInventario[]
@@ -193,6 +194,18 @@ model Proforma {
   @@unique([empresaId, numero])
   @@index([empresaId, createdAt])
   @@map("proformas")
+}
+
+model RestauranteEstado {
+  empresaId  String   @id @map("empresa_id")
+  empresa    Empresa  @relation(fields: [empresaId], references: [id], onDelete: Cascade)
+  mesas      Json     @default("[]")
+  tickets    Json     @default("[]")
+  menu       Json     @default("[]")
+  categorias Json     @default("[]")
+  updatedAt  DateTime @updatedAt @map("updated_at")
+
+  @@map("restaurante_estado")
 }
 
 model Usuario {

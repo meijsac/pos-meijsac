@@ -1,9 +1,10 @@
 "use client"
-import { useState, useEffect, useMemo } from "react"
+import { useState, useEffect, useMemo, useRef } from "react"
+import { guardarRestaurante, leerLocal, leerRestaurante, nombreUsuario } from "@/lib/restaurante/sync"
 
 type Mods = { termino?:string, acomp?:string, nota?:string }
-type Item = { id:number, uid:string, nombre:string, precio:number, cat:string, mods:Mods, cant:number, estado:"PENDIENTE"|"ENVIADO" }
-type Mesa = { id:number, nombre:string, zona:string, estado:"LIBRE"|"OCUPADA"|"CUENTA"|"SUCIA", mesero:string, inicio:string|null, items:Item[], tiempo:number }
+type Item = { id:number, uid:string, nombre:string, precio:number, cat:string, destino?:string, mods:Mods, cant:number, estado:"PENDIENTE"|"ENVIADO"|"PREPARANDO"|"LISTO"|"ENTREGADO", capacidad?: number }
+type Mesa = { id:number, nombre:string, zona:string, estado:"LIBRE"|"OCUPADA"|"CUENTA"|"SUCIA", mesero:string, inicio:string|null, items:Item[], tiempo:number, capacidad?: number }
 type SplitFactura = { id:string, mesaOrigenId:number, numero: number, totalPartes: number, items: Item[], subtotal:number, iva:number, propina:number, total:number, esSplit: boolean, estado: "PENDIENTE"|"FACTURADA", cliente?:any, origen?:string }
 
 const MENU_BASE: any[] = [
@@ -37,31 +38,72 @@ export default function SalonCompleto(){
   const [categoriasMenu, setCategoriasMenu] = useState<string[]>(CATEGORIAS_BASE)
   const [showAddCategoria, setShowAddCategoria] = useState(false)
   const [nuevaCategoriaNombre, setNuevaCategoriaNombre] = useState("")
+  const [listo, setListo] = useState(false)
+  const ticketsRef = useRef<any[]>([])
+  const propia = useRef({ mesas: "", menu: "", categorias: "" })
+  const silencio = useRef(0)
 
   const MENU = menuRestaurante.filter((p:any)=>p.activo!==false)
 
   useEffect(()=>{
-    const guardado = localStorage.getItem("meijsac_menu_restaurante")
-    if(guardado) setMenuRestaurante(JSON.parse(guardado))
+    let vivo = true
+    const localMesas = leerLocal("meijsac_restaurante_mesas")
+    const localMenu = leerLocal("meijsac_menu_restaurante")
+    const localCats = leerLocal("meijsac_categorias_menu")
+    const base = localMesas.length ? localMesas : Array.from({length:12},(_,i)=>({ id:i+1, nombre:`Mesa ${i+1}`, zona: i<4?"Salón":i<8?"Terraza":"Barra", estado:"LIBRE", mesero:"", inicio:null, items:[], tiempo:0, capacidad:4 }))
+    ticketsRef.current = leerLocal("meijsac_kds")
+    leerRestaurante().then((remoto) => {
+      if (!vivo) return
+      setMesas((remoto?.mesas.length ? remoto.mesas : base) as Mesa[])
+      if (remoto?.menu.length) setMenuRestaurante(remoto.menu)
+      else if (localMenu.length) setMenuRestaurante(localMenu)
+      if (remoto?.categorias.length) setCategoriasMenu(remoto.categorias as string[])
+      else if (localCats.length) setCategoriasMenu(localCats)
+      ticketsRef.current = remoto?.tickets.length ? remoto.tickets : ticketsRef.current
+      setMounted(true)
+      setListo(true)
+    }).catch(() => { if (vivo) { setMesas(base as Mesa[]); setMounted(true); setListo(true) } })
+    const reloj = setInterval(() => {
+      leerRestaurante().then((remoto) => {
+        if (!vivo || !remoto) return
+        if (Date.now() < silencio.current) return
+        const json = JSON.stringify(remoto.mesas)
+        if (remoto.mesas.length && json !== propia.current.mesas) {
+          propia.current.mesas = json
+          setMesas(remoto.mesas as Mesa[])
+        }
+        ticketsRef.current = remoto.tickets
+      }).catch(() => {})
+    }, 2000)
+    return () => { vivo = false; clearInterval(reloj) }
   },[])
-
-  useEffect(()=>{ localStorage.setItem("meijsac_menu_restaurante", JSON.stringify(menuRestaurante)) },[menuRestaurante])
 
   useEffect(()=>{
-    setMounted(true)
-    const s=localStorage.getItem("meijsac_restaurante_mesas")
-    if(s){ try{ setMesas(JSON.parse(s)) }catch{} }
-    if(!s || JSON.parse(s||"[]").length===0){ setMesas(Array.from({length:12},(_,i)=>({ id:i+1, nombre:`Mesa ${i+1}`, zona: i<4?"Salón":i<8?"Terraza":"Barra", estado:"LIBRE", mesero:"", inicio:null, items:[], tiempo:0 } as Mesa))) }
-  },[])
-
-  useEffect(()=>{ if(mounted) localStorage.setItem("meijsac_restaurante_mesas", JSON.stringify(mesas)) },[mesas, mounted])
+    if (!listo) return
+    const json = JSON.stringify(mesas)
+    if (json === propia.current.mesas) return
+    propia.current.mesas = json
+    silencio.current = Date.now() + 2500
+    localStorage.setItem("meijsac_restaurante_mesas", json)
+    void guardarRestaurante({ mesas })
+  },[mesas, listo])
   useEffect(()=>{ const t=setInterval(()=>setMesas(ms=>ms.map(m=>m.estado==="OCUPADA" && m.inicio?{...m, tiempo:Math.floor((Date.now()-new Date(m.inicio).getTime())/60000)}:m)),60000); return ()=>clearInterval(t) },[])
   useEffect(()=>{
-    const catGuardadas = localStorage.getItem("meijsac_categorias_menu")
-    if(catGuardadas) setCategoriasMenu(JSON.parse(catGuardadas))
-  },[])
-
-  useEffect(()=>{ localStorage.setItem("meijsac_categorias_menu", JSON.stringify(categoriasMenu)) },[categoriasMenu])
+    if (!listo) return
+    const json = JSON.stringify(menuRestaurante)
+    if (json === propia.current.menu) return
+    propia.current.menu = json
+    localStorage.setItem("meijsac_menu_restaurante", json)
+    void guardarRestaurante({ menu: menuRestaurante })
+  },[menuRestaurante, listo])
+  useEffect(()=>{
+    if (!listo) return
+    const json = JSON.stringify(categoriasMenu)
+    if (json === propia.current.categorias) return
+    propia.current.categorias = json
+    localStorage.setItem("meijsac_categorias_menu", json)
+    void guardarRestaurante({ categorias: categoriasMenu })
+  },[categoriasMenu, listo])
 
   const mesa = useMemo(()=> mesas.find(m=>m.id===mesaActiva), [mesas, mesaActiva])
   const pendientes = useMemo(()=> mesa?.items.filter(i=>i.estado==="PENDIENTE")||[], [mesa])
@@ -73,13 +115,39 @@ export default function SalonCompleto(){
     if(!showMods) return
     setMesas(prev=>prev.map(m=>{
       if(m.id!==mesaActiva) return m
-      const base = m.estado==="LIBRE"? {...m, estado:"OCUPADA" as const, inicio:new Date().toISOString(), mesero:"Mesero 01"} : m
+      const base = m.estado==="LIBRE"? {...m, estado:"OCUPADA" as const, inicio:new Date().toISOString(), mesero:nombreUsuario() || "Mesero"} : m
       return {...base, items:[...base.items, {...showMods, estado:"PENDIENTE" as const}]}
     }))
     setShowMods(null)
   }
 
-  const enviarLoteACocina = () => { if(!mesa || pendientes.length===0) return; const kds = JSON.parse(localStorage.getItem("meijsac_kds")||"[]"); kds.push({ id:Date.now(), mesa:mesa.id, nombre:mesa.nombre, zona:mesa.zona, hora:new Date().toLocaleTimeString(), items:pendientes, estado:"EN_COLA", tiempo:0 }); localStorage.setItem("meijsac_kds", JSON.stringify(kds)); setMesas(prev=>prev.map(m=> m.id===mesaActiva? {...m, items: m.items.map(i=> i.estado==="PENDIENTE"? {...i, estado:"ENVIADO"}: i)} : m)) }
+  const enviarLoteACocina = () => {
+    if(!mesa || pendientes.length===0) return
+    const ahora = new Date().toISOString()
+    const mesero = nombreUsuario() || mesa.mesero || "Mesero"
+    const tickets = pendientes.map((item, indice) => ({
+      id: Date.now() + indice,
+      mesa: mesa.id,
+      mesaId: mesa.id,
+      nombre: mesa.nombre,
+      zona: mesa.zona,
+      plato: item.nombre,
+      destino: item.destino || "COCINA",
+      items: [{ ...item, estado: "PENDIENTE", enviadoEn: ahora }],
+      mods: item.mods,
+      mesero,
+      hora: new Date().toLocaleTimeString(),
+      estado: "PENDIENTE",
+      tiempo: 0,
+      timestamp: Date.now(),
+      enviadoEn: ahora,
+    }))
+    ticketsRef.current = [...ticketsRef.current, ...tickets]
+    localStorage.setItem("meijsac_kds", JSON.stringify(ticketsRef.current))
+    localStorage.setItem("meijsac_cola_cocina", JSON.stringify(ticketsRef.current))
+    void guardarRestaurante({ tickets: ticketsRef.current })
+    setMesas(prev=>prev.map(m=> m.id===mesaActiva? {...m, mesero, items: m.items.map(i=> i.estado==="PENDIENTE"? {...i, estado:"ENVIADO" as const, enviadoEn: ahora}: i)} : m))
+  }
   const preCuenta = () => { if(!mesa) return; setMesas(prev=>prev.map(m=> m.id===mesaActiva? {...m, estado:"CUENTA" as const}:m)) }
 
   // --- FIX: AHORA SI VA DIRECTO AL FACTURADOR ---
@@ -138,7 +206,7 @@ export default function SalonCompleto(){
 
   const agregarMesa = () => {
     if(!nuevaMesa.nombre.trim()){ alert("Nombre requerido"); return }
-    const nueva = { id: Date.now(), nombre: nuevaMesa.nombre.trim(), zona: nuevaMesa.zona, estado:"LIBRE", mesero:"", inicio:null, items:[], tiempo:0 } as Mesa
+    const nueva = { id: Date.now(), nombre: nuevaMesa.nombre.trim(), zona: nuevaMesa.zona, estado:"LIBRE" as const, mesero:"", inicio:null, items:[], tiempo:0, capacidad:4 }
     setMesas(prev=>[...prev, nueva]); setShowAddMesa(false); setMesaActiva(nueva.id)
   }
 
@@ -176,8 +244,8 @@ export default function SalonCompleto(){
                   {isOcupadaAlerta && <span className="w-2.5 h-2.5 bg-red-500 rounded-full animate-pulse shadow-[0_0_8px_rgba(239,68,68,0.8)]"></span>}
                   {isSucia && <span className="w-2.5 h-2.5 bg-red-400 rounded-full"></span>}
                 </div>
-                <div className="text-[9px]">{m.zona} {m.tiempo>0?`${m.tiempo}min`:""}</div>
-                <div className="text-[9px] mt-1 font-bold">{m.estado}</div>
+                <div className="text-[9px]">{m.zona}{m.capacidad ? ` · ${m.capacidad}` : ""} {m.tiempo>0?`${m.tiempo}min`:""}</div>
+                <div className="text-[9px] mt-1 font-bold">{m.estado}{m.mesero ? ` · ${m.mesero}` : ""}</div>
               </button>
               {modoEdicionMesas && m.estado!== "OCUPADA" && m.estado!== "SUCIA" && (
                 <button onClick={()=> setMesas(prev=>prev.filter(x=>x.id!==m.id))} className="absolute -top-2 -right-2 w-6 h-6 rounded-full bg-red-500 text-[10px] flex items-center justify-center font-black">✕</button>
