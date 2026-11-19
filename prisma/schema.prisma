@@ -56,6 +56,7 @@ model Empresa {
   proveedores     Proveedor[]
   movimientos     MovimientoInventario[]
   facturas        FacturaEmitida[]
+  proformas       Proforma[]
   documentosLegales DocumentoLegal[]
   kardex          KardexMovimiento[]
   transferencias  TransferenciaInventario[]
@@ -178,6 +179,20 @@ model FacturaEmitida {
   createdAt        DateTime  @default(now())
 
   @@index([empresaId, usuarioId])
+}
+
+model Proforma {
+  id        String   @id @default(cuid())
+  empresaId String   @map("empresa_id")
+  empresa   Empresa  @relation(fields: [empresaId], references: [id], onDelete: Cascade)
+  numero    Int
+  estado    String   @default("GUARDADA")
+  payload   Json
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@unique([empresaId, numero])
+  @@index([empresaId, createdAt])
+  @@map("proformas")
 }
 
 model Usuario {

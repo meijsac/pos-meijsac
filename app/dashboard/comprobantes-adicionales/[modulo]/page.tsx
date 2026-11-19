@@ -27,7 +27,7 @@ export default function ModuloAdicionalPage() {
     <Marco titulo={modulo.titulo}>
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         {(modulo.documentos || []).map((documento) => (
-          <Link key={documento.slug} href={`/dashboard/comprobantes-adicionales/${modulo.slug}/${documento.slug}`} className={tarjeta}>
+          <Link key={documento.slug} href={documento.href || `/dashboard/comprobantes-adicionales/${modulo.slug}/${documento.slug}`} className={tarjeta}>
             <p className="text-lg font-black text-white">{documento.titulo}</p>
             <p className="text-xs font-bold text-teal-400 mt-6">Abrir</p>
           </Link>

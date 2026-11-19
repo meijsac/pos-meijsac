@@ -3,10 +3,19 @@ export type ModuloAdicional = {
   titulo: string
   detalle: string
   construccion?: boolean
-  documentos?: { slug: string; titulo: string }[]
+  documentos?: { slug: string; titulo: string; href?: string }[]
 }
 
 export const MODULOS_ADICIONALES: ModuloAdicional[] = [
+  {
+    slug: "proforma",
+    titulo: "Proforma",
+    detalle: "Cotización y proformas emitidas",
+    documentos: [
+      { slug: "nueva", titulo: "Proforma", href: "/dashboard/proforma" },
+      { slug: "emitidas", titulo: "Proformas emitidas", href: "/dashboard/proforma/emitidas" },
+    ],
+  },
   {
     slug: "opticas",
     titulo: "Ópticas",

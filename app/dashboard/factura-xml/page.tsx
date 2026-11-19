@@ -568,6 +568,31 @@ useEffect(()=>{
         // No borramos el transito aqui, se borra despues de AUTORIZAR en emitirComprobante
       } catch(e){ console.error("Error transito", e) }
     }
+    try {
+      const crudo = sessionStorage.getItem("meijsac_proforma_factura")
+      if (!crudo) return
+      sessionStorage.removeItem("meijsac_proforma_factura")
+      const data = JSON.parse(crudo)
+      if (data?.cliente && typeof data.cliente === "object") setCliente((prev: any) => ({ ...prev, ...data.cliente }))
+      if (data?.propina) setPropinaCheck(true)
+      if (Array.isArray(data?.items) && data.items.length) {
+        setItems(data.items.map((it: any) => ({
+          codigo: String(it.codigo || ""),
+          descripcion: String(it.descripcion || ""),
+          detalle: "",
+          detalleAdicional: "",
+          cant: Number(it.cant) || 1,
+          pUnit: Number(it.pUnit) || 0,
+          descPorc: Number(it.descPorc) || 0,
+          descDolar: 0,
+          codigoPorcentaje: String(it.codigoPorcentaje || "4"),
+          tarifa: Number(it.tarifa || 15),
+          iva: Number(it.iva || 15),
+          ice: Number(it.ice) || 0,
+          esPlastico: Boolean(it.esPlastico),
+        })))
+      }
+    } catch {}
   },[])
 
     const toggleTema = ()=>{
