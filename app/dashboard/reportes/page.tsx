@@ -21,7 +21,10 @@ export default function ReporteVendedoresPage() {
   const [fechaHasta, setFechaHasta] = useState(hoy());
   const [filtroCliente, setFiltroCliente] = useState("");
   const [filtroProducto, setFiltroProducto] = useState("");
+  const [tipoDoc, setTipoDoc] = useState("01");
   const [facturasBase, setFacturasBase] = useState<Factura[]>([]);
+  const [notasBase, setNotasBase] = useState<Factura[]>([]);
+  const [proformasBase, setProformasBase] = useState<Factura[]>([]);
   const [trabajadores, setTrabajadores] = useState<{ id: string; nombre: string }[]>([]);
   const [porCaja, setPorCaja] = useState<Caja[]>([]);
   const [captacion, setCaptacion] = useState<Persona[]>([]);
@@ -37,6 +40,7 @@ export default function ReporteVendedoresPage() {
       .then((data) => {
         if (!vivo || !data) return
         setFacturasBase(Array.isArray(data.facturas) ? data.facturas : [])
+        setNotasBase(Array.isArray(data.notas) ? data.notas : [])
         setTrabajadores(Array.isArray(data.trabajadores) ? data.trabajadores : [])
         setPorCaja(Array.isArray(data.porCaja) ? data.porCaja : [])
         setCaptacion(Array.isArray(data.captacion) ? data.captacion : [])
@@ -46,13 +50,51 @@ export default function ReporteVendedoresPage() {
     return () => { vivo = false }
   }, [vendedorSel, fechaDesde, fechaHasta]);
 
-  const facturas = useMemo(() => {
-    return facturasBase.filter((f) => {
-      const cumpleCliente = filtroCliente === "" ? true : f.cliente.toLowerCase().includes(filtroCliente.toLowerCase()) || f.ruc.includes(filtroCliente);
-      const cumpleProducto = filtroProducto === "" ? true : f.productos.toLowerCase().includes(filtroProducto.toLowerCase());
-      return cumpleCliente && cumpleProducto;
-    });
-  }, [facturasBase, filtroCliente, filtroProducto]);
+  useEffect(() => {
+    if (tipoDoc !== "PROFORMA") return
+    let vivo = true
+    fetch("/api/proformas", { credentials: "same-origin" })
+      .then((r) => r.ok ? r.json() : [])
+      .then((data) => {
+        if (!vivo || !Array.isArray(data)) return
+        setProformasBase(data.map((fila) => ({
+          id: String(fila.id),
+          fecha: String(fila.creada || "").slice(0, 10),
+          secuencial: String(fila.numero || ""),
+          cliente: String(fila.cliente || ""),
+          ruc: "",
+          monto: Number(fila.total) || 0,
+          usuarioId: "",
+          vendedor: String(fila.vendedor || ""),
+          caja: "",
+          productos: "",
+          efectivo: 0,
+          tarjeta: 0,
+          transferencia: 0,
+        })))
+      })
+      .catch(() => {})
+    return () => { vivo = false }
+  }, [tipoDoc]);
+
+  const coincide = (f: Factura) => {
+    const cumpleCliente = filtroCliente === "" ? true : f.cliente.toLowerCase().includes(filtroCliente.toLowerCase()) || f.ruc.includes(filtroCliente);
+    const cumpleProducto = filtroProducto === "" ? true : f.productos.toLowerCase().includes(filtroProducto.toLowerCase());
+    return cumpleCliente && cumpleProducto;
+  }
+  const facturas = useMemo(() => facturasBase.filter(coincide), [facturasBase, filtroCliente, filtroProducto]);
+  const notas = useMemo(() => notasBase.filter(coincide), [notasBase, filtroCliente, filtroProducto]);
+  const proformas = useMemo(() => {
+    const nombre = trabajadores.find((t) => t.id === vendedorSel)?.nombre || ""
+    return proformasBase.filter((f) => {
+      if (f.fecha && (f.fecha < fechaDesde || f.fecha > fechaHasta)) return false
+      if (nombre && f.vendedor !== nombre) return false
+      return coincide(f)
+    })
+  }, [proformasBase, fechaDesde, fechaHasta, vendedorSel, trabajadores, filtroCliente, filtroProducto]);
+  const documentos = tipoDoc === "04" ? notas : tipoDoc === "PROFORMA" ? proformas : facturas
+  const tituloTotal = tipoDoc === "04" ? "TOTAL NOTAS DE CRÉDITO" : tipoDoc === "PROFORMA" ? "TOTAL PROFORMAS" : "TOTAL FACTURADO"
+  const vacio = tipoDoc === "04" ? "Sin notas de crédito en este rango" : tipoDoc === "PROFORMA" ? "Sin proformas en este rango" : "Sin facturas autorizadas en este rango"
 
   const carteraClientes = useMemo(() => {
     const agrupado: Record<string, { ruc: string; nombre: string; comprasRealizadas: number; totalAcumulado: number }> = {};
@@ -69,12 +111,12 @@ export default function ReporteVendedoresPage() {
     })).sort((a, b) => b.totalAcumulado - a.totalAcumulado);
   }, [facturas]);
 
-  const totalFacturado = facturas.reduce((s, f) => s + f.monto, 0);
+  const totalFacturado = documentos.reduce((s, f) => s + f.monto, 0);
   const clientesNuevos = captacion.reduce((s, c) => s + Number(c.nuevos || 0), 0);
 
   const exportar = () => {
     const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(facturas), "Facturas");
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(documentos), tipoDoc === "04" ? "Notas" : tipoDoc === "PROFORMA" ? "Proformas" : "Facturas");
     XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(porCaja), "Cajas");
     XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(captacion), "Captacion");
     const excelBuffer = XLSX.write(wb, { bookType: "xlsx", type: "array" });
@@ -112,6 +154,11 @@ export default function ReporteVendedoresPage() {
 
       <div className="bg-[#11131a] rounded-[20px] p-3 border border-[#00f5d4]/20 flex items-center gap-3 mb-4">
         <span className="text-[9px] bg-[#00f5d4]/20 text-[#00f5d4] px-2 py-1 rounded font-black">FILTRO FINO</span>
+        <select value={tipoDoc} onChange={(e) => setTipoDoc(e.target.value)} className="bg-black border border-white/10 rounded-xl px-3 py-2.5 text-xs text-white outline-none focus:border-[#00f5d4] font-bold">
+          <option value="01">Factura</option>
+          <option value="04">Nota de crédito</option>
+          <option value="PROFORMA">Proforma</option>
+        </select>
         <div className="relative flex-1">
           <input value={filtroCliente} onChange={e=> setFiltroCliente(e.target.value)} placeholder="Buscar por cliente o RUC" className="w-full bg-black border border-white/10 rounded-xl px-4 py-2.5 text-xs text-white outline-none focus:border-[#00f5d4]"/>
         </div>
@@ -125,7 +172,7 @@ export default function ReporteVendedoresPage() {
 
       <div className="grid grid-cols-3 gap-4 mb-4">
         <div className="bg-[#11131a] border border-white/5 rounded-2xl p-4">
-          <p className="text-[9px] text-white/40 font-bold tracking-widest uppercase">TOTAL FACTURADO</p>
+          <p className="text-[9px] text-white/40 font-bold tracking-widest uppercase">{tituloTotal}</p>
           <p className="text-2xl font-black mt-1 font-mono">${totalFacturado.toFixed(2)}</p>
         </div>
         <div className="bg-[#11131a] border border-white/5 rounded-2xl p-4">
@@ -134,7 +181,7 @@ export default function ReporteVendedoresPage() {
         </div>
         <div className="bg-[#11131a] border border-white/5 rounded-2xl p-4">
           <p className="text-[9px] text-white/40 font-bold tracking-widest uppercase">DOCUMENTOS</p>
-          <p className="text-2xl font-black mt-1 font-mono">{cargando ? "…" : facturas.length}</p>
+          <p className="text-2xl font-black mt-1 font-mono">{cargando ? "…" : documentos.length}</p>
         </div>
       </div>
 
@@ -182,7 +229,7 @@ export default function ReporteVendedoresPage() {
                 </tr>
               </thead>
               <tbody>
-                {facturas.map((f) => (
+                {documentos.map((f) => (
                   <tr key={f.id} className="border-b border-white/5 text-white/80 hover:bg-white/5 transition-colors">
                     <td className="p-2 font-mono text-white/40">{f.fecha}</td>
                     <td className="p-2 font-mono text-[#00f5d4] font-bold">{f.secuencial}</td>
@@ -191,8 +238,8 @@ export default function ReporteVendedoresPage() {
                     <td className="p-2 text-right font-mono font-bold text-white">${f.monto.toFixed(2)}</td>
                   </tr>
                 ))}
-                {facturas.length === 0 && (
-                  <tr><td colSpan={5} className="p-6 text-center text-white/30">{cargando ? "Leyendo ventas de esta empresa…" : "Sin facturas autorizadas en este rango"}</td></tr>
+                {documentos.length === 0 && (
+                  <tr><td colSpan={5} className="p-6 text-center text-white/30">{cargando ? "Leyendo ventas de esta empresa…" : vacio}</td></tr>
                 )}
               </tbody>
             </table>

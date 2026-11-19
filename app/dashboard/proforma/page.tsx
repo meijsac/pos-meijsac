@@ -1,7 +1,8 @@
 "use client"
 import { useEffect, useState } from "react"
 import { cargarEmpresaSesion } from "@/lib/sesion-cliente"
-import { totalesProforma } from "@/lib/proforma/calculos"
+import { numeroProforma, totalesProforma } from "@/lib/proforma/calculos"
+import { puntoActivoFactura } from "@/lib/sri/punto-emision"
 
 type Item = {
   codigo: string
@@ -45,6 +46,11 @@ export default function ProformaPage() {
   const [sugerencias, setSugerencias] = useState<any[]>([])
   const [guardando, setGuardando] = useState(false)
   const [aviso, setAviso] = useState("")
+  const [siguiente, setSiguiente] = useState(1)
+  const [serie, setSerie] = useState("")
+  const [vendedor, setVendedor] = useState("")
+  const [clientesGuardados, setClientesGuardados] = useState<any[]>([])
+  const [busquedaCliente, setBusquedaCliente] = useState("")
 
   useEffect(() => {
     let vivo = true
@@ -56,31 +62,55 @@ export default function ProformaPage() {
         matriz: String(empresa.dirMatriz || empresa.direccion || ""),
         regimen: String(empresa.regimen || ""),
       })
+      const punto = puntoActivoFactura(empresa.secuenciales, empresa.ambiente).punto
+      if (punto.estab && punto.pto) setSerie(`${punto.estab}-${punto.pto}`)
     }).catch(() => {})
     fetch("/api/productos", { credentials: "same-origin" }).then((r) => r.json()).then((data) => {
       if (vivo && Array.isArray(data)) setCatalogo(data)
     }).catch(() => {})
+    fetch("/api/clientes", { credentials: "same-origin" }).then((r) => r.json()).then((data) => {
+      if (vivo && Array.isArray(data)) setClientesGuardados(data)
+    }).catch(() => {})
+    try {
+      const usuario = JSON.parse(localStorage.getItem("meijsac_user") || "{}")
+      if (vivo) setVendedor(String(usuario?.nombre || ""))
+    } catch {}
+    fetch("/api/proformas", { credentials: "same-origin" }).then((r) => r.json()).then((data) => {
+      if (!vivo || !Array.isArray(data)) return
+      const mayor = data.reduce((max, fila) => Math.max(max, Number(fila.correlativo) || 0), 0)
+      setSiguiente(mayor + 1)
+      if (data[0]?.serie) setSerie(String(data[0].serie))
+    }).catch(() => {})
     return () => { vivo = false }
   }, [])
 
-  const buscarClientes = async (nombre: string) => {
-    setCliente({ ...cliente, razon: nombre })
-    const q = nombre.trim().toLowerCase()
-    if (q.length < 2) { setClientes([]); return }
-    const data = await fetch("/api/clientes", { credentials: "same-origin" }).then((r) => r.json()).catch(() => [])
-    if (!Array.isArray(data)) return
-    setClientes(data.filter((c) => `${c.razonSocial || ""} ${c.nombreComercial || ""}`.toLowerCase().includes(q)).slice(0, 30))
+  const textoCliente = (c: any) => [
+    c.razonSocial, c.nombreComercial, c.identificacion, c.email, c.telefono,
+    c.direccion, c.ciudad, c.provincia, c.categoria, c.tipoCliente,
+    ...(Array.isArray(c.sucursales) ? c.sucursales.flatMap((s: any) => [s.nombre, s.codigo, s.direccion, s.ciudad]) : []),
+  ].map((v) => String(v || "").toLowerCase()).join(" ")
+  const buscarClientes = () => {
+    const q = busquedaCliente.trim().toLowerCase()
+    if (!q) { setClientes([]); setAviso("Escribe un nombre, cédula, RUC, correo o teléfono."); return }
+    const encontrados = clientesGuardados.filter((c) => textoCliente(c).includes(q))
+    setClientes(encontrados)
+    setAviso(encontrados.length ? "" : "No hay clientes con ese dato.")
   }
 
   const plano = (p: any) => {
     const ficha = p?.ficha && typeof p.ficha === "object" ? p.ficha : {}
     return { ...ficha, ...p, tipoIvaSRI: ficha.tipoIvaSRI || p?.tipoIvaSRI, codigoPorcentaje: ficha.codigoPorcentaje || p?.codigoPorcentaje, precioMinorista: ficha.precioMinorista ?? p?.precio }
   }
-  const buscarProductos = (q: string) => {
-    setTexto(q)
-    const busqueda = q.trim().toLowerCase()
-    if (!busqueda) { setSugerencias([]); return }
-    setSugerencias(catalogo.map(plano).filter((p) => `${p.nombre || ""} ${p.descripcion || ""} ${p.codigo || ""}`.toLowerCase().includes(busqueda)))
+  const textoProducto = (p: any) => [
+    p.nombre, p.descripcion, p.codigo, p.categoria, p.codigoAuxiliar, p.codigoBarras,
+    p.codigo_barras, p.codigoInterno, p.codigo_interno, p.sku, p.codigoAlterno, p.detalle,
+  ].map((v) => String(v || "").toLowerCase()).join(" ")
+  const buscarProductos = () => {
+    const busqueda = texto.trim().toLowerCase()
+    if (!busqueda) { setSugerencias([]); setAviso("Escribe un código, nombre o cualquier dato del producto."); return }
+    const encontrados = catalogo.map(plano).filter((p) => textoProducto(p).includes(busqueda))
+    setSugerencias(encontrados)
+    setAviso(encontrados.length ? "" : "No hay productos con ese dato.")
   }
 
   const agregar = (p: any) => {
@@ -113,12 +143,13 @@ export default function ProformaPage() {
         method: "POST",
         credentials: "same-origin",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ cliente, items, propina }),
+        body: JSON.stringify({ cliente, items, propina, atendidoPor: vendedor }),
       })
       const data = await res.json().catch(() => ({}))
       if (!res.ok) { setAviso(data.error || "No se pudo guardar"); return }
       window.open(`/api/proformas/${data.id}/pdf`, "_blank")
       setItems([])
+      setSiguiente((Number(data.correlativo) || siguiente) + 1)
       setAviso(`Proforma ${data.numero} guardada. El PDF quedó listo para imprimir.`)
     } finally {
       setGuardando(false)
@@ -136,7 +167,9 @@ export default function ProformaPage() {
         <h1 className="font-black text-lg">Proforma</h1>
         <p className="text-[11px] text-white/70 mt-1">{emisor.razon || "Cargando empresa"}{emisor.ruc ? ` · RUC ${emisor.ruc}` : ""}</p>
         <p className="text-[11px] text-white/50">{emisor.matriz}{emisor.regimen ? ` · ${emisor.regimen}` : ""}</p>
-        <p className="text-[11px] text-amber-200 mt-2">Este documento no se envía al SRI y no usa el secuencial de la factura.</p>
+        <p className="text-sm font-black text-teal-300 mt-2">Nro. {serie ? `${serie}-${numeroProforma(siguiente)}` : numeroProforma(siguiente)}</p>
+        <p className="text-[11px] text-white/70">Vendedor: {vendedor || "—"}</p>
+        <p className="text-[11px] text-amber-200 mt-2">Este documento no se envía al SRI y no usa el secuencial de la factura. Cada proforma guardada usa el número siguiente.</p>
       </div>
       <div className="max-w-7xl mx-auto bg-[#0f172a] border border-white/10 rounded-xl p-4 mb-3 grid grid-cols-1 md:grid-cols-2 gap-2">
         <select value={cliente.tipoDoc} onChange={(e) => {
@@ -151,7 +184,11 @@ export default function ProformaPage() {
         </select>
         <input value={cliente.identificacion} onChange={(e) => setCliente({ ...cliente, identificacion: e.target.value })} placeholder="Identificación" className="bg-black border border-white/10 rounded-lg p-2 text-[12px]" />
         <div className="relative md:col-span-2">
-          <input value={cliente.razon} onChange={(e) => { void buscarClientes(e.target.value) }} placeholder="Nombre / Razón social" className="w-full bg-black border border-white/10 rounded-lg p-2 text-[12px]" />
+          <div className="flex gap-2">
+            <input value={busquedaCliente} onChange={(e) => setBusquedaCliente(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); buscarClientes() } }} placeholder="Buscar por nombre, cédula, RUC, correo o teléfono" className="flex-1 bg-black border border-white/10 rounded-lg p-2 text-[12px]" />
+            <button type="button" onClick={buscarClientes} className="bg-teal-400 text-slate-950 px-3 rounded-lg text-[12px] font-bold">Buscar</button>
+          </div>
+          <input value={cliente.razon} onChange={(e) => setCliente({ ...cliente, razon: e.target.value })} placeholder="Nombre / Razón social" className="w-full mt-2 bg-black border border-white/10 rounded-lg p-2 text-[12px]" />
           {coincidentes.length > 0 && (
             <div className="absolute z-20 mt-1 w-full max-h-60 overflow-y-auto bg-[#0f172a] border border-white/10 rounded-lg">
               {coincidentes.map((c) => (
@@ -168,7 +205,10 @@ export default function ProformaPage() {
       </div>
       <div className="max-w-7xl mx-auto bg-[#1e293b] border border-white/10 rounded-xl p-4">
         <div className="relative mb-3">
-          <input value={texto} onChange={(e) => { void buscarProductos(e.target.value) }} placeholder="Código o nombre del producto" className="w-full bg-black border border-white/10 rounded-lg p-3 text-[13px]" />
+          <div className="flex gap-2">
+            <input value={texto} onChange={(e) => setTexto(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); buscarProductos() } }} placeholder="Código, nombre o cualquier dato del producto" className="flex-1 bg-black border border-white/10 rounded-lg p-3 text-[13px]" />
+            <button type="button" onClick={buscarProductos} className="bg-teal-400 text-slate-950 px-4 rounded-lg text-[12px] font-bold">Buscar</button>
+          </div>
           {sugerencias.length > 0 && (
             <div className="absolute z-20 mt-1 w-full max-h-72 overflow-y-auto bg-[#0f172a] border border-teal-400/40 rounded-lg">
               {sugerencias.map((p, idx) => (

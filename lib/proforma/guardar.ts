@@ -2,6 +2,7 @@ import { prisma } from "@/lib/prisma"
 import { datosRegistroDe } from "@/lib/empresa-sesion"
 import { itemProforma, numeroProforma, texto, totalesProforma, type ItemProforma } from "@/lib/proforma/calculos"
 import { pdfProforma, type EmisorProforma } from "@/lib/proforma/pdf"
+import { puntoActivoFactura } from "@/lib/sri/punto-emision"
 
 export function emisorDeEmpresa(empresa: { razonSocial: string; nombreComercial: string | null; ruc: string; direccion: string | null; telefono: string | null; email: string | null; datosRegistro: unknown }): EmisorProforma {
   const extra = datosRegistroDe(empresa.datosRegistro)
@@ -24,6 +25,20 @@ export function emisorDeEmpresa(empresa: { razonSocial: string; nombreComercial:
     email: texto(empresa.email || extra.email || extra.correo || "", 120),
     telefono: texto(empresa.telefono || extra.telefono || extra.celular || "", 40),
   }
+}
+
+export function serieProforma(empresa: { ambienteSri?: string | null; datosRegistro: unknown }) {
+  const extra = datosRegistroDe(empresa.datosRegistro)
+  const punto = puntoActivoFactura(extra.secuenciales, empresa.ambienteSri || extra.ambiente || extra.ambienteCodigo).punto
+  if (!punto.estab || !punto.pto) return ""
+  return `${punto.estab}-${punto.pto}`
+}
+
+export function numeroVisible(numero: number, serie: string, guardado = "") {
+  const propio = texto(guardado, 40)
+  if (propio.includes("-")) return propio
+  const correlativo = numeroProforma(numero)
+  return serie ? `${serie}-${correlativo}` : correlativo
 }
 
 export function fechaHoy() {
@@ -62,13 +77,14 @@ export function armarPayload(body: unknown, emisor: EmisorProforma, atendidoPor:
   }
 }
 
-export async function crearProforma(empresaId: string, payload: Record<string, unknown>) {
+export async function crearProforma(empresaId: string, payload: Record<string, unknown>, serie: string) {
   for (let intento = 0; intento < 2; intento++) {
     try {
       return await prisma.$transaction(async (tx) => {
         const maximo = await tx.proforma.aggregate({ where: { empresaId }, _max: { numero: true } })
         const numero = (maximo._max.numero || 0) + 1
-        return tx.proforma.create({ data: { empresaId, numero, estado: "GUARDADA", payload: payload as object } })
+        const visible = numeroVisible(numero, serie)
+        return tx.proforma.create({ data: { empresaId, numero, estado: "GUARDADA", payload: { ...payload, numero: visible } } })
       })
     } catch (error) {
       if (intento === 1) throw error
@@ -90,7 +106,7 @@ export function pdfDeProforma(numero: number, payload: Record<string, unknown>) 
       direccion: texto(clienteRaw.direccion, 180),
       email: texto(clienteRaw.email, 120),
     },
-    numero: numeroProforma(numero),
+    numero: numeroVisible(numero, "", texto(payload.numero, 40)),
     fecha: texto(payload.fecha, 20),
     items,
     totales: totalesProforma(items, propina),

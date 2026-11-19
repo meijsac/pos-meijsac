@@ -92,6 +92,29 @@ export async function GET(req: Request) {
     caja.total = plata(caja.total + f.monto)
     porCaja.set(caja.caja, caja)
   }
+  const notas = filas.flatMap((fila) => {
+    const payload = (fila.payload || {}) as any
+    const tipo = String(payload?.tipoComprobante || payload?.codDoc || "").replace(/\D/g, "").padStart(2, "0").slice(-2)
+    if (tipo !== "04") return []
+    const usuarioId = String(fila.usuarioId || payload.usuarioId || "")
+    if (trabajador && usuarioId !== trabajador) return []
+    const productos = Array.isArray(payload.items) ? payload.items.map((item: { descripcion?: string; nombre?: string }) => item.descripcion || item.nombre || "").filter(Boolean).join(", ") : ""
+    return [{
+      id: fila.id,
+      fecha: fila.createdAt.toISOString().slice(0, 10),
+      secuencial: [payload.establecimiento, payload.secuencial].filter(Boolean).join("-"),
+      cliente: String(payload.cliente?.razon || ""),
+      ruc: String(payload.cliente?.identificacion || ""),
+      monto: plata(payload.totales?.total),
+      usuarioId,
+      vendedor: nombres.get(usuarioId) || String(payload.atendidoPor || "Sin trabajador"),
+      caja: String(payload.establecimiento || ""),
+      productos,
+      efectivo: 0,
+      tarjeta: 0,
+      transferencia: 0,
+    }]
+  })
   const clientes = await prisma.cliente.findMany({
     where: {
       empresaId,
@@ -127,6 +150,7 @@ export async function GET(req: Request) {
   }
   return NextResponse.json({
     facturas,
+    notas,
     trabajadores: equipo.map((u) => ({ id: u.id, nombre: u.nombre })),
     porTrabajador: [...porTrabajador.values()],
     porCaja: [...porCaja.values()],
