@@ -120,23 +120,9 @@ export function htmlRide(data: {
     .tot { display:flex; justify-content:space-between; padding:8px; border-bottom:1px solid #f1f5f9; }
     .total { display:flex; justify-content:space-between; padding:10px; background:#f0f9ff; border-top:2px solid #0284c7; font-weight:700; font-size:14px; }
     @media print {
-      @page { size: A4; margin: 8mm; }
-      html, body { background:#fff !important; padding:0 !important; margin:0 !important; max-width:none !important; font-size:10px !important; line-height:1.25 !important; -webkit-print-color-adjust:exact; print-color-adjust:exact; }
+      @page { size: A4; margin: 12mm; }
+      html, body { background:#fff !important; padding:0 !important; margin:0 !important; max-width:none !important; -webkit-print-color-adjust:exact; print-color-adjust:exact; }
       .no-print { display:none !important; }
-      .grid { gap:6px !important; margin-bottom:6px !important; break-inside:avoid; page-break-inside:avoid; }
-      .caja { padding:6px !important; }
-      img { max-height:40px !important; max-width:150px !important; margin-bottom:4px !important; }
-      svg { height:24px !important; }
-      h1 { font-size:11px !important; margin:0 0 2px !important; }
-      h2 { font-size:13px !important; margin:2px 0 !important; }
-      h3 { font-size:10px !important; margin:0 0 4px !important; }
-      p { margin:0 0 1px !important; }
-      th, td { padding:2px 4px !important; }
-      .tot { padding:1px 6px !important; }
-      .total { padding:3px 6px !important; font-size:12px !important; }
-      body > div { margin-bottom:6px !important; }
-      body > div[style*="padding"] { padding:6px !important; }
-      [style*="height:100%"] { height:auto !important; }
       table { page-break-inside:auto; }
       thead { display:table-header-group; }
       tr { break-inside:avoid; page-break-inside:avoid; }
