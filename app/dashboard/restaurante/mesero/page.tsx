@@ -5,8 +5,10 @@ import { guardarRestaurante, leerLocal, leerRestaurante, nombreUsuario, sonarLis
 type Mods = { termino?:string, acomp?:string, nota?:string }
 type Item = { id:number, uid?: string, nombre:string, precio:number, cat:string, destino?: string, mods:Mods, cant:number, estado?: string }
 type Mesa = { id:number, nombre:string, zona:string, estado:"LIBRE"|"OCUPADA"|"CUENTA"|"SUCIA", mesero:string, inicio:string|null, items:Item[], tiempo:number }
+type PlatoMenu = { id:number, nombre:string, precio:number, cat:string, destino?: string, activo?: boolean }
+type TicketListo = { id:number | string, mesa?: number | string, nombre?: string, plato?: string, estado?: string, items?: Item[] }
 
-const MENU = [
+const MENU_EJEMPLO: PlatoMenu[] = [
   {id:1, nombre:"Lomo Fino", precio:18.50, cat:"CARNES"},
   {id:2, nombre:"Hamburguesa Doble", precio:8.90, cat:"CARNES"},
   {id:3, nombre:"Cerveza Club", precio:3.50, cat:"BEBIDAS"},
@@ -14,10 +16,27 @@ const MENU = [
   {id:5, nombre:"Coca Cola", precio:2.00, cat:"BEBIDAS"},
   {id:6, nombre:"Tigrillo", precio:6.50, cat:"ALMUERZOS"},
 ]
+const CATEGORIAS_EJEMPLO = ["CARNES", "BEBIDAS", "ALMUERZOS"]
+
+function platosActivos(lista: unknown) {
+  if (!Array.isArray(lista)) return []
+  return lista.filter((plato) => plato && typeof plato === "object" && (plato as PlatoMenu).activo !== false && (plato as PlatoMenu).nombre) as PlatoMenu[]
+}
+
+function nombrePlato(ticket: TicketListo) {
+  return ticket.plato || ticket.items?.find((item) => item.nombre)?.nombre || "Plato"
+}
+
+function nombreMesa(ticket: TicketListo) {
+  return ticket.nombre || (ticket.mesa ? `Mesa ${ticket.mesa}` : "Mesa")
+}
 
 export default function AppMesero(){
   const [mesas, setMesas] = useState<Mesa[]>([])
   const [mesaActiva, setMesaActiva] = useState<number|null>(null)
+  const [menu, setMenu] = useState<PlatoMenu[]>(MENU_EJEMPLO)
+  const [categorias, setCategorias] = useState<string[]>(CATEGORIAS_EJEMPLO)
+  const [avisos, setAvisos] = useState<TicketListo[]>([])
   const [cat, setCat] = useState("CARNES")
   const [mods, setMods] = useState<Mods>({})
   const [platoSel, setPlatoSel] = useState<Item|null>(null)
@@ -30,18 +49,31 @@ export default function AppMesero(){
     const local = leerLocal("meijsac_restaurante_mesas")
     const base = local.length ? local : Array.from({length:12},(_,i)=>({ id:i+1, nombre:`Mesa ${i+1}`, zona: i<6?"Salón":"Terraza", estado:"LIBRE", mesero:"", inicio:null, items:[], tiempo:0, capacidad:4 } as Mesa))
     setMesas(base as Mesa[])
+    const aplicarCarta = (remoto: { menu: unknown[], categorias: unknown[], tickets: unknown[] }) => {
+      const carta = platosActivos(remoto.menu)
+      if (carta.length) setMenu(carta)
+      const grupos = remoto.categorias.map((nombre) => String(nombre || "").trim()).filter(Boolean)
+      if (grupos.length) {
+        setCategorias(grupos)
+        setCat((actual) => grupos.includes(actual) ? actual : grupos[0])
+      }
+      const listos = (remoto.tickets as TicketListo[]).filter((ticket) => ticket?.estado === "LISTO")
+      setAvisos(listos)
+      const ids = listos.map((ticket) => String(ticket.id))
+      if (!vistos.current) { vistos.current = new Set(ids); return }
+      if (ids.some((id) => !vistos.current?.has(id))) sonarListo()
+      ids.forEach((id) => vistos.current?.add(id))
+    }
     leerRestaurante().then((remoto) => {
       if (remoto?.mesas.length) setMesas(remoto.mesas as Mesa[])
       else void guardarRestaurante({ mesas: base })
+      if (remoto) aplicarCarta(remoto)
     }).catch(() => {})
     const reloj = setInterval(() => {
       leerRestaurante().then((remoto) => {
         if (!remoto) return
         if (Date.now() >= silencio.current && remoto.mesas.length) setMesas(remoto.mesas as Mesa[])
-        const listos = remoto.tickets.filter((ticket) => (ticket as { estado?: string }).estado === "LISTO").map((ticket) => String((ticket as { id?: string }).id))
-        if (!vistos.current) { vistos.current = new Set(listos); return }
-        if (listos.some((id) => !vistos.current?.has(id))) sonarListo()
-        listos.forEach((id) => vistos.current?.add(id))
+        aplicarCarta(remoto)
       }).catch(() => {})
     }, 2000)
     return () => clearInterval(reloj)
@@ -82,7 +114,8 @@ export default function AppMesero(){
     }
     const ahora = new Date().toISOString()
     const mesero = nombreUsuario() || "Mesero"
-    const itemFinal: Item = {...platoSel, uid: `${Date.now()}`, mods:{...mods, nota}, cant:1, estado: "PENDIENTE", destino: platoSel.cat === "BEBIDAS" ? "BARRA" : "PARRILLA" }
+    const destino = platoSel.destino || (platoSel.cat === "BEBIDAS" ? "BARRA" : "PARRILLA")
+    const itemFinal: Item = {...platoSel, uid: `${Date.now()}`, mods:{...mods, nota}, cant:1, estado: "PENDIENTE", destino }
 
     const lista = mesas.map(m=>{
       if(m.id!==mesaActiva) return m
@@ -121,16 +154,53 @@ export default function AppMesero(){
     setNota("")
   }
 
+  const marcarEntregado = async (id: number | string) => {
+    silencio.current = Date.now() + 2500
+    const remoto = await leerRestaurante()
+    const base = (remoto?.tickets?.length ? remoto.tickets : leerLocal("meijsac_kds")) as TicketListo[]
+    const ticket = base.find((item) => String(item.id) === String(id))
+    const uids = new Set((ticket?.items || []).map((item) => item.uid).filter(Boolean))
+    const tickets = base.map((item) => String(item.id) === String(id) ? {
+      ...item,
+      estado: "ENTREGADO",
+      items: Array.isArray(item.items) ? item.items.map((plato) => ({ ...plato, estado: "ENTREGADO" })) : item.items,
+    } : item)
+    const mesasBase = ((remoto?.mesas?.length ? remoto.mesas : mesas) as Mesa[])
+    const lista = mesasBase.map((m) => ({
+      ...m,
+      items: Array.isArray(m.items) ? m.items.map((item) => item.uid && uids.has(item.uid) ? { ...item, estado: "ENTREGADO" } : item) : m.items,
+    }))
+    localStorage.setItem("meijsac_kds", JSON.stringify(tickets))
+    localStorage.setItem("meijsac_cola_cocina", JSON.stringify(tickets))
+    localStorage.setItem("meijsac_restaurante_mesas", JSON.stringify(lista))
+    setMesas(lista)
+    setAvisos(tickets.filter((item) => item.estado === "LISTO"))
+    await guardarRestaurante({ tickets, mesas: lista })
+  }
+
+  const letrero = avisos.length ? (
+    <div className="sticky top-0 z-40 mb-3 space-y-2">
+      {avisos.map((ticket) => (
+        <div key={String(ticket.id)} className="bg-amber-300 text-black rounded-2xl p-3 flex items-center gap-2">
+          <p className="flex-1 text-xs font-black">🔔 {nombreMesa(ticket)}: {nombrePlato(ticket)} está listo</p>
+          <button type="button" onClick={() => { void marcarEntregado(ticket.id) }} className="bg-black text-white px-3 py-2 rounded-xl text-[11px] font-black">Entregado</button>
+        </div>
+      ))}
+    </div>
+  ) : null
+
   const mesa = mesas.find(m=>m.id===mesaActiva)
 
   if(mesaActiva===null){
     return (
       <div className="min-h-screen bg-[#080c14] text-white p-3">
         <link rel="manifest" href="/mesero.webmanifest" />
+        <link rel="apple-touch-icon" href="/mesero-192.png" />
         <div className="bg-[#1e293b] p-4 rounded-2xl flex justify-between items-center mb-3">
           <div><h1 className="font-black text-sm">APP MESERO 📱</h1><p className="text-[10px] opacity-50">Selecciona una mesa para tomar pedido</p></div>
           <div className="text-[10px] bg-[#00f5d4]/20 text-[#00f5d4] px-2 py-1 rounded-full">{mesas.filter(m=>m.estado==="OCUPADA").length} Ocupadas</div>
         </div>
+        {letrero}
         <div className="grid grid-cols-2 gap-3 pb-20">
           {mesas.map(m=>{
             const col = m.estado==="LIBRE"?"bg-blue-500/20 border-blue-500/30 text-blue-200": m.estado==="OCUPADA"?"bg-green-500/20 border-green-500/40 text-green-200": m.estado==="CUENTA"?"bg-yellow-500/20 border-yellow-500/40 text-yellow-200 opacity-60":"bg-red-500/20 border-red-500/30 text-red-200 opacity-60"
@@ -160,6 +230,7 @@ export default function AppMesero(){
         <div className="text-center"><div className="font-black">{mesa?.nombre} • {mesa?.zona}</div><div className="text-[10px] opacity-60">{mesa?.items.length} platos en comanda</div></div>
         <button onClick={()=>{ const kds=JSON.parse(localStorage.getItem("meijsac_cola_cocina")||"[]"); alert(`En cocina: ${kds.filter((x:any)=>x.mesa===mesaActiva).length} platos` )}} className="bg-[#00f5d4]/20 text-[#00f5d4] px-3 py-2 rounded-xl text-[10px] font-black">KDS</button>
       </div>
+      {letrero}
 
       <div className="p-3 space-y-2 max-h-[35vh] overflow-y-auto bg-black/20">
         {mesa?.items.map((it,idx)=>(
@@ -173,11 +244,11 @@ export default function AppMesero(){
       </div>
 
       <div className="flex gap-2 p-3 overflow-x-auto">
-        {["CARNES","BEBIDAS","ALMUERZOS"].map(c=><button key={c} onClick={()=>setCat(c)} className={`px-4 py-2 rounded-full text-xs font-black whitespace-nowrap ${cat===c?"bg-white text-black":"bg-white/10"}`}>{c}</button>)}
+        {(categorias.length ? categorias : CATEGORIAS_EJEMPLO).map(c=><button key={c} onClick={()=>setCat(c)} className={`px-4 py-2 rounded-full text-xs font-black whitespace-nowrap ${cat===c?"bg-white text-black":"bg-white/10"}`}>{c}</button>)}
       </div>
 
       <div className="flex-1 grid grid-cols-2 gap-2 p-3 pb-28">
-        {MENU.filter(m=>m.cat===cat).map(plato=>(
+        {menu.filter(m=>m.cat===cat).map(plato=>(
           <button key={plato.id} onClick={()=>abrirMods(plato)} className="bg-[#1e293b] border border-white/10 p-4 rounded-2xl text-left active:scale-95">
             <div className="font-bold text-sm">{plato.nombre}</div>
             <div className="text-[10px] opacity-50 mt-1">Tocar para personalizar</div>

@@ -4,7 +4,7 @@ import { guardarRestaurante, leerLocal, leerRestaurante, nombreUsuario } from "@
 
 type Mods = { termino?:string, acomp?:string, nota?:string }
 type Item = { id:number, uid:string, nombre:string, precio:number, cat:string, destino?:string, mods:Mods, cant:number, estado:"PENDIENTE"|"ENVIADO"|"PREPARANDO"|"LISTO"|"ENTREGADO", capacidad?: number }
-type Mesa = { id:number, nombre:string, zona:string, estado:"LIBRE"|"OCUPADA"|"CUENTA"|"SUCIA", mesero:string, inicio:string|null, items:Item[], tiempo:number, capacidad?: number }
+type Mesa = { id:number, nombre:string, zona:string, estado:"LIBRE"|"OCUPADA"|"CUENTA"|"SUCIA", mesero:string, inicio:string|null, items:Item[], tiempo:number, capacidad?: number, codigo?: string }
 type SplitFactura = { id:string, mesaOrigenId:number, numero: number, totalPartes: number, items: Item[], subtotal:number, iva:number, propina:number, total:number, esSplit: boolean, estado: "PENDIENTE"|"FACTURADA", cliente?:any, origen?:string }
 
 const MENU_BASE: any[] = [
@@ -37,6 +37,8 @@ export default function SalonCompleto(){
   const CATEGORIAS_BASE = ["CARNES","ARROCES","BEBIDAS","ALMUERZOS","COMBOS"]
   const [categoriasMenu, setCategoriasMenu] = useState<string[]>(CATEGORIAS_BASE)
   const [showAddCategoria, setShowAddCategoria] = useState(false)
+  const [qrMesa, setQrMesa] = useState("")
+  const [qrSvg, setQrSvg] = useState("")
   const [nuevaCategoriaNombre, setNuevaCategoriaNombre] = useState("")
   const [listo, setListo] = useState(false)
   const ticketsRef = useRef<any[]>([])
@@ -149,6 +151,34 @@ export default function SalonCompleto(){
     setMesas(prev=>prev.map(m=> m.id===mesaActiva? {...m, mesero, items: m.items.map(i=> i.estado==="PENDIENTE"? {...i, estado:"ENVIADO" as const, enviadoEn: ahora}: i)} : m))
   }
   const preCuenta = () => { if(!mesa) return; setMesas(prev=>prev.map(m=> m.id===mesaActiva? {...m, estado:"CUENTA" as const}:m)) }
+
+  const mostrarQr = async () => {
+    if (!mesa) return
+    let codigo = mesa.codigo || ""
+    let lista = mesas
+    if (!/^[a-f0-9]{20}$/.test(codigo)) {
+      const bytes = new Uint8Array(10)
+      crypto.getRandomValues(bytes)
+      codigo = Array.from(bytes, (b) => b.toString(16).padStart(2, "0")).join("")
+      lista = mesas.map((m) => m.id === mesa.id ? { ...m, codigo } : m)
+      setMesas(lista)
+      localStorage.setItem("meijsac_restaurante_mesas", JSON.stringify(lista))
+      await guardarRestaurante({ mesas: lista })
+    }
+    const QR = await import("qrcode")
+    const svg = await QR.toString(`${window.location.origin}/mesa/${codigo}`, { type: "svg", margin: 1, errorCorrectionLevel: "M" })
+    setQrMesa(codigo)
+    setQrSvg(svg)
+  }
+
+  const imprimirQr = () => {
+    if (!qrSvg || !mesa) return
+    const texto = (valor: string) => valor.replace(/[&<>"]/g, (letra) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", "\"": "&quot;" }[letra] || letra))
+    const hoja = window.open("", "_blank")
+    if (!hoja) return
+    hoja.document.write(`<!DOCTYPE html><html><head><title>QR ${texto(mesa.nombre)}</title></head><body style="font-family:Arial,sans-serif;text-align:center;padding:24px">${qrSvg}<h1>${texto(mesa.nombre)}</h1><p>${texto(mesa.zona || "")}</p><script>print()</script></body></html>`)
+    hoja.document.close()
+  }
 
   // --- FIX: AHORA SI VA DIRECTO AL FACTURADOR ---
   const facturarSRI = () => {
@@ -264,7 +294,10 @@ export default function SalonCompleto(){
     <div className="w-[45%] bg-[#1e293b] p-4 flex flex-col">
       <div className="flex justify-between border-b border-white/10 pb-3 mb-3">
         <div><h1 className="font-black">{mesa?.nombre} - <span className={mesa?.estado==="CUENTA"?"text-yellow-300":mesa?.estado==="OCUPADA"?"text-green-300":mesa?.estado==="SUCIA"?"text-red-300":"text-blue-300"}>{mesa?.estado}</span></h1><p className="text-[10px] opacity-50">{pendientes.length>0? `${pendientes.length} pendientes por enviar` : "Todo enviado"}</p></div>
-        <button onClick={()=>setShowLib(true)} className="bg-white/10 px-3 py-1 rounded text-xs">Liberar</button>
+        <div className="flex gap-2">
+          <button onClick={() => { void mostrarQr() }} className="bg-white text-black px-3 py-1 rounded text-xs font-black">QR cliente</button>
+          <button onClick={()=>setShowLib(true)} className="bg-white/10 px-3 py-1 rounded text-xs">Liberar</button>
+        </div>
       </div>
       <div className="flex-1 space-y-2 overflow-y-auto">
         {mesa?.items.map((it, index)=>(
@@ -342,6 +375,7 @@ export default function SalonCompleto(){
     {showAddMesa && <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-4"><div className="bg-[#0f172a] w-full max-w-sm rounded-2xl p-6 border border-blue-500/30"><h2 className="font-black text-blue-300">+ Añadir Nueva Mesa</h2><input placeholder="Mesa 13..." value={nuevaMesa.nombre} onChange={e=>setNuevaMesa({...nuevaMesa, nombre:e.target.value})} className="w-full bg-black border border-white/10 p-3 rounded-xl text-sm mt-4" /><div className="flex gap-2 mt-6"><button onClick={()=>setShowAddMesa(false)} className="flex-1 bg-white/10 py-3 rounded-xl">Cancelar</button><button onClick={agregarMesa} className="flex-1 bg-blue-500 text-white font-black py-3 rounded-xl">CREAR MESA</button></div></div></div>}
     {showSplitIguales && <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-4"><div className="bg-[#0f172a] w-full max-w-sm rounded-2xl p-6 border border-[#7c3aed]/50"><h2 className="font-black text-[#a78bfa]">Dividir iguales</h2><input type="number" min={2} max={8} value={numPartes} onChange={e=>setNumPartes(parseInt(e.target.value)||2)} className="w-full bg-black border border-white/20 p-4 rounded-xl text-center text-2xl font-black mt-4" /><div className="flex gap-2 mt-6"><button onClick={()=>setShowSplitIguales(false)} className="flex-1 bg-white/10 py-3 rounded-xl">Cancelar</button><button onClick={confirmarSplitIguales} className="flex-1 bg-[#7c3aed] text-white font-black py-3 rounded-xl">GENERAR {numPartes} →</button></div></div></div>}
     {showSplitItems && <div className="fixed inset-0 bg-black/90 flex items-center justify-center z-50 p-4"><div className="bg-[#0f172a] w-full max-w-4xl rounded-2xl p-6 border border-orange-500/30 max-h-[90vh] overflow-hidden flex flex-col"><h2 className="font-black text-orange-400">Dividir por Platos</h2><div className="grid grid-cols-3 gap-4 mt-4 flex-1 overflow-hidden"><div className="bg-black/40 rounded-xl p-3 overflow-y-auto"><h3 className="font-black text-[11px] mb-2">PLATOS MESA {mesaActiva}</h3>{mesa?.items.map(it=><button key={it.uid} onClick={()=>{ setBandejas(prev=>{ const n=[...prev.map(x=>[...x])]; if(!n[0].some(x=>x.uid===it.uid)) n[0].push(it); return n })}} className="w-full text-left bg-white/5 border border-white/10 p-2 rounded-xl mb-2"><div className="text-xs font-bold">{it.nombre}</div></button>)}</div>{bandejas.map((b,i)=><div key={i} className="bg-[#7c3aed]/10 border border-[#7c3aed]/30 rounded-xl p-3 overflow-y-auto"><div className="flex justify-between items-center mb-2"><h3 className="font-black text-[11px]">FACTURA {i+1}</h3><span className="text-[10px] bg-[#7c3aed] px-2 py-1 rounded-full">${b.reduce((s,i)=>s+i.precio,0).toFixed(2)}</span></div>{b.map(it=><div key={it.uid} className="bg-black/50 p-2 rounded-xl mb-2"><div className="text-xs">{it.nombre}</div></div>)}</div>)}</div><div className="flex gap-2 mt-4 justify-end"><button onClick={()=>setShowSplitItems(false)} className="bg-white/10 px-6 py-3 rounded-xl">Cerrar</button></div></div></div>}
+    {qrMesa && qrSvg && <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-4"><div className="bg-white text-black w-full max-w-sm rounded-2xl p-6 text-center"><div className="mx-auto w-56" dangerouslySetInnerHTML={{ __html: qrSvg }} /><h2 className="font-black mt-3">{mesa?.nombre}</h2><p className="text-xs text-slate-500 mt-1">El cliente ve la cuenta y el menú. Al liberar la mesa deja de ver el consumo.</p><div className="flex gap-2 mt-4"><button onClick={() => { setQrMesa(""); setQrSvg("") }} className="flex-1 bg-slate-200 py-3 rounded-xl font-bold">Cerrar</button><button onClick={imprimirQr} className="flex-1 bg-slate-900 text-white py-3 rounded-xl font-black">Imprimir</button></div></div></div>}
     {showLib && <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-4"><div className="bg-[#0f172a] w-full max-w-sm rounded-2xl p-6 border border-red-500/30"><h2 className="font-black text-red-400">¿Liberar {mesa?.nombre}?</h2><div className="flex gap-2 mt-6"><button onClick={()=>setShowLib(false)} className="flex-1 bg-white/10 py-3 rounded-xl">No</button><button onClick={confirmarLiberar} className="flex-1 bg-red-500 text-white font-black py-3 rounded-xl">Sí, Liberar</button></div></div></div>}
     {showAddPlato && <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-[100] p-4"><div className="bg-[#0f172a] w-full max-w-md rounded-2xl p-6 border border-[#00f5d4]/30"><h2 className="font-black text-[#00f5d4]">+ NUEVO PLATO - {catActiva}</h2><input placeholder="Nombre" value={nuevoPlato.nombre} onChange={e=>setNuevoPlato({...nuevoPlato, nombre:e.target.value})} className="w-full bg-black border border-white/10 p-3 rounded-xl text-sm mt-4" /><div className="flex gap-2 mt-6"><button onClick={()=>setShowAddPlato(false)} className="flex-1 bg-white/10 py-3 rounded-xl">Cancelar</button><button onClick={()=>{ if(!nuevoPlato.nombre||!nuevoPlato.precio){ alert("Falta nombre y precio"); return } const nuevo = { id: Date.now(), nombre: nuevoPlato.nombre, precio: Number(nuevoPlato.precio), cat: nuevoPlato.cat || catActiva, destino: nuevoPlato.destino, activo:true, iva:nuevoPlato.iva, mods:[] }; setMenuRestaurante(prev=>[...prev, nuevo]); setNuevoPlato({nombre:"", precio:0, cat:catActiva, destino:"WOK", iva:15}); setShowAddPlato(false)}} className="flex-1 bg-[#00f5d4] text-black py-3 rounded-xl font-black">GUARDAR</button></div></div></div>}
   </div>
