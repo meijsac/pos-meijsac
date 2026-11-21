@@ -128,16 +128,20 @@ function PanelRespaldo() {
   const descargar = async () => {
     const res = await fetch("/api/respaldo", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ password: clave }) })
     if (!res.ok) { const data = await res.json(); setAviso(data.error); return }
-    const blob = await res.blob()
+    const blob = new Blob([await res.arrayBuffer()], { type: "application/json;charset=utf-8" })
     const url = URL.createObjectURL(blob)
     const a = document.createElement("a")
     a.href = url
-    a.download = "respaldo-meijsac.enc"
+    a.download = "respaldo-meijsac.json"
+    document.body.appendChild(a)
     a.click()
+    a.remove()
+    URL.revokeObjectURL(url)
+    setAviso("Listo. Se guardó respaldo-meijsac.json. Ábrelo con el Bloc de notas.")
   }
   return (
     <div className="space-y-2 max-w-md">
-      <p className="text-[12px]">El respaldo sale cifrado. Solo el administrador puede descargarlo.</p>
+      <p className="text-[12px]">Se descarga un archivo de texto con los clientes y las últimas 500 facturas de esta empresa. Ábrelo con el Bloc de notas.</p>
       <input type="password" value={clave} onChange={(e) => setClave(e.target.value)} placeholder="Contraseña de admin" className="w-full bg-black border border-white/10 rounded-xl p-3" />
       <button onClick={descargar} className="bg-[#00f5d4] text-black font-black rounded-xl px-4 py-2">Descargar Respaldo</button>
       {aviso && <p className="text-red-300 text-[12px]">{aviso}</p>}
