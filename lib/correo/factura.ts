@@ -225,13 +225,52 @@ const WIN: Record<string, string> = {
 }
 
 function pdfTexto(valor: unknown) {
-  return String(valor ?? "").normalize("NFC").slice(0, 90).split("").map((char) => {
+  return String(valor ?? "").normalize("NFC").split("").map((char) => {
     if (WIN[char]) return WIN[char]
     if (char === "\\") return "\\\\"
     if (char === "(" || char === ")") return `\\${char}`
     const code = char.charCodeAt(0)
     return code >= 32 && code <= 126 ? char : " "
   }).join("")
+}
+
+function medirPdf(texto: string, size: number) {
+  let ancho = 0
+  for (const char of texto) ancho += char === " " ? size * 0.33 : char >= "0" && char <= "9" ? size * 0.56 : size * 0.52
+  return ancho
+}
+
+function partirPdf(valor: unknown, size: number, ancho: number) {
+  const texto = String(valor ?? "").normalize("NFC").replace(/\s+/g, " ").trim()
+  if (!texto) return []
+  const cabe = (s: string) => medirPdf(s, size) <= ancho
+  const lineas: string[] = []
+  let actual = ""
+  const cortar = (palabra: string) => {
+    let resto = palabra
+    while (resto) {
+      let n = resto.length
+      while (n > 1 && !cabe(resto.slice(0, n))) n -= 1
+      lineas.push(resto.slice(0, n))
+      resto = resto.slice(n)
+    }
+  }
+  for (const palabra of texto.split(" ")) {
+    if (!cabe(palabra)) {
+      if (actual) lineas.push(actual)
+      actual = ""
+      cortar(palabra)
+      continue
+    }
+    const prueba = actual ? `${actual} ${palabra}` : palabra
+    if (cabe(prueba)) actual = prueba
+    else {
+      if (actual) lineas.push(actual)
+      actual = palabra
+    }
+  }
+  if (actual) lineas.push(actual)
+  return lineas
 }
 
 function dineroPdf(valor: unknown) {
@@ -291,87 +330,112 @@ function pdfIgualAlRide(body: Record<string, any>) {
   const items = Array.isArray(body.items) ? body.items : []
   const cmd: string[] = ["0.75 0.8 0.84 RG", "0.12 0.16 0.22 rg"]
   const t = (x: number, y: number, size: number, bold: boolean, valor: unknown) => {
-    cmd.push(`BT /${bold ? "F2" : "F1"} ${size} Tf 1 0 0 1 ${x} ${y} Tm (${pdfTexto(valor)}) Tj ET`)
+    cmd.push(`BT /${bold ? "F2" : "F1"} ${size} Tf 1 0 0 1 ${x.toFixed(2)} ${y.toFixed(2)} Tm (${pdfTexto(valor)}) Tj ET`)
   }
   const caja = (x: number, y: number, w: number, h: number) => cmd.push(`${x} ${y} ${w} ${h} re S`)
-  caja(32, 640, 268, 170)
-  caja(308, 640, 256, 170)
-  t(40, 790, 11, true, emisor.razon || "")
-  t(40, 774, 9, false, emisor.comercial || "")
-  t(40, 758, 8, false, `Direccion Matriz: ${emisor.matriz || ""}`)
-  t(40, 744, 8, false, `Direccion Sucursal: ${emisor.sucursal || emisor.matriz || ""}`)
-  t(40, 728, 8, true, `OBLIGADO A LLEVAR CONTABILIDAD: ${emisor.obligado || "NO"}`)
+  const bloque = (x: number, y: number, size: number, bold: boolean, valor: unknown, ancho: number, paso: number) => {
+    const lineas = partirPdf(valor, size, ancho)
+    lineas.forEach((linea, i) => t(x, y - i * paso, size, bold, linea))
+    return lineas.length * paso
+  }
+  caja(32, 600, 268, 214)
+  caja(308, 600, 256, 214)
+  let izq = 792
+  const ponerIzq = (size: number, bold: boolean, valor: unknown, paso: number) => {
+    const usado = bloque(40, izq, size, bold, valor, 244, paso)
+    if (usado) izq -= usado
+  }
+  ponerIzq(11, true, emisor.razon || "", 14)
+  ponerIzq(9, false, emisor.comercial || "", 12)
+  ponerIzq(8, false, `Direccion Matriz: ${emisor.matriz || ""}`, 12)
+  ponerIzq(8, false, `Direccion Sucursal: ${emisor.sucursal || emisor.matriz || ""}`, 12)
+  ponerIzq(7, true, `OBLIGADO A LLEVAR CONTABILIDAD: ${emisor.obligado || "NO"}`, 11)
   const leyenda = leyendaRegimen(emisor.regimen)
-  if (leyenda) t(40, 712, 7, true, leyenda)
-  t(316, 790, 10, true, `R.U.C.: ${emisor.ruc || ""}`)
-  t(316, 772, 14, true, "FACTURA")
-  t(316, 754, 10, true, `No. ${numero}`)
-  t(316, 736, 8, true, "NUMERO DE AUTORIZACION:")
-  t(316, 722, 7, false, clave)
+  if (leyenda) ponerIzq(7, true, leyenda, 10)
+  let der = 792
+  const ponerDer = (size: number, bold: boolean, valor: unknown, paso: number) => {
+    const usado = bloque(316, der, size, bold, valor, 232, paso)
+    if (usado) der -= usado
+  }
+  ponerDer(10, true, `R.U.C.: ${emisor.ruc || ""}`, 14)
+  ponerDer(13, true, "FACTURA", 16)
+  ponerDer(9, true, `No. ${numero}`, 14)
+  ponerDer(8, true, "NUMERO DE AUTORIZACION:", 12)
+  ponerDer(7, false, clave, 11)
+  ponerDer(7, false, `FECHA Y HORA DE AUTORIZACION: ${fechaAutorizacion || "-"}`, 10)
+  ponerDer(7, false, `AMBIENTE: ${ambiente}`, 10)
+  ponerDer(7, false, "EMISION: NORMAL", 10)
+  if (vendedor) ponerDer(7, false, `VENDEDOR: ${vendedor}`, 10)
+  ponerDer(7, true, "CLAVE DE ACCESO:", 12)
   const bits = bitsCode128(clave)
   if (bits) {
     const x0 = 316
-    const ancho = 240
+    const ancho = 232
     let unidades = 0
     for (const parte of bits) unidades += Number(parte)
-    const escala = ancho / unidades
+    const escala = unidades ? ancho / unidades : 1
     let x = x0
+    const alto = 16
+    const base = der - alto
     cmd.push("0 0 0 rg")
     for (let i = 0; i < bits.length; i++) {
       const w = Number(bits[i]) * escala
-      if (i % 2 === 0) cmd.push(`${x.toFixed(2)} 696 ${w.toFixed(2)} 20 re f`)
+      if (i % 2 === 0) cmd.push(`${x.toFixed(2)} ${base.toFixed(2)} ${w.toFixed(2)} ${alto} re f`)
       x += w
     }
     cmd.push("0.12 0.16 0.22 rg")
+    der = base - 6
   }
-  t(316, 684, 8, false, `FECHA Y HORA DE AUTORIZACION: ${fechaAutorizacion || "-"}`)
-  t(316, 674, 8, false, `AMBIENTE: ${ambiente}`)
-  t(316, 664, 8, false, "EMISION: NORMAL")
-  if (vendedor) t(316, 654, 8, false, `VENDEDOR: ${vendedor}`)
-  t(316, 644, 7, false, `CLAVE DE ACCESO: ${clave}`)
-  caja(32, 548, 532, 80)
-  t(40, 610, 8, true, "Razon Social / Nombres y Apellidos:")
-  t(230, 610, 8, false, cliente.razon || "")
-  t(40, 594, 8, true, "Identificacion:")
-  t(130, 594, 8, false, cliente.identificacion || "")
-  t(300, 594, 8, true, "Fecha de Emision:")
-  t(400, 594, 8, false, body.fechaEmisionFormato || "")
-  t(40, 578, 8, true, "Direccion:")
-  t(100, 578, 8, false, cliente.direccion || "-")
-  t(300, 578, 8, true, "Email:")
-  t(350, 578, 8, false, cliente.email || "-")
-  t(40, 562, 8, true, "Guia de Remision: S/N")
-  caja(32, 520, 532, 18)
-  t(40, 526, 8, true, "Cod. Principal")
-  t(130, 526, 8, true, "Cant.")
-  t(190, 526, 8, true, "Descripcion")
-  t(390, 526, 8, true, "Precio Unitario")
-  t(470, 526, 8, true, "Descuento")
-  t(520, 526, 8, true, "Precio Total")
-  let y = 500
+  bloque(316, der, 7, false, clave, 232, 10)
+  caja(32, 506, 532, 82)
+  const una = (valor: unknown, size: number, ancho: number) => partirPdf(valor, size, ancho)[0] || ""
+  t(40, 574, 8, true, una(`Razon Social / Nombres y Apellidos: ${cliente.razon || ""}`, 8, 500))
+  t(40, 554, 8, true, una(`Identificacion: ${cliente.identificacion || ""}`, 8, 250))
+  t(300, 554, 8, true, una(`Fecha de Emision: ${body.fechaEmisionFormato || ""}`, 8, 220))
+  t(40, 534, 8, true, una(`Direccion: ${cliente.direccion || "-"}`, 8, 250))
+  t(300, 534, 8, true, una(`Email: ${cliente.email || "-"}`, 8, 220))
+  t(40, 516, 8, true, "Guia de Remision: S/N")
+  caja(32, 478, 532, 16)
+  t(40, 482, 8, true, "Cod. Principal")
+  t(118, 482, 8, true, "Cant.")
+  t(168, 482, 8, true, "Descripcion")
+  t(372, 482, 8, true, "Precio Unitario")
+  t(456, 482, 8, true, "Descuento")
+  t(498, 482, 8, true, "Precio Total")
+  let filaY = 462
   for (const item of items.slice(0, 10)) {
     const cant = Number(item.cant || item.cantidad || 0)
     const precio = Number(item.pUnit || item.precio || 0)
     const desc = Number(item.descDolar || 0) || cant * precio * Number(item.descPorc || 0) / 100
     const total = Number.isFinite(Number(item.total)) ? Number(item.total) : cant * precio - desc
-    t(40, y, 8, false, item.codigo || "")
-    t(130, y, 8, false, cant.toFixed(2))
-    t(190, y, 8, false, item.descripcion || "")
-    t(400, y, 8, false, dineroPdf(precio))
-    t(475, y, 8, false, dineroPdf(desc))
-    t(525, y, 8, false, dineroPdf(total))
-    y -= 14
+    const codigo = partirPdf(item.codigo || "", 8, 70)[0] || ""
+    const descripcion = partirPdf(item.descripcion || "", 8, 190)[0] || ""
+    t(40, filaY, 8, false, codigo)
+    t(118, filaY, 8, false, cant.toFixed(2))
+    t(168, filaY, 8, false, descripcion)
+    t(372, filaY, 8, false, dineroPdf(precio))
+    t(456, filaY, 8, false, dineroPdf(desc))
+    t(508, filaY, 8, false, dineroPdf(total))
+    filaY -= 14
   }
-  caja(32, 70, 260, 150)
-  t(40, 200, 8, true, "INFORMACION ADICIONAL")
-  t(40, 184, 8, false, `Forma de Pago: ${body.formaPago || ""}`)
+  caja(32, 36, 260, 282)
+  caja(308, 36, 256, 282)
+  let infoY = 300
+  const ponerInfo = (size: number, bold: boolean, valor: unknown, paso: number) => {
+    if (infoY < 84) return
+    const lineas = partirPdf(valor, size, 236).slice(0, Math.floor((infoY - 80) / paso))
+    lineas.forEach((linea, i) => t(40, infoY - i * paso, size, bold, linea))
+    if (lineas.length) infoY -= lineas.length * paso
+  }
+  ponerInfo(8, true, "INFORMACION ADICIONAL", 14)
+  ponerInfo(8, false, `Forma de Pago: ${body.formaPago || ""}`, 11)
   const recibido = Number(body.pagos?.efectivoRecibido || body.efectivoRecibido || body.pagos?.entregado || 0)
   const vuelto = Number(body.pagos?.vuelto || body.vuelto || 0)
-  if (recibido > 0) t(40, 168, 8, false, `Valor recibido: ${dineroPdf(recibido)}`)
-  if (vuelto > 0) t(40, 154, 8, false, `Vuelto entregado: ${dineroPdf(vuelto)}`)
-  if (body.mensajeSri) t(40, 140, 7, false, `Mensaje del SRI: ${body.mensajeSri}`)
-  t(40, 84, 7, true, "Proveedor del sistema: MEIJSAC S.A.S. RUC 1793243789001")
-  caja(308, 70, 256, 200)
+  if (recibido > 0) ponerInfo(8, false, `Valor recibido: ${dineroPdf(recibido)}`, 12)
+  if (vuelto > 0) ponerInfo(8, false, `Vuelto entregado: ${dineroPdf(vuelto)}`, 12)
+  if (body.mensajeSri) ponerInfo(7, false, `Mensaje del SRI: ${body.mensajeSri}`, 10)
+  t(40, 64, 7, true, "Proveedor del sistema: MEIJSAC S.A.S.")
+  t(40, 52, 7, true, "RUC 1793243789001")
   const filasTotales: [string, unknown][] = [
     ["SUBTOTAL 15%", totales.base15],
     ["SUBTOTAL 0%", totales.base0],
@@ -384,11 +448,11 @@ function pdfIgualAlRide(body: Record<string, any>) {
     ["PROPINA", totales.propina],
   ]
   filasTotales.forEach((fila, i) => {
-    t(316, 250 - i * 14, 7, fila[0].includes("SIN IMPUESTOS"), fila[0])
-    t(490, 250 - i * 14, 7, false, dineroPdf(fila[1]))
+    t(316, 300 - i * 16, 7, fila[0].includes("SIN IMPUESTOS"), fila[0])
+    t(500, 300 - i * 16, 7, false, dineroPdf(fila[1]))
   })
-  t(316, 90, 10, true, "VALOR TOTAL")
-  t(470, 90, 10, true, dineroPdf(totales.total))
+  t(316, 58, 11, true, "VALOR TOTAL")
+  t(470, 58, 11, true, dineroPdf(totales.total))
   const stream = cmd.join("\n")
   const objetos = [
     "<< /Type /Catalog /Pages 2 0 R >>",
