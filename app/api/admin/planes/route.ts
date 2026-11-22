@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
 import { asegurarPlanInicial } from "@/lib/plan-inicial"
-import { MODULOS_MEIJSAC } from "@/lib/suscripcion"
+import { MODULOS_MEIJSAC, MODULOS_PLAN } from "@/lib/suscripcion"
 
 function limpiar(body: any) {
   const nombre = String(body?.nombre || "").trim()
@@ -9,9 +9,11 @@ function limpiar(body: any) {
   const duracionDias = Math.round(Number(body?.duracionDias))
   const limiteComprobantes = Math.round(Number(body?.limiteComprobantes))
   const limiteUsuarios = Math.round(Number(body?.limiteUsuarios))
-  const modulos = Array.isArray(body?.modulos)
-    ? body.modulos.map((m: unknown) => String(m)).filter((m: string) => (MODULOS_MEIJSAC as readonly string[]).includes(m))
-    : String(body?.modulos || "").split(",").map((m) => m.trim()).filter((m) => (MODULOS_MEIJSAC as readonly string[]).includes(m))
+  const listaExplicita = Array.isArray(body?.modulos)
+  const permitidos = MODULOS_PLAN as readonly string[]
+  const modulos = listaExplicita
+    ? body.modulos.map((m: unknown) => String(m)).filter((m: string) => permitidos.includes(m))
+    : String(body?.modulos || "").split(",").map((m) => m.trim()).filter((m: string) => permitidos.includes(m))
 
   if (!nombre) return { error: "Escribe el nombre del plan" }
   if (!Number.isFinite(precio) || precio < 0) return { error: "El precio puede ser 0 o mayor" }
@@ -40,7 +42,7 @@ function limpiar(body: any) {
       documentosAnio: documentosAnio || limiteComprobantes,
       badge,
       activo: body?.activo !== false,
-      modulos: (modulos.length ? modulos : [...MODULOS_MEIJSAC]).join(","),
+      modulos: (listaExplicita ? modulos : (modulos.length ? modulos : [...MODULOS_MEIJSAC])).join(","),
     },
   }
 }

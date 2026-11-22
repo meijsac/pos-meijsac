@@ -13,7 +13,26 @@ export const MODULOS_MEIJSAC = [
   "CLIENTES",
   "REPORTES",
   "COMPROBANTES ADICIONALES",
+  "RESPALDO / RESTAURAR",
 ] as const
+
+export const CARPETAS_PLAN = [
+  "Identidad",
+  "Firma",
+  "Secuenciales",
+  "Impuestos",
+  "Inventario",
+  "Seguridad",
+  "WhatsApp",
+  "Respaldo",
+  "Marca RIDE",
+  "Documentos",
+  "Permisos",
+  "Ambiente SRI",
+  "Catálogo SRI",
+] as const
+
+export const MODULOS_PLAN = [...MODULOS_MEIJSAC, ...CARPETAS_PLAN] as const
 
 export type EstadoPlan = "PRUEBA" | "ACTIVO" | "BLOQUEADO"
 

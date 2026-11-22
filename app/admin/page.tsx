@@ -1,5 +1,6 @@
 "use client"
 import { useEffect, useMemo, useState } from "react"
+import { CARPETAS_PLAN, MODULOS_MEIJSAC } from "@/lib/suscripcion"
 
 type Plan = {
   id: string
@@ -14,6 +15,7 @@ type Plan = {
   documentosAnio: number
   badge: string
   activo: boolean
+  modulos: string[]
 }
 
 type Cliente = {
@@ -27,7 +29,9 @@ type Cliente = {
   planFin: string | null
   firmaExpira: string | null
   comprobantesUsados: number
+  comprobantesEmitidos: number
   limiteComprobantes: number
+  vence: string | null
 }
 
 const vacio = {
@@ -42,6 +46,30 @@ const vacio = {
   documentosAnio: 15,
   badge: "",
   activo: true,
+  modulos: [...MODULOS_MEIJSAC, ...CARPETAS_PLAN],
+}
+
+function diasHasta(fecha: string | null) {
+  if (!fecha) return null
+  const momento = new Date(fecha).getTime()
+  if (!Number.isFinite(momento)) return null
+  return Math.ceil((momento - Date.now()) / 86400000)
+}
+
+function textoCaducidad(fecha: string | null) {
+  const dias = diasHasta(fecha)
+  if (dias === null) return "Sin fecha"
+  const dia = String(fecha).slice(0, 10)
+  if (dias < 0) return `Vencido hace ${Math.abs(dias)} día${Math.abs(dias) === 1 ? "" : "s"} · ${dia}`
+  if (dias === 0) return `Caduca hoy · ${dia}`
+  return `Faltan ${dias} día${dias === 1 ? "" : "s"} · ${dia}`
+}
+
+function textoQuedan(usados: number, limite: number) {
+  if (limite < 0) return "Sin límite"
+  const quedan = limite - usados
+  if (quedan < 0) return `Pasó el límite por ${Math.abs(quedan)}`
+  return `${quedan} de ${limite}`
 }
 
 export default function AdminModuladorCompleto() {
@@ -49,7 +77,6 @@ export default function AdminModuladorCompleto() {
   const [user, setUser] = useState("")
   const [pass, setPass] = useState("")
   const [tab, setTab] = useState<"dash" | "planes" | "clientes" | "crear">("planes")
-  const [centro, setCentro] = useState(false)
   const [planes, setPlanes] = useState<Plan[]>([])
   const [clientes, setClientes] = useState<Cliente[]>([])
   const [filtro, setFiltro] = useState("")
@@ -90,6 +117,7 @@ export default function AdminModuladorCompleto() {
         documentosAnio: Number(p.documentosAnio || p.limiteComprobantes || 0),
         badge: p.badge || "",
         activo: p.activo !== false,
+        modulos: Array.isArray(p.modulos) ? p.modulos.map((m: unknown) => String(m)) : [],
       })))
     }
     if (Array.isArray(clientesData)) setClientes(clientesData)
@@ -131,6 +159,7 @@ export default function AdminModuladorCompleto() {
       documentosAnio: p.documentosAnio,
       badge: p.badge,
       activo: p.activo,
+      modulos: p.modulos,
     })
     setEditId(p.id)
     setTab("crear")
@@ -197,33 +226,26 @@ export default function AdminModuladorCompleto() {
     <div className="min-h-screen bg-[#0a0a0a] text-white p-4">
       <div className="max-w-7xl mx-auto space-y-4">
         <div className="flex justify-between items-center"><h1 className="text-xl font-black">MODULADOR COMPLETO</h1><button onClick={() => setLogado(false)} className="text-xs bg-white/10 px-3 py-1 rounded">Salir</button></div>
-        <div className="flex gap-2 flex-wrap">{(["dash", "planes", "clientes", "crear"] as const).map((t) => <button key={t} onClick={() => { setCentro(false); setTab(t); if (t === "crear" && !editId) setForm(vacio) }} className={`px-4 py-2 rounded-xl text-xs font-black ${!centro && tab === t ? "bg-[#00f5d4] text-black" : "bg-white/10"}`}>{t === "dash" ? "DASHBOARD" : t === "planes" ? "PLANES" : t === "clientes" ? "CLIENTES / SUSCRIPCIONES" : editId ? "EDITAR PLAN" : "CREAR PLAN"}</button>)}</div>
-        <button type="button" onClick={() => setCentro(true)} className={`max-w-sm bg-white/5 border rounded-2xl px-4 py-4 flex items-center gap-3 text-left ${centro ? "border-[#00f5d4]" : "border-white/10"}`}>
-          <span className="text-2xl" aria-hidden="true">📁</span>
-          <span>
-            <span className="block text-[11px] font-black tracking-widest">CENTRO DE CONTROL MODULAR</span>
-            <span className="block text-[10px] text-white/50">Activar o desactivar secciones y carpetas</span>
-          </span>
-        </button>
+        <div className="flex gap-2 flex-wrap">{(["dash", "planes", "clientes", "crear"] as const).map((t) => <button key={t} onClick={() => { setTab(t); if (t === "crear" && !editId) setForm(vacio) }} className={`px-4 py-2 rounded-xl text-xs font-black ${tab === t ? "bg-[#00f5d4] text-black" : "bg-white/10"}`}>{t === "dash" ? "DASHBOARD" : t === "planes" ? "PLANES" : t === "clientes" ? "CLIENTES / SUSCRIPCIONES" : editId ? "EDITAR PLAN" : "CREAR PLAN"}</button>)}</div>
         {aviso && <div className="bg-amber-500/10 border border-amber-400/30 text-amber-200 text-xs p-3 rounded-xl">{aviso}</div>}
 
-        {centro && <CentroModular />}
-
-        {!centro && tab === "dash" && (
+        {tab === "dash" && (
           <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
             <div className="bg-white/5 p-4 rounded-xl"><div className="text-[10px] opacity-50">MRR ESTIMADO</div><div className="font-black text-xl">${mrr.toFixed(2)}</div></div>
             <div className="bg-white/5 p-4 rounded-xl"><div className="text-[10px] opacity-50">CLIENTES</div><div className="font-black text-xl">{clientes.length}</div></div>
             <div className="bg-emerald-500/10 p-4 rounded-xl"><div className="text-[10px] opacity-50">ACTIVOS</div><div className="font-black text-xl">{clientes.filter((c) => c.estado === "ACTIVO").length}</div></div>
             <div className="bg-red-500/10 p-4 rounded-xl"><div className="text-[10px] opacity-50">BLOQUEADOS</div><div className="font-black text-xl">{clientes.filter((c) => c.estado === "BLOQUEADO").length}</div></div>
+            <div className="bg-amber-500/10 p-4 rounded-xl"><div className="text-[10px] opacity-50">CADUCAN EN 7 DÍAS</div><div className="font-black text-xl">{clientes.filter((c) => { const dias = diasHasta(c.vence || c.planFin); return dias !== null && dias >= 0 && dias <= 7 }).length}</div></div>
+            <div className="bg-amber-500/10 p-4 rounded-xl"><div className="text-[10px] opacity-50">QUEDAN POCOS COMPROBANTES</div><div className="font-black text-xl">{clientes.filter((c) => c.limiteComprobantes >= 0 && c.limiteComprobantes - (c.comprobantesEmitidos || 0) <= Math.max(1, Math.ceil(c.limiteComprobantes * 0.1))).length}</div></div>
           </div>
         )}
 
-        {!centro && tab === "planes" && (
+        {tab === "planes" && (
           <div className="grid gap-2">{planes.map((p) => (
             <div key={p.id} className="bg-white/5 p-4 rounded-xl flex flex-col md:flex-row md:justify-between md:items-center gap-3">
               <div>
                 <div className="font-bold">{p.nombre} {p.badge && <span className="bg-[#00f5d4] text-black text-[9px] px-1 rounded">{p.badge}</span>}</div>
-                <div className="text-[11px] opacity-60">{p.descripcion} | {p.documentosAnio} documentos / año | ${p.precio} mensual | ${p.precioAnual} anual | Trial {p.trialDias}d | Facturas: {p.limiteComprobantes} | Usuarios: {p.limiteUsuarios}</div>
+                <div className="text-[11px] opacity-60">{p.descripcion} | {p.documentosAnio} documentos / año | ${p.precio} mensual | ${p.precioAnual} anual | Trial {p.trialDias}d | Facturas: {p.limiteComprobantes} | Usuarios: {p.limiteUsuarios} | Módulos: {p.modulos.length}</div>
               </div>
               <div className="flex gap-2">
                 <button onClick={() => editar(p)} className="px-3 py-1 rounded text-xs font-black bg-white/10">EDITAR</button>
@@ -234,8 +256,8 @@ export default function AdminModuladorCompleto() {
           ))}</div>
         )}
 
-        {!centro && tab === "crear" && (
-          <div className="bg-white/5 p-4 rounded-xl space-y-3 max-w-xl">
+        {tab === "crear" && (
+          <div className="bg-white/5 p-4 rounded-xl space-y-3 max-w-3xl">
             <h3 className="font-black">{editId ? "EDITAR PLAN" : "CREAR PLAN"}</h3>
             <input value={form.nombre} onChange={(e) => setForm({ ...form, nombre: e.target.value })} placeholder="Nombre" className="w-full p-3 rounded bg-black border border-white/10 text-sm" />
             <input value={form.descripcion} onChange={(e) => setForm({ ...form, descripcion: e.target.value })} placeholder="Descripción" className="w-full p-3 rounded bg-black border border-white/10 text-sm" />
@@ -250,22 +272,24 @@ export default function AdminModuladorCompleto() {
               <label className="text-xs">Tipo<select value={form.badge} onChange={(e) => setForm({ ...form, badge: e.target.value })} className="w-full p-2 rounded bg-black border border-white/10"><option value="">Normal</option><option value="Popular">Popular</option><option value="Más popular">Más popular</option><option value="Gratuito">Gratuito</option></select></label>
             </div>
             <label className="flex items-center gap-2 text-xs"><input type="checkbox" checked={form.activo} onChange={(e) => setForm({ ...form, activo: e.target.checked })} /> Activo</label>
+            <ModulosPlan elegidos={form.modulos} onChange={(modulos) => setForm({ ...form, modulos })} />
             <button onClick={guardarPlan} className="w-full py-3 bg-[#00f5d4] text-black font-black rounded-xl">{editId ? "GUARDAR CAMBIOS" : "CREAR PLAN"}</button>
           </div>
         )}
 
-        {!centro && tab === "clientes" && (
+        {tab === "clientes" && (
           <div className="space-y-3">
             <input value={filtro} onChange={(e) => setFiltro(e.target.value)} placeholder="Buscar por RUC o razón" className="w-full p-3 rounded-xl bg-black border border-white/10 text-sm" />
             <div className="overflow-x-auto bg-white/5 rounded-xl border border-white/10">
               <table className="w-full text-[11px]">
-                <thead><tr className="text-left opacity-50 text-[10px]"><th className="p-2">CLIENTE</th><th>PLAN</th><th>ESTADO</th><th>VENCE</th><th>ACCIONES</th></tr></thead>
+                <thead><tr className="text-left opacity-50 text-[10px]"><th className="p-2">CLIENTE</th><th>PLAN</th><th>ESTADO</th><th>QUEDAN</th><th>CADUCA</th><th>ACCIONES</th></tr></thead>
                 <tbody>{filtrados.map((c) => (
                   <tr key={c.id} className="border-t border-white/5 align-top">
                     <td className="p-2"><div className="font-bold">{c.razonSocial}</div><div className="opacity-60">{c.ruc}</div></td>
                     <td className="p-2">{c.planNombre || "Sin plan"}</td>
                     <td className="p-2">{c.planEstado} / {c.estado}</td>
-                    <td className="p-2">{c.planFin ? String(c.planFin).slice(0, 10) : "—"}</td>
+                    <td className="p-2"><div className="font-bold">{textoQuedan(c.comprobantesEmitidos || 0, c.limiteComprobantes)}</div><div className="opacity-60">{c.comprobantesEmitidos || 0} guardados</div></td>
+                    <td className="p-2">{textoCaducidad(c.vence || c.planFin)}</td>
                     <td className="p-2 space-y-2">
                       <div className="flex gap-1 flex-wrap">
                         <select value={elegido[c.id] || c.planId || ""} onChange={(e) => setElegido({ ...elegido, [c.id]: e.target.value })} className="bg-black border border-white/10 rounded px-1 py-1">
@@ -291,74 +315,28 @@ export default function AdminModuladorCompleto() {
   )
 }
 
-const SECCIONES = [
-  "Comprobantes electrónicos",
-  "POS Ticket",
-  "Restaurante POS",
-  "Contabilidad",
-  "Cuentas por cobrar",
-  "Inventario",
-  "Caja",
-  "Clientes",
-  "Reportes",
-  "Comprobantes adicionales",
-  "Respaldo / Restaurar",
-]
-
-const CARPETAS = [
-  "Identidad",
-  "Firma",
-  "Secuenciales",
-  "Impuestos",
-  "Inventario",
-  "Seguridad",
-  "WhatsApp",
-  "Respaldo",
-  "Marca RIDE",
-  "Documentos",
-  "Permisos",
-  "Ambiente SRI",
-  "Catálogo SRI",
-]
-
-function CentroModular() {
-  const [activos, setActivos] = useState<Record<string, boolean>>({})
-
-  useEffect(() => {
-    let guardado: Record<string, boolean> = {}
-    try { guardado = JSON.parse(localStorage.getItem("meijsac_modulos_activos") || "{}") } catch { guardado = {} }
-    const base: Record<string, boolean> = {}
-    for (const nombre of [...SECCIONES, ...CARPETAS]) base[nombre] = guardado[nombre] !== false
-    setActivos(base)
-  }, [])
-
-  function cambiar(nombre: string) {
-    setActivos((prev) => {
-      const siguiente = { ...prev, [nombre]: !prev[nombre] }
-      localStorage.setItem("meijsac_modulos_activos", JSON.stringify(siguiente))
-      return siguiente
-    })
+function ModulosPlan({ elegidos, onChange }: { elegidos: string[]; onChange: (modulos: string[]) => void }) {
+  const marcar = (nombre: string) => {
+    onChange(elegidos.includes(nombre) ? elegidos.filter((item) => item !== nombre) : [...elegidos, nombre])
   }
-
-  const lista = (titulo: string, nombres: string[]) => (
-    <section className="bg-white/5 border border-white/10 rounded-2xl">
-      <h2 className="px-4 pt-4 text-[11px] font-black tracking-widest text-[#00f5d4]">{titulo}</h2>
+  const lista = (titulo: string, nombres: readonly string[]) => (
+    <section className="bg-black/40 border border-white/10 rounded-xl">
+      <h2 className="px-3 pt-3 text-[11px] font-black tracking-widest text-[#00f5d4]">{titulo}</h2>
       <div className="divide-y divide-white/5">
         {nombres.map((nombre) => (
-          <label key={nombre} className="flex items-center justify-between px-4 py-3 cursor-pointer">
-            <span className="text-sm">{nombre}</span>
-            <input type="checkbox" checked={activos[nombre] !== false} onChange={() => cambiar(nombre)} className="accent-[#00f5d4] w-4 h-4" />
+          <label key={nombre} className="flex items-center justify-between px-3 py-2 cursor-pointer">
+            <span className="text-xs">{nombre}</span>
+            <input type="checkbox" checked={elegidos.includes(nombre)} onChange={() => marcar(nombre)} className="accent-[#00f5d4] w-4 h-4" />
           </label>
         ))}
       </div>
     </section>
   )
-
   return (
-    <div className="max-w-3xl space-y-4">
-      <h2 className="text-lg font-black">Centro de Control Modular</h2>
-      {lista("SECCIONES", SECCIONES)}
-      {lista("CARPETAS", CARPETAS)}
+    <div className="space-y-2">
+      <p className="text-[11px] font-black tracking-widest">CENTRO DE CONTROL MODULAR DE ESTE PLAN</p>
+      {lista("SECCIONES", MODULOS_MEIJSAC)}
+      {lista("CARPETAS", CARPETAS_PLAN)}
     </div>
   )
 }
