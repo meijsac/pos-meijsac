@@ -34,7 +34,7 @@ type Cliente = {
   vence: string | null
 }
 
-const vacio = {
+const vacio: Omit<Plan, "id"> = {
   nombre: "",
   descripcion: "",
   precio: 0,
