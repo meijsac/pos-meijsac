@@ -166,6 +166,9 @@ model FacturaEmitida {
   empresa          Empresa   @relation(fields: [empresaId], references: [id], onDelete: Cascade)
   estado           String
   sriStatus        String?   @map("sri_status")
+  ambiente         String?   @db.VarChar(1)
+  fechaAutorizacion DateTime? @map("fecha_autorizacion")
+  estadoSri        String?   @map("estado_sri") @db.VarChar(20)
   payload          Json
   tipoCobro        String?   @map("tipo_cobro")
   estadoPago       String?   @map("estado_pago")
@@ -180,6 +183,7 @@ model FacturaEmitida {
   createdAt        DateTime  @default(now())
 
   @@index([empresaId, usuarioId])
+  @@index([empresaId, ambiente, fechaAutorizacion])
 }
 
 model Proforma {

@@ -288,7 +288,7 @@ export default function AdminModuladorCompleto() {
                     <td className="p-2"><div className="font-bold">{c.razonSocial}</div><div className="opacity-60">{c.ruc}</div></td>
                     <td className="p-2">{c.planNombre || "Sin plan"}</td>
                     <td className="p-2">{c.planEstado} / {c.estado}</td>
-                    <td className="p-2"><div className="font-bold">{textoQuedan(c.comprobantesEmitidos || 0, c.limiteComprobantes)}</div><div className="opacity-60">{c.comprobantesEmitidos || 0} guardados</div></td>
+                    <td className="p-2"><div className="font-bold">{textoQuedan(c.comprobantesEmitidos || 0, c.limiteComprobantes)}</div><div className="opacity-60">{c.comprobantesEmitidos || 0} autorizados en producción</div></td>
                     <td className="p-2">{textoCaducidad(c.vence || c.planFin)}</td>
                     <td className="p-2 space-y-2">
                       <div className="flex gap-1 flex-wrap">

@@ -11,6 +11,7 @@ export async function GET() {
       }),
       prisma.facturaEmitida.groupBy({
         by: ["empresaId"],
+        where: { ambiente: "2", fechaAutorizacion: { not: null } },
         _count: { _all: true },
       }),
     ]);
