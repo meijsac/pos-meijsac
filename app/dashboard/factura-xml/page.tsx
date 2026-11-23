@@ -1265,6 +1265,17 @@ const total = subtotalSin + iva15 + ivaDiferenciado + valorICE + valorIRBPNR + p
       .facturador-tema[data-tema="claro"] .btn-guardar-borrador {
         color: #2dd4bf;
       }
+      .facturador-tema { font-size: 18px; }
+      .facturador-tema .text-\\[7px\\] { font-size: 10px !important; }
+      .facturador-tema .text-\\[8px\\] { font-size: 11px !important; }
+      .facturador-tema .text-\\[9px\\] { font-size: 12px !important; }
+      .facturador-tema .text-\\[10px\\] { font-size: 13px !important; }
+      .facturador-tema .text-\\[11px\\] { font-size: 14px !important; }
+      .facturador-tema .text-\\[12px\\] { font-size: 16px !important; }
+      .facturador-tema .text-xs { font-size: 15px !important; }
+      .facturador-tema .text-sm { font-size: 17px !important; }
+      .facturador-tema .text-lg { font-size: 22px !important; }
+      .facturador-tema .text-xl { font-size: 26px !important; }
     `}</style>
     {/* PEGALO AQUÍ ARRIBA DE TODO */}
     <div className="max-w-7xl mx-auto flex flex-wrap gap-2 mb-4 print:hidden">
