@@ -27,7 +27,7 @@ export async function GET(req: Request, context: { params: Promise<{ clave: stri
   const fila = await facturaPorClave(sesion.empresa.id, clave)
   const xmlGuardado = quiereXml || !fila ? await leerComprobanteArchivado(sesion.empresa.id, clave, "xml") : null
   const pdfGuardado = quierePdf || !fila ? await leerComprobanteArchivado(sesion.empresa.id, clave, "pdf") : null
-  const htmlGuardado = !quiereXml && !quierePdf ? await leerComprobanteArchivado(sesion.empresa.id, clave, "html") : null
+  const htmlGuardado = !fila && !quiereXml && !quierePdf ? await leerComprobanteArchivado(sesion.empresa.id, clave, "html") : null
   if (!fila && !xmlGuardado && !htmlGuardado && !pdfGuardado) return pagina("Comprobante", "No encontré esta factura.", 404)
   const p = ((fila?.payload || {}) as Record<string, any>)
   const emisor = p.configEmisor || {}
@@ -65,7 +65,7 @@ export async function GET(req: Request, context: { params: Promise<{ clave: stri
       },
     })
   }
-  if (autorizado && !htmlGuardado && (xmlAutorizado || p.xmlContent)) {
+  if (!fila && autorizado && !htmlGuardado && (xmlAutorizado || p.xmlContent)) {
     void guardarRespaldo(sesion.empresa.id, clave, xmlAutorizado || String(p.xmlContent || ""), { estado: "AUTORIZADO", fechaAutorizacion: fecha }, p)
   }
   if (pedido.searchParams.get("ticket") !== "1" && htmlGuardado) {

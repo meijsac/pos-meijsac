@@ -1080,7 +1080,6 @@ const total = subtotalSin + iva15 + ivaDiferenciado + valorICE + valorIRBPNR + p
         cargarPunto()
         return
       }
-      await guardarClienteEmitido(facturaPendiente.cliente)
       const serieUsada = guardada.establecimiento || puntoEmision.serie
       const secUsado = guardada.secuencial || puntoEmision.secuencial
       facturaPendiente.establecimiento = serieUsada
@@ -1096,6 +1095,21 @@ const total = subtotalSin + iva15 + ivaDiferenciado + valorICE + valorIRBPNR + p
       facturaPendiente.fechaAutorizacion = guardada.fechaAutorizacion || ""
       facturaPendiente.mensajeSri = guardada.mensaje || ""
       facturaPendiente.mensajesSri = guardada.mensajes || []
+      const claveRide = String(guardada.claveAcceso || facturaPendiente.claveAcceso || "").replace(/\D/g, "")
+      const urlRide = `/dashboard/factura-xml/visor/${claveRide}`
+      setEnviandoSri(false)
+      if (claveRide.length === 49) {
+        if (venta && !venta.closed) venta.location.href = urlRide
+        else {
+          const abierta = window.open(urlRide, "_blank")
+          if (!abierta) alert(`La factura quedó ${estadoVisible}. Permite las ventanas emergentes para ver el comprobante.`)
+        }
+      } else {
+        venta?.close()
+        alert("No se pudo obtener la clave de acceso del comprobante.")
+      }
+      try {
+      void guardarClienteEmitido(facturaPendiente.cliente)
       const listaDoc = {
         id: guardada.id || facturaPendiente.id,
         facturaId: guardada.id,
@@ -1123,22 +1137,13 @@ const total = subtotalSin + iva15 + ivaDiferenciado + valorICE + valorIRBPNR + p
         const previa = JSON.parse(localStorage.getItem(clave) || "[]")
         localStorage.setItem(clave, JSON.stringify([...previa, listaDoc]))
       })
-      const siguiente = await guardarSecuencialUsado(serieUsada, secUsado)
-      if (siguiente) setPuntoEmision((p) => ({ ...p, secuencial: siguiente, ultimo: String(secUsado || "").replace(/\D/g, "").padStart(9, "0") }))
+      void guardarSecuencialUsado(serieUsada, secUsado).then((siguiente) => {
+        if (siguiente) setPuntoEmision((p) => ({ ...p, secuencial: siguiente, ultimo: String(secUsado || "").replace(/\D/g, "").padStart(9, "0") }))
+      })
       cargarPunto()
       localStorage.setItem("meijsac_ultima_factura_pendiente", JSON.stringify(facturaPendiente))
-      const claveRide = String(guardada.claveAcceso || facturaPendiente.claveAcceso || "").replace(/\D/g, "")
-      const urlRide = `/dashboard/factura-xml/visor/${claveRide}`
-      setEnviandoSri(false)
-      if (claveRide.length === 49) {
-        if (venta && !venta.closed) venta.location.href = urlRide
-        else {
-          const abierta = window.open(urlRide, "_blank")
-          if (!abierta) alert(`La factura quedó ${estadoVisible}. Permite las ventanas emergentes para ver el comprobante.`)
-        }
-      } else {
-        venta?.close()
-        alert("No se pudo obtener la clave de acceso del comprobante.")
+      } catch (error) {
+        console.error(error)
       }
     } catch (error) {
       setEnviandoSri(false)

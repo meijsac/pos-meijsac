@@ -7,9 +7,18 @@ export async function facturaPorClave(empresaId: string, claveEntrada: string) {
     SELECT id, payload, estado, sri_status AS "sriStatus"
     FROM "FacturaEmitida"
     WHERE "empresaId" = ${empresaId}
+    AND payload->>'claveAcceso' = ${clave}
+    ORDER BY "createdAt" DESC
+    LIMIT 1
+  `
+  if (filas[0]) return filas[0]
+  const antiguas = await prisma.$queryRaw<Array<{ id: string; payload: unknown; estado: string; sriStatus: string | null }>>`
+    SELECT id, payload, estado, sri_status AS "sriStatus"
+    FROM "FacturaEmitida"
+    WHERE "empresaId" = ${empresaId}
     AND regexp_replace(COALESCE(payload->>'claveAcceso', ''), '[^0-9]', '', 'g') = ${clave}
     ORDER BY "createdAt" DESC
     LIMIT 1
   `
-  return filas[0] || null
+  return antiguas[0] || null
 }
