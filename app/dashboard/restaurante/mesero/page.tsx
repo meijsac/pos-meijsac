@@ -38,6 +38,7 @@ export default function AppMesero(){
   const [categorias, setCategorias] = useState<string[]>(CATEGORIAS_EJEMPLO)
   const [avisos, setAvisos] = useState<TicketListo[]>([])
   const [cat, setCat] = useState("CARNES")
+  const [busca, setBusca] = useState("")
   const [mods, setMods] = useState<Mods>({})
   const [platoSel, setPlatoSel] = useState<Item|null>(null)
   const [nota, setNota] = useState("")
@@ -190,6 +191,8 @@ export default function AppMesero(){
   ) : null
 
   const mesa = mesas.find(m=>m.id===mesaActiva)
+  const textoBusca = busca.trim().toLowerCase()
+  const carta = menu.filter((plato) => textoBusca ? plato.nombre.toLowerCase().includes(textoBusca) : plato.cat === cat)
 
   if(mesaActiva===null){
     return (
@@ -201,15 +204,15 @@ export default function AppMesero(){
           <div className="text-[10px] bg-[#00f5d4]/20 text-[#00f5d4] px-2 py-1 rounded-full">{mesas.filter(m=>m.estado==="OCUPADA").length} Ocupadas</div>
         </div>
         {letrero}
-        <div className="grid grid-cols-2 gap-3 pb-20">
+        <div className="grid grid-cols-2 gap-3 pb-24">
           {mesas.map(m=>{
             const col = m.estado==="LIBRE"?"bg-blue-500/20 border-blue-500/30 text-blue-200": m.estado==="OCUPADA"?"bg-green-500/20 border-green-500/40 text-green-200": m.estado==="CUENTA"?"bg-yellow-500/20 border-yellow-500/40 text-yellow-200 opacity-60":"bg-red-500/20 border-red-500/30 text-red-200 opacity-60"
             const bloqueada = m.estado==="CUENTA" || m.estado==="SUCIA"
             return (
-              <button key={m.id} onClick={()=>seleccionarMesa(m.id)} className={`${col} border p-4 rounded-2xl text-left active:scale-95 transition ${bloqueada?"":""}`}>
-                <div className="font-black text-[15px] flex justify-between">{m.nombre} {bloqueada && <span className="text-[10px]">🔒</span>}</div>
-                <div className="text-[10px] opacity-70">{m.zona} • {m.estado}</div>
-                <div className="mt-2 text-[11px] font-bold">{m.items.length>0? `${m.items.length} platos` : "Libre - AZUL"} {bloqueada? "- En Caja":""}</div>
+              <button key={m.id} onClick={()=>seleccionarMesa(m.id)} className={`${col} border min-h-24 p-4 rounded-2xl text-left active:scale-95 transition`}>
+                <div className="font-black text-base flex justify-between">{m.nombre} {bloqueada && <span className="text-[10px]">🔒</span>}</div>
+                <div className="text-xs opacity-70 mt-1">{m.zona} • {m.estado}</div>
+                <div className="mt-2 text-xs font-bold">{m.items.length>0? `${m.items.length} platos` : "Libre"} {bloqueada? "· En caja":""}</div>
               </button>
             )
           })}
@@ -225,7 +228,7 @@ export default function AppMesero(){
   return (
     <div className="min-h-screen bg-[#080c14] text-white flex flex-col">
       <div className="bg-[#1e293b] p-4 flex justify-between items-center">
-        <button onClick={()=>setMesaActiva(null)} className="bg-white/10 px-3 py-2 rounded-xl text-xs">← Mesas</button>
+        <button onClick={()=>{ setBusca(""); setMesaActiva(null) }} className="bg-white/10 px-4 py-3 rounded-xl text-sm font-bold">← Mesas</button>
         {/* PROTECCION: sin $ en header */}
         <div className="text-center"><div className="font-black">{mesa?.nombre} • {mesa?.zona}</div><div className="text-[10px] opacity-60">{mesa?.items.length} platos en comanda</div></div>
         <button onClick={()=>{ const kds=JSON.parse(localStorage.getItem("meijsac_cola_cocina")||"[]"); alert(`En cocina: ${kds.filter((x:any)=>x.mesa===mesaActiva).length} platos` )}} className="bg-[#00f5d4]/20 text-[#00f5d4] px-3 py-2 rounded-xl text-[10px] font-black">KDS</button>
@@ -243,17 +246,21 @@ export default function AppMesero(){
         {(!mesa || mesa.items.length===0) && <div className="text-center opacity-30 text-xs py-6">Aún sin pedidos - Agrega abajo</div>}
       </div>
 
+      <div className="px-3 pt-3">
+        <input value={busca} onChange={(e) => setBusca(e.target.value)} placeholder="Buscar plato" className="w-full rounded-2xl bg-black border border-white/15 px-4 py-4 text-base outline-none" />
+      </div>
       <div className="flex gap-2 p-3 overflow-x-auto">
-        {(categorias.length ? categorias : CATEGORIAS_EJEMPLO).map(c=><button key={c} onClick={()=>setCat(c)} className={`px-4 py-2 rounded-full text-xs font-black whitespace-nowrap ${cat===c?"bg-white text-black":"bg-white/10"}`}>{c}</button>)}
+        {(categorias.length ? categorias : CATEGORIAS_EJEMPLO).map(c=><button key={c} onClick={()=>{ setBusca(""); setCat(c) }} className={`min-h-11 px-5 py-3 rounded-full text-sm font-black whitespace-nowrap ${!textoBusca && cat===c?"bg-white text-black":"bg-white/10"}`}>{c}</button>)}
       </div>
 
-      <div className="flex-1 grid grid-cols-2 gap-2 p-3 pb-28">
-        {menu.filter(m=>m.cat===cat).map(plato=>(
-          <button key={plato.id} onClick={()=>abrirMods(plato)} className="bg-[#1e293b] border border-white/10 p-4 rounded-2xl text-left active:scale-95">
-            <div className="font-bold text-sm">{plato.nombre}</div>
-            <div className="text-[10px] opacity-50 mt-1">Tocar para personalizar</div>
+      <div className="flex-1 grid grid-cols-2 gap-3 p-3 pb-8 content-start">
+        {carta.map(plato=>(
+          <button key={`${plato.cat}-${plato.id}`} onClick={()=>abrirMods(plato)} className="bg-[#1e293b] border border-white/10 min-h-24 p-4 rounded-2xl text-left active:scale-95">
+            <div className="font-bold text-base leading-snug">{plato.nombre}</div>
+            {textoBusca && <div className="text-xs text-[#00f5d4] mt-2">{plato.cat}</div>}
           </button>
         ))}
+        {carta.length === 0 && <div className="col-span-2 text-center text-sm opacity-50 py-8">Ningún plato coincide</div>}
       </div>
 
       {platoSel && (
