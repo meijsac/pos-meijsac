@@ -1,5 +1,5 @@
 "use client"
-import { useEffect, useMemo, useState } from "react"
+import { useEffect, useMemo, useState, type ReactNode } from "react"
 import { CARPETAS_PLAN, MODULOS_MEIJSAC } from "@/lib/suscripcion"
 
 type Plan = {
@@ -72,8 +72,39 @@ function textoQuedan(usados: number, limite: number) {
   return `${quedan} de ${limite}`
 }
 
-const campo = "w-full rounded-xl border border-cyan-300/15 bg-white/[0.04] px-3 py-2.5 text-sm text-white outline-none transition focus:border-cyan-300/50 focus:ring-2 focus:ring-cyan-300/20"
-const panel = "rounded-2xl border border-white/10 bg-white/[0.04] shadow-[0_0_40px_rgba(0,245,212,0.05)] backdrop-blur"
+const campo = "admin-campo"
+const panel = "admin-marco"
+
+const estilosAdmin = `
+@property --giro { syntax: "<angle>"; inherits: false; initial-value: 0deg; }
+.meijsac-admin { --fondo:#05070d; --texto:#f4fffd; --suave:rgba(244,255,253,.68); --tenue:rgba(244,255,253,.46); --panel:rgba(7,14,22,.78); --campo:rgba(255,255,255,.05); min-height:100vh; color:var(--texto); background-color:var(--fondo); background-image:radial-gradient(ellipse at top, rgba(0,245,212,.16), transparent 42%), radial-gradient(ellipse at bottom, rgba(99,102,241,.18), transparent 46%); }
+.meijsac-admin[data-tema="claro"] { --fondo:#f4fbfb; --texto:#102027; --suave:rgba(16,32,39,.72); --tenue:rgba(16,32,39,.52); --panel:rgba(255,255,255,.9); --campo:#ffffff; background-image:radial-gradient(ellipse at top, rgba(0,245,212,.28), transparent 42%), radial-gradient(ellipse at bottom, rgba(99,102,241,.12), transparent 48%); }
+.admin-marco { position:relative; border-radius:1rem; background:var(--panel); }
+.admin-marco::before { content:""; position:absolute; inset:0; border-radius:inherit; padding:1.5px; background:conic-gradient(from var(--giro), rgba(0,245,212,.15), #00f5d4, rgba(0,245,212,.15) 30%, #5eead4 58%, rgba(0,245,212,.15) 80%, #00f5d4); animation:admin-giro 7s linear infinite; -webkit-mask:linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0); -webkit-mask-composite:xor; mask:linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0); mask-composite:exclude; pointer-events:none; }
+@keyframes admin-giro { to { --giro:360deg; } }
+.admin-campo { width:100%; border-radius:.75rem; border:1px solid rgba(0,245,212,.55); background:var(--campo); color:var(--texto); padding:.65rem .8rem; font-size:.875rem; outline:none; }
+.admin-campo::placeholder { color:var(--tenue); }
+.admin-suave { color:var(--suave); }
+.admin-tenue { color:var(--tenue); }
+.meijsac-admin .chip-ok { color:#6ee7b7; }
+.meijsac-admin .chip-mal { color:#fda4af; }
+.meijsac-admin .chip-aviso { color:#fcd34d; }
+.meijsac-admin[data-tema="claro"] .chip-ok { color:#047857; }
+.meijsac-admin[data-tema="claro"] .chip-mal { color:#be123c; }
+.meijsac-admin[data-tema="claro"] .chip-aviso { color:#b45309; }
+.admin-aviso { border:1px solid rgba(251,191,36,.45); background:rgba(251,191,36,.12); color:#fde68a; }
+.meijsac-admin[data-tema="claro"] .admin-aviso { color:#92400e; }
+@media (prefers-reduced-motion: reduce) { .admin-marco::before { animation:none; } }
+`
+
+function Lienzo({ claro, children }: { claro: boolean; children: ReactNode }) {
+  return (
+    <div className="meijsac-admin" data-tema={claro ? "claro" : "oscuro"}>
+      <style>{estilosAdmin}</style>
+      {children}
+    </div>
+  )
+}
 
 export default function AdminModuladorCompleto() {
   const [logado, setLogado] = useState(false)
@@ -87,6 +118,17 @@ export default function AdminModuladorCompleto() {
   const [editId, setEditId] = useState<string | null>(null)
   const [form, setForm] = useState(vacio)
   const [elegido, setElegido] = useState<Record<string, string>>({})
+  const [claro, setClaro] = useState(false)
+
+  useEffect(() => {
+    setClaro(window.localStorage.getItem("meijsac_admin_tema") === "claro")
+  }, [])
+
+  const cambiarTema = () => {
+    const siguiente = !claro
+    setClaro(siguiente)
+    window.localStorage.setItem("meijsac_admin_tema", siguiente ? "claro" : "oscuro")
+  }
 
   const entrar = async () => {
     const res = await fetch("/api/admin/login", {
@@ -224,53 +266,65 @@ export default function AdminModuladorCompleto() {
   const mrr = useMemo(() => clientes.reduce((acc, c) => acc + (planes.find((p) => p.id === c.planId)?.precio || 0), 0), [clientes, planes])
 
   const metricas = [
-    { etiqueta: "MRR estimado", valor: `$${mrr.toFixed(2)}`, tono: "text-cyan-200" },
-    { etiqueta: "Clientes", valor: String(clientes.length), tono: "text-white" },
-    { etiqueta: "Activos", valor: String(clientes.filter((c) => c.estado === "ACTIVO").length), tono: "text-emerald-300" },
-    { etiqueta: "Bloqueados", valor: String(clientes.filter((c) => c.estado === "BLOQUEADO").length), tono: "text-rose-300" },
-    { etiqueta: "Caducan en 7 días", valor: String(clientes.filter((c) => { const dias = diasHasta(c.vence || c.planFin); return dias !== null && dias >= 0 && dias <= 7 }).length), tono: "text-amber-200" },
-    { etiqueta: "Quedan pocos comprobantes", valor: String(clientes.filter((c) => c.limiteComprobantes >= 0 && c.limiteComprobantes - (c.comprobantesEmitidos || 0) <= Math.max(1, Math.ceil(c.limiteComprobantes * 0.1))).length), tono: "text-amber-200" },
+    { etiqueta: "MRR estimado", valor: `$${mrr.toFixed(2)}`, tono: "" },
+    { etiqueta: "Clientes", valor: String(clientes.length), tono: "" },
+    { etiqueta: "Activos", valor: String(clientes.filter((c) => c.estado === "ACTIVO").length), tono: "chip-ok" },
+    { etiqueta: "Bloqueados", valor: String(clientes.filter((c) => c.estado === "BLOQUEADO").length), tono: "chip-mal" },
+    { etiqueta: "Caducan en 7 días", valor: String(clientes.filter((c) => { const dias = diasHasta(c.vence || c.planFin); return dias !== null && dias >= 0 && dias <= 7 }).length), tono: "chip-aviso" },
+    { etiqueta: "Quedan pocos comprobantes", valor: String(clientes.filter((c) => c.limiteComprobantes >= 0 && c.limiteComprobantes - (c.comprobantesEmitidos || 0) <= Math.max(1, Math.ceil(c.limiteComprobantes * 0.1))).length), tono: "chip-aviso" },
   ]
 
+  const tema = (
+    <button type="button" onClick={cambiarTema} className="shrink-0 whitespace-nowrap rounded-full border border-cyan-400/70 px-4 py-2 text-xs">
+      {claro ? "Modo oscuro" : "Modo claro"}
+    </button>
+  )
+
   if (!logado) return (
-    <div className="min-h-screen bg-[#05070d] bg-[radial-gradient(ellipse_at_top,rgba(0,245,212,0.16),transparent_42%),radial-gradient(ellipse_at_bottom,rgba(99,102,241,0.2),transparent_46%)] text-white flex items-center justify-center p-6">
-      <form onSubmit={(e) => { e.preventDefault(); entrar() }} className={`${panel} w-full max-w-md p-8 space-y-5`}>
-        <div>
-          <p className="text-[11px] tracking-[0.35em] text-cyan-300/80">MEIJSAC</p>
-          <h1 className="mt-2 text-3xl font-semibold tracking-tight">Centro de control</h1>
-          <p className="mt-2 text-sm text-white/55">Acceso del administrador del sistema.</p>
-        </div>
-        <input value={user} onChange={(e) => setUser(e.target.value)} placeholder="Usuario" className={campo} />
-        <input type="password" value={pass} onChange={(e) => setPass(e.target.value)} placeholder="Contraseña" className={campo} />
-        <button type="submit" className="w-full rounded-xl bg-cyan-300 py-3 text-sm font-semibold text-black shadow-[0_0_24px_rgba(0,245,212,0.35)]">Entrar</button>
-      </form>
-    </div>
+    <Lienzo claro={claro}>
+      <div className="relative flex min-h-screen items-center justify-center p-6">
+        <div className="absolute right-6 top-6">{tema}</div>
+        <form onSubmit={(e) => { e.preventDefault(); entrar() }} className={`${panel} w-full max-w-md space-y-5 p-8`}>
+          <div>
+            <p className="text-[11px] tracking-[0.35em] text-cyan-500">MEIJSAC</p>
+            <h1 className="mt-2 text-3xl font-semibold tracking-tight">Centro de control</h1>
+            <p className="admin-suave mt-2 text-sm">Acceso del administrador del sistema.</p>
+          </div>
+          <input value={user} onChange={(e) => setUser(e.target.value)} placeholder="Usuario" className={campo} />
+          <input type="password" value={pass} onChange={(e) => setPass(e.target.value)} placeholder="Contraseña" className={campo} />
+          <button type="submit" className="w-full rounded-xl bg-cyan-300 py-3 text-sm font-semibold text-black shadow-[0_0_24px_rgba(0,245,212,0.35)]">Entrar</button>
+        </form>
+      </div>
+    </Lienzo>
   )
 
   return (
-    <div className="min-h-screen bg-[#05070d] bg-[radial-gradient(ellipse_at_top,rgba(0,245,212,0.12),transparent_38%),radial-gradient(ellipse_at_bottom_right,rgba(99,102,241,0.16),transparent_42%)] text-white">
+    <Lienzo claro={claro}>
       <div className="mx-auto max-w-7xl space-y-6 px-4 py-6 md:px-8">
         <header className="flex flex-wrap items-end justify-between gap-4">
           <div>
-            <p className="text-[11px] tracking-[0.35em] text-cyan-300/80">MEIJSAC</p>
+            <p className="text-[11px] tracking-[0.35em] text-cyan-500">MEIJSAC</p>
             <h1 className="text-3xl font-semibold tracking-tight">Centro de control</h1>
           </div>
-          <button onClick={salir} className="rounded-full border border-white/15 px-4 py-2 text-xs text-white/70 hover:border-cyan-300/40 hover:text-white">Salir</button>
+          <div className="flex gap-2">
+            {tema}
+            <button onClick={salir} className="admin-suave rounded-full border border-cyan-400/50 px-4 py-2 text-xs">Salir</button>
+          </div>
         </header>
-        <nav className="flex gap-2 overflow-x-auto rounded-2xl border border-white/10 bg-black/30 p-1.5">
+        <nav className="admin-marco flex flex-wrap gap-2 p-1.5">
           {(["dash", "planes", "clientes", "crear"] as const).map((t) => (
-            <button key={t} onClick={() => { setTab(t); if (t === "crear" && !editId) setForm(vacio) }} className={`whitespace-nowrap rounded-xl px-4 py-2 text-xs font-medium transition ${tab === t ? "bg-cyan-300 text-black shadow-[0_0_18px_rgba(0,245,212,0.35)]" : "text-white/60 hover:text-white"}`}>
+            <button key={t} onClick={() => { setTab(t); if (t === "crear" && !editId) setForm(vacio) }} className={`whitespace-nowrap rounded-xl px-4 py-2 text-xs font-medium transition ${tab === t ? "bg-cyan-300 text-black shadow-[0_0_18px_rgba(0,245,212,0.35)]" : "admin-suave"}`}>
               {t === "dash" ? "Dashboard" : t === "planes" ? "Planes" : t === "clientes" ? "Clientes" : editId ? "Editar plan" : "Crear plan"}
             </button>
           ))}
         </nav>
-        {aviso && <div className="rounded-2xl border border-amber-300/30 bg-amber-300/10 px-4 py-3 text-sm text-amber-100">{aviso}</div>}
+        {aviso && <div className="admin-aviso rounded-2xl px-4 py-3 text-sm">{aviso}</div>}
 
         {tab === "dash" && (
           <div className="grid grid-cols-2 gap-3 lg:grid-cols-3">
             {metricas.map((item) => (
               <div key={item.etiqueta} className={`${panel} p-5`}>
-                <div className="text-[11px] uppercase tracking-[0.18em] text-white/45">{item.etiqueta}</div>
+                <div className="admin-tenue text-[11px] uppercase tracking-[0.18em]">{item.etiqueta}</div>
                 <div className={`mt-3 text-3xl font-semibold tracking-tight ${item.tono}`}>{item.valor}</div>
               </div>
             ))}
@@ -284,10 +338,10 @@ export default function AdminModuladorCompleto() {
                 <div className="flex flex-wrap items-center gap-2">
                   <h2 className="text-lg font-medium">{p.nombre}</h2>
                   {p.badge && <span className="rounded-full bg-cyan-300 px-2 py-0.5 text-[10px] font-semibold text-black">{p.badge}</span>}
-                  <span className={`rounded-full px-2 py-0.5 text-[10px] ${p.activo ? "bg-emerald-400/15 text-emerald-200" : "bg-white/10 text-white/50"}`}>{p.activo ? "Activo" : "Inactivo"}</span>
+                  <span className={`rounded-full px-2 py-0.5 text-[10px] ${p.activo ? "chip-ok bg-emerald-400/15" : "admin-tenue bg-black/5"}`}>{p.activo ? "Activo" : "Inactivo"}</span>
                 </div>
-                <p className="mt-1 text-sm text-white/55">{p.descripcion}</p>
-                <div className="mt-3 flex flex-wrap gap-2 text-[11px] text-cyan-100/70">
+                <p className="admin-suave mt-1 text-sm">{p.descripcion}</p>
+                <div className="admin-suave mt-3 flex flex-wrap gap-2 text-[11px]">
                   <span className="rounded-full border border-white/10 px-2 py-1">{p.documentosAnio} documentos / año</span>
                   <span className="rounded-full border border-white/10 px-2 py-1">${p.precio} mensual</span>
                   <span className="rounded-full border border-white/10 px-2 py-1">${p.precioAnual} anual</span>
@@ -299,7 +353,7 @@ export default function AdminModuladorCompleto() {
               </div>
               <div className="flex shrink-0 gap-2">
                 <button onClick={() => editar(p)} className="rounded-xl border border-white/15 px-3 py-2 text-xs hover:border-cyan-300/40">Editar</button>
-                <button onClick={() => eliminar(p)} className="rounded-xl border border-rose-400/30 bg-rose-500/10 px-3 py-2 text-xs text-rose-200">Eliminar</button>
+                <button onClick={() => eliminar(p)} className="chip-mal rounded-xl border border-rose-400/30 bg-rose-500/10 px-3 py-2 text-xs">Eliminar</button>
                 <button onClick={() => alternar(p)} className={`rounded-xl px-3 py-2 text-xs font-medium ${p.activo ? "bg-cyan-300 text-black" : "border border-white/15"}`}>{p.activo ? "Activo" : "Inactivo"}</button>
               </div>
             </article>
@@ -312,16 +366,16 @@ export default function AdminModuladorCompleto() {
             <input value={form.nombre} onChange={(e) => setForm({ ...form, nombre: e.target.value })} placeholder="Nombre" className={campo} />
             <input value={form.descripcion} onChange={(e) => setForm({ ...form, descripcion: e.target.value })} placeholder="Descripción" className={campo} />
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-              <label className="space-y-1 text-xs text-white/55">Precio mensual<input type="number" value={form.precio} onChange={(e) => setForm({ ...form, precio: Number(e.target.value) })} className={campo} /></label>
-              <label className="space-y-1 text-xs text-white/55">Precio anual<input type="number" value={form.precioAnual} onChange={(e) => setForm({ ...form, precioAnual: Number(e.target.value) })} className={campo} /></label>
-              <label className="space-y-1 text-xs text-white/55">Trial días<input type="number" value={form.trialDias} onChange={(e) => setForm({ ...form, trialDias: Number(e.target.value) })} className={campo} /></label>
-              <label className="space-y-1 text-xs text-white/55">Duración días<input type="number" value={form.duracionDias} onChange={(e) => setForm({ ...form, duracionDias: Number(e.target.value) })} className={campo} /></label>
-              <label className="space-y-1 text-xs text-white/55">Facturas<input type="number" value={form.limiteComprobantes} onChange={(e) => setForm({ ...form, limiteComprobantes: Number(e.target.value) })} className={campo} /></label>
-              <label className="space-y-1 text-xs text-white/55">Usuarios<input type="number" value={form.limiteUsuarios} onChange={(e) => setForm({ ...form, limiteUsuarios: Number(e.target.value) })} className={campo} /></label>
-              <label className="space-y-1 text-xs text-white/55">Documentos / año<input type="number" value={form.documentosAnio} onChange={(e) => setForm({ ...form, documentosAnio: Number(e.target.value) })} className={campo} /></label>
-              <label className="space-y-1 text-xs text-white/55">Tipo<select value={form.badge} onChange={(e) => setForm({ ...form, badge: e.target.value })} className={campo}><option value="">Normal</option><option value="Popular">Popular</option><option value="Más popular">Más popular</option><option value="Gratuito">Gratuito</option></select></label>
+              <label className="admin-suave space-y-1 text-xs">Precio mensual<input type="number" value={form.precio} onChange={(e) => setForm({ ...form, precio: Number(e.target.value) })} className={campo} /></label>
+              <label className="admin-suave space-y-1 text-xs">Precio anual<input type="number" value={form.precioAnual} onChange={(e) => setForm({ ...form, precioAnual: Number(e.target.value) })} className={campo} /></label>
+              <label className="admin-suave space-y-1 text-xs">Trial días<input type="number" value={form.trialDias} onChange={(e) => setForm({ ...form, trialDias: Number(e.target.value) })} className={campo} /></label>
+              <label className="admin-suave space-y-1 text-xs">Duración días<input type="number" value={form.duracionDias} onChange={(e) => setForm({ ...form, duracionDias: Number(e.target.value) })} className={campo} /></label>
+              <label className="admin-suave space-y-1 text-xs">Facturas<input type="number" value={form.limiteComprobantes} onChange={(e) => setForm({ ...form, limiteComprobantes: Number(e.target.value) })} className={campo} /></label>
+              <label className="admin-suave space-y-1 text-xs">Usuarios<input type="number" value={form.limiteUsuarios} onChange={(e) => setForm({ ...form, limiteUsuarios: Number(e.target.value) })} className={campo} /></label>
+              <label className="admin-suave space-y-1 text-xs">Documentos / año<input type="number" value={form.documentosAnio} onChange={(e) => setForm({ ...form, documentosAnio: Number(e.target.value) })} className={campo} /></label>
+              <label className="admin-suave space-y-1 text-xs">Tipo<select value={form.badge} onChange={(e) => setForm({ ...form, badge: e.target.value })} className={campo}><option value="">Normal</option><option value="Popular">Popular</option><option value="Más popular">Más popular</option><option value="Gratuito">Gratuito</option></select></label>
             </div>
-            <label className="flex items-center gap-2 text-sm text-white/75"><input type="checkbox" checked={form.activo} onChange={(e) => setForm({ ...form, activo: e.target.checked })} className="h-4 w-4 accent-cyan-300" /> Activo</label>
+            <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={form.activo} onChange={(e) => setForm({ ...form, activo: e.target.checked })} className="h-4 w-4 accent-cyan-300" /> Activo</label>
             <ModulosPlan elegidos={form.modulos} onChange={(modulos) => setForm({ ...form, modulos })} />
             <button onClick={guardarPlan} className="w-full rounded-xl bg-cyan-300 py-3 text-sm font-semibold text-black shadow-[0_0_24px_rgba(0,245,212,0.28)]">{editId ? "Guardar cambios" : "Crear plan"}</button>
           </div>
@@ -330,9 +384,10 @@ export default function AdminModuladorCompleto() {
         {tab === "clientes" && (
           <div className="space-y-3">
             <input value={filtro} onChange={(e) => setFiltro(e.target.value)} placeholder="Buscar por RUC o razón" className={campo} />
-            <div className={`${panel} overflow-x-auto`}>
+            <div className={panel}>
+              <div className="overflow-x-auto">
               <table className="w-full min-w-[920px] text-left text-sm">
-                <thead className="text-[11px] uppercase tracking-[0.16em] text-white/40">
+                <thead className="admin-tenue text-[11px] uppercase tracking-[0.16em]">
                   <tr>
                     <th className="px-4 py-3 font-medium">Cliente</th>
                     <th className="px-4 py-3 font-medium">Plan</th>
@@ -343,34 +398,35 @@ export default function AdminModuladorCompleto() {
                   </tr>
                 </thead>
                 <tbody>{filtrados.map((c) => (
-                  <tr key={c.id} className="border-t border-white/8 align-top">
-                    <td className="px-4 py-4"><div className="font-medium">{c.razonSocial}</div><div className="text-xs text-white/45">{c.ruc}</div></td>
-                    <td className="px-4 py-4 text-white/75">{c.planNombre || "Sin plan"}</td>
-                    <td className="px-4 py-4 text-white/75">{c.planEstado} / {c.estado}</td>
-                    <td className="px-4 py-4"><div className="font-medium text-cyan-100">{textoQuedan(c.comprobantesEmitidos || 0, c.limiteComprobantes)}</div><div className="text-xs text-white/45">{c.comprobantesEmitidos || 0} autorizados en producción</div></td>
-                    <td className="px-4 py-4 text-white/75">{textoCaducidad(c.vence || c.planFin)}</td>
+                  <tr key={c.id} className="border-t border-cyan-400/20 align-top">
+                    <td className="px-4 py-4"><div className="font-medium">{c.razonSocial}</div><div className="admin-tenue text-xs">{c.ruc}</div></td>
+                    <td className="admin-suave px-4 py-4">{c.planNombre || "Sin plan"}</td>
+                    <td className="admin-suave px-4 py-4">{c.planEstado} / {c.estado}</td>
+                    <td className="px-4 py-4"><div className="font-medium">{textoQuedan(c.comprobantesEmitidos || 0, c.limiteComprobantes)}</div><div className="admin-tenue text-xs">{c.comprobantesEmitidos || 0} autorizados en producción</div></td>
+                    <td className="admin-suave px-4 py-4">{textoCaducidad(c.vence || c.planFin)}</td>
                     <td className="px-4 py-4 space-y-2">
                       <div className="flex flex-wrap gap-2">
-                        <select value={elegido[c.id] || c.planId || ""} onChange={(e) => setElegido({ ...elegido, [c.id]: e.target.value })} className="rounded-lg border border-white/15 bg-[#0b1018] px-2 py-1.5 text-xs">
+                        <select value={elegido[c.id] || c.planId || ""} onChange={(e) => setElegido({ ...elegido, [c.id]: e.target.value })} className="admin-campo w-auto px-2 py-1.5 text-xs">
                           <option value="">Elegir plan</option>
                           {activos.map((p) => <option key={p.id} value={p.id}>{p.nombre}</option>)}
                         </select>
                         <button onClick={() => accionCliente(c.id, "asignar", elegido[c.id] || c.planId || "")} className="rounded-lg bg-cyan-300 px-2 py-1.5 text-xs font-semibold text-black">Cambiar plan / asignar plan</button>
                       </div>
                       <div className="flex flex-wrap gap-2">
-                        <button onClick={() => accionCliente(c.id, "suspender")} className="rounded-lg border border-rose-400/30 bg-rose-500/10 px-2 py-1.5 text-xs text-rose-200">Suspender</button>
-                        <button onClick={() => accionCliente(c.id, "reactivar")} className="rounded-lg border border-white/15 px-2 py-1.5 text-xs">Reactivar</button>
-                        <button onClick={() => accionCliente(c.id, "inicial")} className="rounded-lg border border-emerald-400/30 bg-emerald-400/10 px-2 py-1.5 text-xs text-emerald-200">Reactivar con plan inicial</button>
+                        <button onClick={() => accionCliente(c.id, "suspender")} className="chip-mal rounded-lg border border-rose-400/30 bg-rose-500/10 px-2 py-1.5 text-xs">Suspender</button>
+                        <button onClick={() => accionCliente(c.id, "reactivar")} className="rounded-lg border border-cyan-400/40 px-2 py-1.5 text-xs">Reactivar</button>
+                        <button onClick={() => accionCliente(c.id, "inicial")} className="chip-ok rounded-lg border border-emerald-400/30 bg-emerald-400/10 px-2 py-1.5 text-xs">Reactivar con plan inicial</button>
                       </div>
                     </td>
                   </tr>
                 ))}</tbody>
               </table>
+              </div>
             </div>
           </div>
         )}
       </div>
-    </div>
+    </Lienzo>
   )
 }
 
@@ -379,12 +435,12 @@ function ModulosPlan({ elegidos, onChange }: { elegidos: string[]; onChange: (mo
     onChange(elegidos.includes(nombre) ? elegidos.filter((item) => item !== nombre) : [...elegidos, nombre])
   }
   const lista = (titulo: string, nombres: readonly string[]) => (
-    <section className="overflow-hidden rounded-2xl border border-white/10 bg-black/30">
-      <h3 className="px-4 pt-4 text-[11px] tracking-[0.22em] text-cyan-300/80">{titulo}</h3>
-      <div className="mt-2 divide-y divide-white/8">
+    <section className="admin-marco overflow-hidden">
+      <h3 className="px-4 pt-4 text-[11px] tracking-[0.22em] text-cyan-500">{titulo}</h3>
+      <div className="mt-2 divide-y divide-cyan-400/15">
         {nombres.map((nombre) => (
-          <label key={nombre} className="flex cursor-pointer items-center justify-between px-4 py-2.5 hover:bg-white/[0.03]">
-            <span className="text-sm text-white/85">{nombre}</span>
+          <label key={nombre} className="flex cursor-pointer items-center justify-between px-4 py-2.5">
+            <span className="text-sm">{nombre}</span>
             <input type="checkbox" checked={elegidos.includes(nombre)} onChange={() => marcar(nombre)} className="h-4 w-4 accent-cyan-300" />
           </label>
         ))}
@@ -393,7 +449,7 @@ function ModulosPlan({ elegidos, onChange }: { elegidos: string[]; onChange: (mo
   )
   return (
     <div className="space-y-3">
-      <p className="text-xs tracking-[0.18em] text-white/45">CENTRO DE CONTROL MODULAR DE ESTE PLAN</p>
+      <p className="admin-tenue text-xs tracking-[0.18em]">CENTRO DE CONTROL MODULAR DE ESTE PLAN</p>
       {lista("SECCIONES", MODULOS_MEIJSAC)}
       {lista("CARPETAS", CARPETAS_PLAN)}
     </div>
