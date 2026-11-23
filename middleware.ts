@@ -24,6 +24,21 @@ function bytes(texto: string) {
   return Uint8Array.from(bin, (c) => c.charCodeAt(0))
 }
 
+async function adminFirmado(token: string) {
+  const partes = token.split(".")
+  const pass = process.env.ADMIN_PASSWORD || ""
+  if (partes.length !== 2 || !pass) return false
+  try {
+    const key = await crypto.subtle.importKey("raw", new TextEncoder().encode(pass), { name: "HMAC", hash: "SHA-256" }, false, ["verify"])
+    const ok = await crypto.subtle.verify("HMAC", key, bytes(partes[1]), new TextEncoder().encode(partes[0]))
+    if (!ok) return false
+    const dato = JSON.parse(new TextDecoder().decode(bytes(partes[0]))) as { exp?: number }
+    return Boolean(dato.exp && dato.exp * 1000 > Date.now())
+  } catch {
+    return false
+  }
+}
+
 async function sesionFirmada(token: string) {
   const partes = token.split(".")
   if (partes.length !== 3) return false
@@ -50,7 +65,8 @@ export async function middleware(req: NextRequest) {
   if (req.nextUrl.pathname.startsWith("/api")) {
     const publica = ["/api/auth/login", "/api/auth/captcha", "/api/auth/recuperar", "/api/auth/restablecer", "/api/admin/login", "/api/empresa/registro", "/api/sri/cola", "/api/sri/reintentar", "/api/sri-status", "/api/whatsapp/webhook", "/api/mesa"]
     const libre = publica.some((ruta) => req.nextUrl.pathname === ruta || req.nextUrl.pathname.startsWith(`${ruta}/`))
-    if (!libre && !(await sesionFirmada(tokenSesion(req)))) {
+    const admin = req.nextUrl.pathname.startsWith("/api/admin/") && await adminFirmado(req.cookies.get("meijsac_admin")?.value || "")
+    if (!libre && !admin && !(await sesionFirmada(tokenSesion(req)))) {
       return proteger(NextResponse.json({ error: "No hay sesión" }, { status: 401 }))
     }
     const ip = (req.headers.get("x-forwarded-for") || "local").split(",")[0].trim()

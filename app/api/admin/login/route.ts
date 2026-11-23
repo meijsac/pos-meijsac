@@ -1,5 +1,24 @@
-import { timingSafeEqual } from "crypto";
+import { createHmac, timingSafeEqual } from "crypto";
 import { NextResponse } from "next/server";
+
+const HORAS = 12;
+
+function sesionAdmin(pass: string) {
+  const cuerpo = Buffer.from(JSON.stringify({ exp: Math.floor(Date.now() / 1000) + HORAS * 3600 })).toString("base64url");
+  const firma = createHmac("sha256", pass).update(cuerpo).digest("base64url");
+  return `${cuerpo}.${firma}`;
+}
+
+function conCookie(res: NextResponse, token: string) {
+  res.cookies.set("meijsac_admin", token, {
+    httpOnly: true,
+    sameSite: "lax",
+    secure: process.env.NODE_ENV === "production",
+    path: "/",
+    maxAge: HORAS * 3600,
+  });
+  return res;
+}
 
 function sameSecret(input: string, expected: string) {
   const a = Buffer.from(input);
@@ -27,5 +46,11 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Acceso denegado" }, { status: 401 });
   }
 
-  return NextResponse.json({ ok: true });
+  return conCookie(NextResponse.json({ ok: true }), sesionAdmin(expectedPass));
+}
+
+export async function DELETE() {
+  const res = NextResponse.json({ ok: true });
+  res.cookies.set("meijsac_admin", "", { httpOnly: true, sameSite: "lax", secure: process.env.NODE_ENV === "production", path: "/", maxAge: 0 });
+  return res;
 }

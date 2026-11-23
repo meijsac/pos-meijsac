@@ -102,6 +102,11 @@ export default function AdminModuladorCompleto() {
     setLogado(true)
   }
 
+  const salir = async () => {
+    await fetch("/api/admin/login", { method: "DELETE" }).catch(() => null)
+    setLogado(false)
+  }
+
   const cargar = async () => {
     const [rp, re] = await Promise.all([fetch("/api/admin/planes"), fetch("/api/admin/empresas")])
     const planesData = await rp.json().catch(() => [])
@@ -124,6 +129,10 @@ export default function AdminModuladorCompleto() {
       })))
     }
     if (Array.isArray(clientesData)) setClientes(clientesData)
+    if (!Array.isArray(planesData) || !Array.isArray(clientesData)) {
+      const fallo = (!Array.isArray(planesData) && planesData?.error) || (!Array.isArray(clientesData) && clientesData?.error) || "No se pudieron cargar los datos"
+      setAviso(String(fallo))
+    }
   }
 
   useEffect(() => {
@@ -246,7 +255,7 @@ export default function AdminModuladorCompleto() {
             <p className="text-[11px] tracking-[0.35em] text-cyan-300/80">MEIJSAC</p>
             <h1 className="text-3xl font-semibold tracking-tight">Centro de control</h1>
           </div>
-          <button onClick={() => setLogado(false)} className="rounded-full border border-white/15 px-4 py-2 text-xs text-white/70 hover:border-cyan-300/40 hover:text-white">Salir</button>
+          <button onClick={salir} className="rounded-full border border-white/15 px-4 py-2 text-xs text-white/70 hover:border-cyan-300/40 hover:text-white">Salir</button>
         </header>
         <nav className="flex gap-2 overflow-x-auto rounded-2xl border border-white/10 bg-black/30 p-1.5">
           {(["dash", "planes", "clientes", "crear"] as const).map((t) => (

@@ -4,17 +4,15 @@ import { resumenEmpresa } from "@/lib/empresa-plan";
 
 export async function GET() {
   try {
-    const [empresas, conteos] = await Promise.all([
-      prisma.empresa.findMany({
-        include: { plan: true },
-        orderBy: { createdAt: "desc" },
-      }),
-      prisma.facturaEmitida.groupBy({
-        by: ["empresaId"],
-        where: { ambiente: "2", fechaAutorizacion: { not: null } },
-        _count: { _all: true },
-      }),
-    ]);
+    const empresas = await prisma.empresa.findMany({
+      include: { plan: true },
+      orderBy: { createdAt: "desc" },
+    });
+    const conteos = await prisma.facturaEmitida.groupBy({
+      by: ["empresaId"],
+      where: { ambiente: "2", fechaAutorizacion: { not: null } },
+      _count: { _all: true },
+    }).catch(() => []);
     const guardados = new Map(conteos.map((fila) => [fila.empresaId, fila._count._all]))
     return NextResponse.json(empresas.map((empresa) => ({
       ...resumenEmpresa(empresa),
