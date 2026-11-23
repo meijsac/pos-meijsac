@@ -55,7 +55,7 @@ export default function HomePage() {
               <Link href="/login" className="px-8 py-3.5 bg-gradient-to-r from-cyan-500 to-teal-400 hover:from-cyan-400 hover:to-teal-300 text-gray-950 font-bold rounded-xl shadow-[0_4px_20px_rgba(6,182,212,0.4)] hover:shadow-[0_4px_25px_rgba(6,182,212,0.6)] hover:-translate-y-0.5 transition-all duration-300">
                 Empezar Ahora →
               </Link>
-              <a href="https://wa.me/593999999999" target="_blank" rel="noopener noreferrer" className="px-6 py-3.5 bg-[#25D366] hover:bg-[#1ebe5d] text-white font-semibold rounded-xl transition-all duration-300">
+              <a href="https://wa.me/593984376413" target="_blank" rel="noopener noreferrer" className="px-6 py-3.5 bg-[#25D366] hover:bg-[#1ebe5d] text-white font-semibold rounded-xl transition-all duration-300">
                 Escríbenos por WhatsApp
               </a>
             </div>
