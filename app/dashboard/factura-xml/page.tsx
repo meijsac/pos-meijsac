@@ -1215,7 +1215,32 @@ const total = subtotalSin + iva15 + ivaDiferenciado + valorICE + valorIRBPNR + p
 
   return (
    
-  <div className={`min-h-screen p-4 ${isDark ? "bg-[#080a0f] text-white" : "bg-[#f1f5f9] text-slate-900"}`}>
+  <div data-tema={isDark ? "oscuro" : "claro"} className={`facturador-tema min-h-screen p-4 ${isDark ? "bg-[#080a0f] text-white" : "bg-[#f1f5f9] text-slate-900"}`}>
+    <style>{`
+      .facturador-tema[data-tema="oscuro"] :is(.bg-\\[\\#1e293b\\], .bg-\\[\\#0f172a\\], .bg-black) {
+        border-width: 2px;
+        border-style: solid;
+        border-color: rgba(0, 245, 212, 0.72);
+      }
+      .facturador-tema[data-tema="claro"] :is(.bg-\\[\\#1e293b\\], .bg-\\[\\#0f172a\\]) {
+        background: #ffffff;
+        color: #0f172a;
+        border-width: 2px;
+        border-style: solid;
+        border-color: rgba(0, 168, 160, 0.9);
+      }
+      .facturador-tema[data-tema="claro"] :is(.bg-black, .bg-black\\/50, .bg-black\\/60) {
+        background: #f8fafc;
+        color: #0f172a;
+        border-width: 2px;
+        border-style: solid;
+        border-color: rgba(0, 168, 160, 0.55);
+      }
+      .facturador-tema[data-tema="claro"] .text-white:not(.bg-red-500):not(.bg-teal-400):not(.bg-teal-500):not(.bg-emerald-500) { color: #0f172a; }
+      .facturador-tema[data-tema="claro"] :is(.text-white\\/80, .text-white\\/70, .text-white\\/50, .text-white\\/45, .text-white\\/40, .text-white\\/30, .text-white\\/20, .text-slate-300, .text-zinc-400) { color: #334155; }
+      .facturador-tema[data-tema="claro"] input::placeholder,
+      .facturador-tema[data-tema="claro"] textarea::placeholder { color: #64748b; }
+    `}</style>
     {/* PEGALO AQUÍ ARRIBA DE TODO */}
     <div className="max-w-7xl mx-auto flex flex-wrap gap-2 mb-4 print:hidden">
       <a href="/dashboard/restaurante" onClick={(e) => { if (!verPlan("/dashboard/restaurante")) avisarPlan(e) }} className="bg-[#1e293b] border border-white/10 px-4 py-2 rounded-full text-[11px] font-bold">← Volver a Restaurante</a>
