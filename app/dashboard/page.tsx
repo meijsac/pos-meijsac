@@ -5,7 +5,7 @@ import { useEffect, useState } from "react"
 import { cargarEmpresaSesion, cerrarSesionEnEsteEquipo } from "@/lib/sesion-cliente"
 import { useAmbienteVivo } from "@/components/SelloAmbiente"
 import { permisosLocales, rutaPermitida, type PermisosPos } from "@/lib/permisos-pos"
-import { seccionPermitida } from "@/lib/plan-acceso"
+import { AVISO_PLAN, seccionPermitida } from "@/lib/plan-acceso"
 
 const CORPORATE = "#23AAB3"
 
@@ -425,13 +425,14 @@ export default function DashboardMeijsac(){
         </div>
 
         <div className={`grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-3 max-w-[1600px] mx-auto ${estaBloqueado ? 'pointer-events-none opacity-40 grayscale' : ''}`}>
-          {modules.filter((m) => rutaPermitida(m.href, acceso) && seccionPermitida(accesoPlan?.modulos, m.title)).map((m,i)=>{
+          {modules.filter((m) => rutaPermitida(m.href, acceso)).map((m,i)=>{
             const isSide = m.title === "CONFIGURACIÓN" || m.title === "COMPROBANTES ELECTRÓNICOS"
             // Si es SOFT BLOCK, POS y COMPROBANTES no dejan entrar
             const bloqueadoPorSoft = estaPorVencer && (m.title.includes("COMPROBANTES") || m.title.includes("POS") || m.title.includes("RESTAURANTE"))
-            const hrefFinal = bloqueadoPorSoft ? "#" : m.href
+            const bloqueadoPorPlan = Boolean(accesoPlan) && !seccionPermitida(accesoPlan?.modulos, m.title)
+            const hrefFinal = bloqueadoPorSoft || bloqueadoPorPlan ? "#" : m.href
             return (
-              <Link key={m.title} href={hrefFinal} onClick={(e)=>{ if(bloqueadoPorSoft){ e.preventDefault(); alert("SOLO LECTURA - Tu plan venció, no puedes emitir.") } }} className={`${m.size} group`}>
+              <Link key={m.title} href={hrefFinal} onClick={(e)=>{ if(bloqueadoPorPlan){ e.preventDefault(); alert(AVISO_PLAN); return } if(bloqueadoPorSoft){ e.preventDefault(); alert("SOLO LECTURA - Tu plan venció, no puedes emitir.") } }} className={`${m.size} group ${bloqueadoPorPlan ? "opacity-50" : ""}`}>
                 <div className="card relative h-[118px] rounded-2xl p-[1px] overflow-hidden" style={{ opacity: mounted?1:0, transform: mounted? 'translateY(0)':'translateY(12px)', transitionDelay: `${i*15}ms` }}>
                   <div className="absolute inset-0 rounded-2xl" style={{ background: `linear-gradient(135deg, ${CORPORATE}, #0f4a4f)` }} />
                   <div className={`relative h-full w-full rounded-[15px] p-3.5 flex flex-col justify-between text-white`} style={{background: `radial-gradient(120% 120% at 0% 0%, ${CORPORATE} 0%, #0f4a4f 100%)`}}>

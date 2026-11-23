@@ -3,7 +3,7 @@ import { useState, useEffect, useRef } from "react";
 import Link from "next/link";
 import { feriadosIvaReducido } from '@/lib/iva-feriados.config';
 import { cargarEmpresaSesion } from "@/lib/sesion-cliente";
-import { carpetaPermitida } from "@/lib/plan-acceso";
+import { AVISO_PLAN, carpetaPermitida } from "@/lib/plan-acceso";
 import { useModulosDelPlan } from "@/lib/use-modulos-plan";
 import { publicarAmbiente } from "@/components/SelloAmbiente";
 import { errorLogo } from "@/lib/logo-empresa";
@@ -199,15 +199,11 @@ const PESTANAS = [
 export default function ConfiguracionAvanzadaSRI() {
     const [tab, setTab] = useState("IDENTIDAD");
     const modulosPlan = useModulosDelPlan();
-    const pestanas = PESTANAS.filter(([, carpeta]) => carpetaPermitida(modulosPlan, carpeta));
+    const tabAbierta = !PESTANAS.some(([id, carpeta]) => id === tab && !carpetaPermitida(modulosPlan, carpeta));
     useEffect(() => {
         const pedido = new URLSearchParams(window.location.search).get("tab");
         if (pedido === "DOCUMENTOS" || pedido === "SECUENCIALES") setTab(pedido);
     }, []);
-    useEffect(() => {
-        if (modulosPlan === undefined) return;
-        if (!pestanas.some(([id]) => id === tab) && pestanas[0]) setTab(pestanas[0][0]);
-    }, [modulosPlan, tab, pestanas]);
     useEffect(() => {
         if (tab !== "AMBIENTE SRI" && tab !== "FIRMA") return;
         let vivo = true;
@@ -626,7 +622,7 @@ base.sucursales = datosReales.sucursales || base.sucursales || [];
         <div className="min-h-screen bg-[#060608] text-white p-4">
             <div className="flex justify-between items-center mb-4 bg-[#0c1e24] border border-[#294650] rounded-[20px] px-5 py-3">
     <div className="flex items-center gap-4">
-      {carpetaPermitida(modulosPlan, "Ambiente SRI") && <GearFuturista size={52} active={tab === "AMBIENTE SRI"} onClick={() => setTab("AMBIENTE SRI")} />}
+      <GearFuturista size={52} active={tab === "AMBIENTE SRI"} onClick={() => { if (!carpetaPermitida(modulosPlan, "Ambiente SRI")) { alert(AVISO_PLAN); return } setTab("AMBIENTE SRI") }} />
       <h1 className="text-white font-black text-[14px] tracking-widest">
         MEIJSAC POS - CENTRO DE CONTROL MODULAR SRI
       </h1>
@@ -634,24 +630,25 @@ base.sucursales = datosReales.sucursales || base.sucursales || [];
     <button onClick={() => location.href = '/dashboard'} className="bg-white/10 px-4 py-2 rounded-xl text-xs">← Dashboard</button>
 </div>
 
-            {carpetaPermitida(modulosPlan, "Catálogo SRI") && <div className="mb-4 max-w-sm">
-                <Link href="/dashboard/configuracion/catalogo-sri" className="bg-[#11131a] border border-white/10 rounded-2xl px-4 py-4 flex items-center gap-3">
+            <div className="mb-4 max-w-sm">
+                <Link href="/dashboard/configuracion/catalogo-sri" onClick={(e) => { if (!carpetaPermitida(modulosPlan, "Catálogo SRI")) { e.preventDefault(); alert(AVISO_PLAN) } }} className="bg-[#11131a] border border-white/10 rounded-2xl px-4 py-4 flex items-center gap-3">
                     <span className="text-2xl" aria-hidden="true">📁</span>
                     <span>
                         <span className="block text-[11px] font-black tracking-widest">CATÁLOGO SRI</span>
                         <span className="block text-[10px] text-white/50">IVA y retenciones</span>
                     </span>
                 </Link>
-            </div>}
+            </div>
 
             <div className="flex gap-2 mb-4 overflow-x-auto pb-2">
-                {pestanas.map(([t]) => (
-                    <button key={t} onClick={() => setTab(t)} className={`px-4 py-2 rounded-xl text-[10px] font-black whitespace-nowrap ${tab === t ? 'bg-[#00f5d4] text-black' : 'bg-[#11131a] border border-white/10'}`}>{t}</button>
+                {PESTANAS.map(([t, carpeta]) => (
+                    <button key={t} onClick={() => { if (!carpetaPermitida(modulosPlan, carpeta)) { alert(AVISO_PLAN); return } setTab(t) }} className={`px-4 py-2 rounded-xl text-[10px] font-black whitespace-nowrap ${tab === t ? 'bg-[#00f5d4] text-black' : 'bg-[#11131a] border border-white/10'} ${carpetaPermitida(modulosPlan, carpeta) ? "" : "opacity-50"}`}>{t}</button>
                 ))}
             </div>
 
             <div className="bg-[#11131a] rounded-[20px] p-6 border border-white/5">
-                {tab === "IDENTIDAD" && (
+                {!tabAbierta && <p className="text-sm">{AVISO_PLAN}</p>}
+                {tabAbierta && tab === "IDENTIDAD" && (
                     <div className="space-y-4">
                       {/* === SUCURSALES COMPLETAS SRI - SIN PROMPT === */}
 <div className="md:col-span-3 border-t border-white/10 pt-4">
@@ -736,7 +733,7 @@ base.sucursales = datosReales.sucursales || base.sucursales || [];
                     </div>
                 )}
 
-                {tab === "FIRMA" && (
+                {tabAbierta && tab === "FIRMA" && (
                   <div className="space-y-4">
                     <p className="text-[#ffbe0a] font-bold text-[11px]">2. MÓDULO FIRMA ELECTRÓNICA AVANZADO - CARGA VISUAL.P12</p>
                     <div><label className="text-[9px] text-white/40">Contraseña de ingreso</label><input type="password" value={claveIngreso} onChange={(e)=> setClaveIngreso(e.target.value)} className="w-full bg-black border border-white/10 rounded p-2 text-[11px] text-white" /><p className="text-[8px] text-white/40 mt-1">Confírmala para subir o cambiar la firma. No se guarda en el navegador.</p></div>
@@ -779,7 +776,7 @@ base.sucursales = datosReales.sucursales || base.sucursales || [];
                   </div>
                 )}
                 
-                {tab === "SECUENCIALES" && (
+                {tabAbierta && tab === "SECUENCIALES" && (
                   <div className="space-y-4">
                     <p className="text-[#00f5d4] font-bold text-[11px]">3. MATRIZ DE SECUENCIALES Y PUNTOS DE EMISIÓN - NIVEL EXPERTO SRI</p>
 
@@ -839,7 +836,7 @@ base.sucursales = datosReales.sucursales || base.sucursales || [];
                   </div>
                 )}
 
-                {tab === "IMPUESTOS" && (
+                {tabAbierta && tab === "IMPUESTOS" && (
                   <div className="space-y-5">
                     <p className="text-[#00f5d4] font-bold text-[11px]">4. AUTOMATIZACIÓN IMPUESTOS Y MONEDA</p>
 
@@ -882,13 +879,13 @@ base.sucursales = datosReales.sucursales || base.sucursales || [];
                   </div>
                 )}
                 
-                {tab === "INVENTARIO" && <MetodoInventario />}
-                {tab === "SEGURIDAD" && <PanelSeguridad />}
-                {tab === "WHATSAPP" && <PanelWhatsapp />}
-                {tab === "RESPALDO" && <PanelRespaldo />}
-                {tab === "DOCUMENTOS" && <DocumentosLegales />}
+                {tabAbierta && tab === "INVENTARIO" && <MetodoInventario />}
+                {tabAbierta && tab === "SEGURIDAD" && <PanelSeguridad />}
+                {tabAbierta && tab === "WHATSAPP" && <PanelWhatsapp />}
+                {tabAbierta && tab === "RESPALDO" && <PanelRespaldo />}
+                {tabAbierta && tab === "DOCUMENTOS" && <DocumentosLegales />}
 
-                {tab === "MARCA RIDE" && (
+                {tabAbierta && tab === "MARCA RIDE" && (
                   <div className="space-y-5">
                     <p className="text-[#00f5d4] font-bold text-[11px]">5. MARCA RIDE - IMAGEN PARA FACTURA ELECTRÓNICA</p>
 
@@ -952,7 +949,7 @@ base.sucursales = datosReales.sucursales || base.sucursales || [];
                   </div>
                 )}
 
-                {tab === "PERMISOS" && (
+                {tabAbierta && tab === "PERMISOS" && (
                   <div className="space-y-4">
                     <p className="text-[#00f5d4] font-bold text-[11px]">6. PERMISOS AVANZADOS - CONTROL DE CAJEROS Y ANTI-FRAUDE</p>
 
@@ -1054,7 +1051,7 @@ base.sucursales = datosReales.sucursales || base.sucursales || [];
                   </div>
                 )}
 
-                {tab === "AMBIENTE SRI" && (
+                {tabAbierta && tab === "AMBIENTE SRI" && (
                   <div className="space-y-5">
                     <p className="text-[#00f5d4] font-bold text-[11px]">AMBIENTE SRI - PRUEBAS / PRODUCCIÓN</p>
 

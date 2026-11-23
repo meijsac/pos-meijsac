@@ -2,7 +2,7 @@
 import Link from "next/link"
 import { useParams } from "next/navigation"
 import { moduloPorSlug, nombreDocumentoAdicional } from "../catalogo"
-import { documentoAdicionalPermitido } from "@/lib/plan-acceso"
+import { avisarPlan, documentoAdicionalPermitido } from "@/lib/plan-acceso"
 import { useModulosDelPlan } from "@/lib/use-modulos-plan"
 import { Marco, tarjeta } from "../marco"
 
@@ -29,12 +29,15 @@ export default function ModuloAdicionalPage() {
   return (
     <Marco titulo={modulo.titulo}>
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-        {(modulo.documentos || []).filter((documento) => documentoAdicionalPermitido(modulos, nombreDocumentoAdicional(modulo.titulo, documento.titulo))).map((documento) => (
-          <Link key={documento.slug} href={documento.href || `/dashboard/comprobantes-adicionales/${modulo.slug}/${documento.slug}`} className={tarjeta}>
+        {(modulo.documentos || []).map((documento) => {
+          const permitido = documentoAdicionalPermitido(modulos, nombreDocumentoAdicional(modulo.titulo, documento.titulo))
+          return (
+          <Link key={documento.slug} href={permitido ? (documento.href || `/dashboard/comprobantes-adicionales/${modulo.slug}/${documento.slug}`) : "#"} onClick={(e) => { if (!permitido) avisarPlan(e) }} className={`${tarjeta} ${permitido ? "" : "opacity-50"}`}>
             <p className="text-lg font-black text-white">{documento.titulo}</p>
             <p className="text-xs font-bold text-teal-400 mt-6">Abrir</p>
           </Link>
-        ))}
+          )
+        })}
       </div>
     </Marco>
   )

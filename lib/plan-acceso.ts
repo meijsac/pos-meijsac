@@ -1,6 +1,13 @@
 import { DOCUMENTOS_ADICIONALES, moduloPorSlug, nombreDocumentoAdicional } from "@/app/dashboard/comprobantes-adicionales/catalogo"
 import { CARPETAS_PLAN } from "@/lib/suscripcion"
 
+export const AVISO_PLAN = "Su plan no le permite abrir este módulo. Comuníquese con su proveedor."
+
+export function avisarPlan(evento?: { preventDefault: () => void }) {
+  evento?.preventDefault()
+  alert(AVISO_PLAN)
+}
+
 function lista(modulos: string[] | null | undefined) {
   return Array.isArray(modulos) && modulos.length > 0 ? modulos : null
 }

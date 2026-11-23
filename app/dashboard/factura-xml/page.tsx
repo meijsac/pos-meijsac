@@ -5,7 +5,7 @@ import ModalCajaMixto from "./components/ModalCajaMixto"
 import ModuloTransporteReducido from "@/components/ModuloTransporteReducido"
 import { puntoActivoFactura, siguienteSecuencial } from "@/lib/sri/punto-emision"
 import { permisosLocales } from "@/lib/permisos-pos"
-import { rutaDePlanPermitida } from "@/lib/plan-acceso"
+import { avisarPlan, rutaDePlanPermitida } from "@/lib/plan-acceso"
 import { useModulosDelPlan } from "@/lib/use-modulos-plan"
 import { cerrarSesionEnEsteEquipo } from "@/lib/sesion-cliente"
 import { normalizarComprador } from "@/lib/sri/xml-factura"
@@ -1205,14 +1205,14 @@ const total = subtotalSin + iva15 + ivaDiferenciado + valorICE + valorIRBPNR + p
   <div className={`min-h-screen p-4 ${isDark ? "bg-[#080a0f] text-white" : "bg-[#f1f5f9] text-slate-900"}`}>
     {/* PEGALO AQUÍ ARRIBA DE TODO */}
     <div className="max-w-7xl mx-auto flex flex-wrap gap-2 mb-4 print:hidden">
-      {verPlan("/dashboard/restaurante") && <a href="/dashboard/restaurante" className="bg-[#1e293b] border border-white/10 px-4 py-2 rounded-full text-[11px] font-bold">← Volver a Restaurante</a>}
+      <a href="/dashboard/restaurante" onClick={(e) => { if (!verPlan("/dashboard/restaurante")) avisarPlan(e) }} className="bg-[#1e293b] border border-white/10 px-4 py-2 rounded-full text-[11px] font-bold">← Volver a Restaurante</a>
       {(!permisos || permisos.verReportes) && <a href="/dashboard" className="bg-white text-black px-4 py-2 rounded-full text-[11px] font-black">← MEIJSAC POS</a>}
-      {verPlan("/dashboard/comprobantes/emitidos") && <a href="/dashboard/comprobantes/emitidos" className="bg-[#1e293b] border border-white/10 px-4 py-2 rounded-full text-[11px] font-bold">Historial</a>}
-      {(!permisos || permisos.verCostos) && verPlan("/dashboard/productos") && <a href="/dashboard/productos" className="bg-[#1e293b] border border-white/10 px-4 py-2 rounded-full text-[11px] font-bold">Inventario</a>}
-      {verPlan("/dashboard/clientes") && <a href="/dashboard/clientes" className="bg-[#1e293b] border border-white/10 px-4 py-2 rounded-full text-[11px] font-bold">Clientes</a>}
-      {verPlan("/dashboard/comprobantes") && <a href="/dashboard/comprobantes" className="bg-[#1e293b] border border-white/10 px-4 py-2 rounded-full text-[11px] font-bold">Comprobantes</a>}
-      {verPlan("/dashboard/reportes") && <a href="/dashboard/reportes" className="bg-[#1e293b] border border-white/10 px-4 py-2 rounded-full text-[11px] font-bold">Reportes</a>}
-      {verPlan("/dashboard/proforma") && <a href="/dashboard/proforma" className="bg-[#1e293b] border border-white/10 px-4 py-2 rounded-full text-[11px] font-bold">Proforma</a>}
+      <a href="/dashboard/comprobantes/emitidos" onClick={(e) => { if (!verPlan("/dashboard/comprobantes/emitidos")) avisarPlan(e) }} className="bg-[#1e293b] border border-white/10 px-4 py-2 rounded-full text-[11px] font-bold">Historial</a>
+      {(!permisos || permisos.verCostos) && <a href="/dashboard/productos" onClick={(e) => { if (!verPlan("/dashboard/productos")) avisarPlan(e) }} className="bg-[#1e293b] border border-white/10 px-4 py-2 rounded-full text-[11px] font-bold">Inventario</a>}
+      <a href="/dashboard/clientes" onClick={(e) => { if (!verPlan("/dashboard/clientes")) avisarPlan(e) }} className="bg-[#1e293b] border border-white/10 px-4 py-2 rounded-full text-[11px] font-bold">Clientes</a>
+      <a href="/dashboard/comprobantes" onClick={(e) => { if (!verPlan("/dashboard/comprobantes")) avisarPlan(e) }} className="bg-[#1e293b] border border-white/10 px-4 py-2 rounded-full text-[11px] font-bold">Comprobantes</a>
+      <a href="/dashboard/reportes" onClick={(e) => { if (!verPlan("/dashboard/reportes")) avisarPlan(e) }} className="bg-[#1e293b] border border-white/10 px-4 py-2 rounded-full text-[11px] font-bold">Reportes</a>
+      <a href="/dashboard/proforma" onClick={(e) => { if (!verPlan("/dashboard/proforma")) avisarPlan(e) }} className="bg-[#1e293b] border border-white/10 px-4 py-2 rounded-full text-[11px] font-bold">Proforma</a>
       {mostrarSalir && <button type="button" onClick={() => { void cerrarSesionEnEsteEquipo() }} className="bg-red-500 text-white px-4 py-2 rounded-full text-[11px] font-bold">Cerrar sesión</button>}
       <button onClick={toggleTema} className="bg-white text-black px-3 py-2 rounded-full text-[10px] font-black ml-auto">{isDark?"☀️ CLARO":"🌙 OSCURO"}</button>
     </div>

@@ -5,7 +5,7 @@ import { EsisaAvatar } from '@/components/EsisaAvatar'
 import { SelloAmbiente } from '@/components/SelloAmbiente'
 import { guardarEmpresaLocal, limpiarSesionLocal } from '@/lib/sesion-cliente'
 import { permisosLocales, rutaPermitida } from '@/lib/permisos-pos'
-import { rutaDePlanPermitida } from '@/lib/plan-acceso'
+import { AVISO_PLAN, rutaDePlanPermitida } from '@/lib/plan-acceso'
 import { useModulosDelPlan } from '@/lib/use-modulos-plan'
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
@@ -13,6 +13,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const pathname = usePathname()
   const isDashboard = pathname === '/dashboard'
   const modulosPlan = useModulosDelPlan()
+  const planCerrado = modulosPlan !== undefined && !rutaDePlanPermitida(pathname, modulosPlan)
 
   useEffect(() => {
     ;["/dashboard", "/dashboard/comprobantes", "/dashboard/configuracion", "/dashboard/factura-xml", "/dashboard/clientes", "/dashboard/productos", "/dashboard/caja", "/dashboard/respaldo"].forEach((ruta) => router.prefetch(ruta))
@@ -45,7 +46,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           if (data?.rol) {
             const previo = JSON.parse(localStorage.getItem("meijsac_user") || "{}")
             localStorage.setItem("meijsac_user", JSON.stringify({ ...previo, nombre: data.nombre || previo.nombre, rol: data.rol, permisos: data.permisos ?? null, empresaId: data.empresaId || previo.empresaId }))
-            if (!rutaPermitida(pathname, permisosLocales())) router.replace(modulosPlan !== undefined && !rutaDePlanPermitida("/dashboard/factura-xml", modulosPlan) ? "/dashboard" : "/dashboard/factura-xml")
+            if (!rutaPermitida(pathname, permisosLocales())) router.replace("/dashboard/factura-xml")
           }
           if (!tieneLocal()) {
             const data = await fetch("/api/empresa/mia", { credentials: "same-origin" }).then((r) => r.json()).catch(() => null)
@@ -70,9 +71,8 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   }, [router])
 
   useEffect(() => {
-    if (!rutaPermitida(pathname, permisosLocales())) router.replace(modulosPlan !== undefined && !rutaDePlanPermitida("/dashboard/factura-xml", modulosPlan) ? "/dashboard" : "/dashboard/factura-xml")
-    if (modulosPlan !== undefined && !rutaDePlanPermitida(pathname, modulosPlan)) router.replace("/dashboard")
-  }, [pathname, router, modulosPlan])
+    if (!rutaPermitida(pathname, permisosLocales())) router.replace("/dashboard/factura-xml")
+  }, [pathname, router])
 
   useEffect(() => {
     if (sessionStorage.getItem("meijsac_sri_reintento")) return
@@ -113,7 +113,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       {!isDashboard && (
         <div className="p-4"></div>
       )}
-      {children}
+      {planCerrado ? <div className="mx-auto max-w-lg px-6 py-16 text-center text-sm">{AVISO_PLAN}</div> : children}
       <EsisaAvatar />
     </div>
   )
