@@ -1236,6 +1236,19 @@ const total = subtotalSin + iva15 + ivaDiferenciado + valorICE + valorIRBPNR + p
       .facturador-tema[data-tema="claro"] :is(.text-teal-300, .text-teal-200, .text-teal-200\\/80, .text-\\[\\#00f5d4\\]) { color: #0f766e; }
       .facturador-tema[data-tema="claro"] input::placeholder,
       .facturador-tema[data-tema="claro"] textarea::placeholder { color: #475569; }
+      .facturador-tema[data-tema="claro"] .btn-cliente-sri {
+        background: #94a3b8;
+        color: #0b1220;
+        border-color: #64748b;
+      }
+      .facturador-tema[data-tema="claro"] .btn-cliente-guardados {
+        background: #0f766e;
+        color: #ffffff;
+        border-color: #0f766e;
+      }
+      .facturador-tema[data-tema="claro"] .btn-guardar-borrador {
+        color: #2dd4bf;
+      }
     `}</style>
     {/* PEGALO AQUÍ ARRIBA DE TODO */}
     <div className="max-w-7xl mx-auto flex flex-wrap gap-2 mb-4 print:hidden">
@@ -1303,14 +1316,14 @@ const total = subtotalSin + iva15 + ivaDiferenciado + valorICE + valorIRBPNR + p
     type="button"
     disabled={buscandoSRI}
     onClick={manejarConsultaSRIExpress}
-    className="px-2 py-1 rounded-md text-[10px] text-teal-200/80 border border-white/10 disabled:opacity-40"
+    className="btn-cliente-sri px-2 py-1 rounded-md text-[10px] text-teal-200/80 border border-white/10 disabled:opacity-40"
   >
     {buscandoSRI ? "..." : "SRI"}
   </button>
   <button
     type="button"
     onClick={buscarEnClientesDB}
-    className="px-2 py-1 rounded-md text-[10px] text-slate-300 border border-white/10"
+    className="btn-cliente-guardados px-2 py-1 rounded-md text-[10px] text-slate-300 border border-white/10"
   >
     Guardados
   </button>
@@ -1714,7 +1727,7 @@ const total = subtotalSin + iva15 + ivaDiferenciado + valorICE + valorIRBPNR + p
   <button type="button" onClick={() => { if (bloqueoConsumidorFinal) return; setCajaAbierta(true) }} disabled={bloqueoConsumidorFinal} className={`font-semibold py-3 rounded-xl text-xs ${bloqueoConsumidorFinal ? "bg-white/10 text-white/30" : "bg-teal-400 text-slate-950"}`}>
     Caja y Cobro
   </button>
-  <button onClick={() => guardarComoBorrador()} className="bg-slate-800 border border-slate-700 text-slate-300 font-semibold py-3 rounded-xl text-xs">
+  <button onClick={() => guardarComoBorrador()} className="btn-guardar-borrador bg-slate-800 border border-slate-700 text-slate-300 font-semibold py-3 rounded-xl text-xs">
     Guardar
   </button>
   <button type="button" onClick={() => emitirComprobante()} disabled={enviandoSri || !pagoRealizado || bloqueoConsumidorFinal || !emisorListo || itemSinTarifa} className={`font-semibold py-3 rounded-xl text-xs border ${!enviandoSri && pagoRealizado && !bloqueoConsumidorFinal && emisorListo && !itemSinTarifa ? 'bg-teal-400 border-teal-300 text-slate-950' : 'bg-white/10 border-transparent text-white/20'}`}>
