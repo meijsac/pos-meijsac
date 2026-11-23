@@ -72,6 +72,8 @@ model Empresa {
   opticaConsultas  OpticaConsulta[]
   opticaOrdenes    OpticaOrden[]
   opticaConfig     OpticaConfig?
+  clinicaPacientes ClinicaPaciente[]
+  clinicaConsultas ClinicaConsulta[]
 }
 
 model FirmaElectronica {
@@ -229,6 +231,7 @@ model Usuario {
   clientesCreados       Cliente[]
   opticaConsultas       OpticaConsulta[]
   opticaAdendas         OpticaAdenda[]
+  clinicaConsultas      ClinicaConsulta[]
 }
 
 model SesionUsuario {
@@ -593,4 +596,75 @@ model OpticaOrden {
 
   @@index([empresaId])
   @@map("optica_orden")
+}
+
+model ClinicaPaciente {
+  id               String            @id @default(cuid())
+  empresaId        String            @map("empresa_id")
+  empresa          Empresa           @relation(fields: [empresaId], references: [id], onDelete: Cascade)
+  tipoDocumento    String            @default("CEDULA") @map("tipo_documento")
+  identificacion   String
+  nombres          String
+  apellidos        String
+  fechaNacimiento  DateTime?         @map("fecha_nacimiento") @db.Date
+  sexo             String            @default("")
+  grupoSanguineo   String            @default("") @map("grupo_sanguineo")
+  alergias         String            @default("")
+  telefono         String            @default("")
+  email            String            @default("")
+  direccion        String            @default("")
+  numeroHistoria   String            @default("") @map("numero_historia")
+  consentimientoAt DateTime?         @map("consentimiento_at")
+  createdAt        DateTime          @default(now()) @map("created_at")
+  updatedAt        DateTime          @updatedAt @map("updated_at")
+  consultas        ClinicaConsulta[]
+
+  @@unique([empresaId, identificacion])
+  @@index([empresaId])
+  @@map("clinica_paciente")
+}
+
+model ClinicaConsulta {
+  id            String           @id @default(cuid())
+  empresaId     String           @map("empresa_id")
+  empresa       Empresa          @relation(fields: [empresaId], references: [id], onDelete: Cascade)
+  pacienteId    String           @map("paciente_id")
+  paciente      ClinicaPaciente  @relation(fields: [pacienteId], references: [id], onDelete: Cascade)
+  usuarioId     String?          @map("usuario_id")
+  usuario       Usuario?         @relation(fields: [usuarioId], references: [id], onDelete: SetNull)
+  usuarioNombre String           @map("usuario_nombre")
+  plantilla     String           @default("general")
+  estado        String           @default("BORRADOR")
+  motivo        String           @default("")
+  enfermedad    String           @default("")
+  antecedentes  String           @default("")
+  examenFisico  String           @default("") @map("examen_fisico")
+  signos        Json
+  especialidad  Json
+  diagnosticos  Json
+  ordenes       Json
+  receta        Json
+  createdAt     DateTime         @default(now()) @map("created_at")
+  updatedAt     DateTime         @updatedAt @map("updated_at")
+  archivos      ClinicaArchivo[]
+
+  @@index([empresaId, createdAt])
+  @@index([pacienteId])
+  @@map("clinica_consulta")
+}
+
+model ClinicaArchivo {
+  id              String          @id @default(cuid())
+  empresaId       String          @map("empresa_id")
+  consultaId      String          @map("consulta_id")
+  consulta        ClinicaConsulta @relation(fields: [consultaId], references: [id], onDelete: Cascade)
+  nombre          String
+  mime            String
+  clase           String          @default("imagen")
+  ruta            String
+  interpretacion  String          @default("")
+  createdAt       DateTime        @default(now()) @map("created_at")
+
+  @@index([consultaId])
+  @@map("clinica_archivo")
 }

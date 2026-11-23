@@ -1,0 +1,48 @@
+export const CIE10_FRECUENTE = [
+  ["J00", "Rinofaringitis aguda"],
+  ["J02.9", "Faringitis aguda"],
+  ["J03.9", "Amigdalitis aguda"],
+  ["J06.9", "Infección aguda de vías respiratorias superiores"],
+  ["J18.9", "Neumonía"],
+  ["J45.9", "Asma"],
+  ["A09", "Diarrea y gastroenteritis"],
+  ["K29.7", "Gastritis"],
+  ["K30", "Dispepsia"],
+  ["R10.4", "Dolor abdominal"],
+  ["R50.9", "Fiebre"],
+  ["R51", "Cefalea"],
+  ["M54.5", "Lumbago"],
+  ["I10", "Hipertensión esencial"],
+  ["E11.9", "Diabetes mellitus tipo 2"],
+  ["E78.5", "Hiperlipidemia"],
+  ["N39.0", "Infección de vías urinarias"],
+  ["L30.9", "Dermatitis"],
+  ["H10.9", "Conjuntivitis"],
+  ["Z00.0", "Examen médico general"],
+  ["Z34.0", "Supervisión de primer embarazo normal"],
+  ["Z34.8", "Supervisión de otros embarazos normales"],
+  ["Z34.9", "Supervisión de embarazo normal"],
+  ["O80", "Parto único espontáneo"],
+  ["N76.0", "Vaginitis aguda"],
+  ["N92.0", "Menstruación excesiva y frecuente"],
+  ["N94.6", "Dismenorrea"],
+  ["Z30.0", "Consejo de anticoncepción"],
+  ["Z12.4", "Examen de detección de cáncer de cuello uterino"],
+  ["J20.9", "Bronquitis aguda"],
+  ["H66.9", "Otitis media"],
+  ["A08.4", "Infección intestinal viral"],
+  ["E86", "Depleción de volumen"],
+  ["L20.9", "Dermatitis atópica"],
+  ["Z23", "Necesidad de inmunización"],
+  ["Z00.1", "Control de salud de rutina del niño"],
+  ["J21.9", "Bronquiolitis aguda"],
+  ["B86", "Escabiosis"],
+  ["R05", "Tos"],
+  ["M25.5", "Dolor en articulación"],
+]
+
+export function buscarCie10(texto: string) {
+  const q = texto.trim().toLowerCase()
+  if (q.length < 2) return []
+  return CIE10_FRECUENTE.filter(([codigo, nombre]) => codigo.toLowerCase().includes(q) || nombre.toLowerCase().includes(q)).slice(0, 8)
+}
