@@ -49,6 +49,20 @@ export const MODULOS_ADICIONALES: ModuloAdicional[] = [
   { slug: "condominos", titulo: "Control de condóminos", detalle: "En construcción", construccion: true },
 ]
 
+function tituloRepetido(titulo: string) {
+  return MODULOS_ADICIONALES.filter((modulo) => (modulo.documentos?.length ? modulo.documentos.some((doc) => doc.titulo === titulo) : modulo.titulo === titulo)).length > 1
+}
+
+export function nombreDocumentoAdicional(modulo: string, titulo: string) {
+  return tituloRepetido(titulo) ? `${modulo} · ${titulo}` : titulo
+}
+
+export const DOCUMENTOS_ADICIONALES = MODULOS_ADICIONALES.flatMap((modulo) =>
+  modulo.documentos?.length
+    ? modulo.documentos.map((doc) => nombreDocumentoAdicional(modulo.titulo, doc.titulo))
+    : [modulo.titulo],
+)
+
 export function moduloPorSlug(slug: string) {
   return MODULOS_ADICIONALES.find((modulo) => modulo.slug === slug) || null
 }

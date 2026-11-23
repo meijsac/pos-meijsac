@@ -1,3 +1,7 @@
+import { DOCUMENTOS_ADICIONALES } from "@/app/dashboard/comprobantes-adicionales/catalogo"
+
+export { DOCUMENTOS_ADICIONALES }
+
 export const PRUEBA_DIAS = 15
 export const PRUEBA_COMPROBANTES = 10
 
@@ -32,7 +36,7 @@ export const CARPETAS_PLAN = [
   "Catálogo SRI",
 ] as const
 
-export const MODULOS_PLAN = [...MODULOS_MEIJSAC, ...CARPETAS_PLAN] as const
+export const MODULOS_PLAN = [...MODULOS_MEIJSAC, ...CARPETAS_PLAN, ...DOCUMENTOS_ADICIONALES] as const
 
 export type EstadoPlan = "PRUEBA" | "ACTIVO" | "BLOQUEADO"
 

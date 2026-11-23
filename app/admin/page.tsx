@@ -1,5 +1,6 @@
 "use client"
 import { useEffect, useMemo, useState, type ReactNode } from "react"
+import { DOCUMENTOS_ADICIONALES, MODULOS_ADICIONALES, nombreDocumentoAdicional } from "@/app/dashboard/comprobantes-adicionales/catalogo"
 import { CARPETAS_PLAN, MODULOS_MEIJSAC } from "@/lib/suscripcion"
 
 type Plan = {
@@ -46,7 +47,7 @@ const vacio: Omit<Plan, "id"> = {
   documentosAnio: 15,
   badge: "",
   activo: true,
-  modulos: [...MODULOS_MEIJSAC, ...CARPETAS_PLAN],
+  modulos: [...MODULOS_MEIJSAC, ...CARPETAS_PLAN, ...DOCUMENTOS_ADICIONALES],
 }
 
 function diasHasta(fecha: string | null) {
@@ -209,7 +210,7 @@ export default function AdminModuladorCompleto() {
       documentosAnio: p.documentosAnio,
       badge: p.badge,
       activo: p.activo,
-      modulos: p.modulos,
+      modulos: conDocumentosGuardados(p.modulos),
     })
     setEditId(p.id)
     setTab("crear")
@@ -426,6 +427,12 @@ export default function AdminModuladorCompleto() {
   )
 }
 
+function conDocumentosGuardados(modulos: string[]) {
+  if (modulos.some((nombre) => DOCUMENTOS_ADICIONALES.includes(nombre))) return modulos
+  if (!modulos.includes("COMPROBANTES ADICIONALES")) return modulos
+  return [...modulos, ...DOCUMENTOS_ADICIONALES]
+}
+
 function ModulosPlan({ elegidos, onChange }: { elegidos: string[]; onChange: (modulos: string[]) => void }) {
   const marcar = (nombre: string) => {
     onChange(elegidos.includes(nombre) ? elegidos.filter((item) => item !== nombre) : [...elegidos, nombre])
@@ -448,6 +455,29 @@ function ModulosPlan({ elegidos, onChange }: { elegidos: string[]; onChange: (mo
       <p className="admin-tenue text-xs tracking-[0.18em]">CENTRO DE CONTROL MODULAR DE ESTE PLAN</p>
       {lista("SECCIONES", MODULOS_MEIJSAC)}
       {lista("CARPETAS", CARPETAS_PLAN)}
+      <section className="admin-marco overflow-hidden">
+        <h3 className="px-4 pt-4 text-[11px] tracking-[0.22em] text-cyan-500">DOCUMENTOS ADICIONALES</h3>
+        <div className="mt-2 divide-y divide-cyan-400/15">
+          {MODULOS_ADICIONALES.map((modulo) => {
+            const piezas = modulo.documentos?.length
+              ? modulo.documentos.map((doc) => ({ visible: doc.titulo, guardado: nombreDocumentoAdicional(modulo.titulo, doc.titulo) }))
+              : [{ visible: modulo.titulo, guardado: modulo.titulo }]
+            return (
+              <div key={modulo.slug} className="px-4 py-3">
+                {modulo.documentos?.length ? <p className="admin-tenue mb-2 text-[11px] tracking-[0.14em]">{modulo.titulo}</p> : null}
+                <div className="space-y-2">
+                  {piezas.map((pieza) => (
+                    <label key={pieza.guardado} className="flex cursor-pointer items-center justify-between gap-3">
+                      <span className="text-sm">{pieza.visible}</span>
+                      <input type="checkbox" checked={elegidos.includes(pieza.guardado)} onChange={() => marcar(pieza.guardado)} className="h-4 w-4 accent-cyan-300" />
+                    </label>
+                  ))}
+                </div>
+              </div>
+            )
+          })}
+        </div>
+      </section>
     </div>
   )
 }
