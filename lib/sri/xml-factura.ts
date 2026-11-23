@@ -188,8 +188,10 @@ export function armarXmlFactura(empresa: {
   })
 
   const grupos: Record<string, { base: bigint; tarifa: number }> = {}
+  const gruposIce: Record<string, { base: bigint; tarifa: number; valor: bigint }> = {}
   let totalDescuento = 0n
   let totalSin = 0n
+  let totalIce = 0n
   const detalles = items.map((item: any) => {
     const cant = Number(item.cant ?? item.cantidad ?? 0)
     const precio = Number(item.pUnit ?? item.precioUnitario ?? 0)
@@ -199,27 +201,51 @@ export function armarXmlFactura(empresa: {
     const porc = aEscala(redondear(Number(item.descPorc || 0), 4), 4)
     const descuento = mitadArriba(producto * porc, 10000000000000000n)
     const base = mitadArriba(producto - descuento * 10000000000n, 10000000000n)
+    const porcIce = Number(item.porcIce || 0)
+    const valorIceUnit = Number(item.valorIce || 0)
+    let ice = 0n
+    let tarifaIce = 0
+    if (porcIce > 0) {
+      tarifaIce = porcIce
+      ice = mitadArriba(base * aEscala(redondear(porcIce, 4), 4), 1000000n)
+    } else if (valorIceUnit > 0) {
+      const unit = aEscala(redondear(valorIceUnit, 6), 6)
+      ice = mitadArriba(aEscala(cantTxt, 6) * unit, 10000000000n)
+    }
     const auxiliar = String(item.codigoAuxiliar || "").trim()
     const esTransporte = auxiliar === "H492001" || auxiliar === "H492002"
     const cod = esTransporte ? "0" : String(item.codigoPorcentaje ?? "4")
     const tarifa = esTransporte ? 0 : (tarifasEnMemoria()[cod] ?? 0)
-    const iva = cod === "6" || cod === "7" || esTransporte ? 0n : mitadArriba(base * aEscala(redondear(tarifa, 2), 2), 10000n)
+    const baseIva = base + ice
+    const iva = cod === "6" || cod === "7" || esTransporte ? 0n : mitadArriba(baseIva * aEscala(redondear(tarifa, 2), 2), 10000n)
     totalDescuento += descuento
     totalSin += base
+    totalIce += ice
     if (!grupos[cod]) grupos[cod] = { base: 0n, tarifa }
-    grupos[cod].base += base
-    return `<detalle><codigoPrincipal>${xml(item.codigo || item.codigoPrincipal || "001")}</codigoPrincipal>${auxiliar ? `<codigoAuxiliar>${xml(auxiliar)}</codigoAuxiliar>` : ""}<descripcion>${xml(item.descripcion)}</descripcion><cantidad>${hastaSeis(cant)}</cantidad><precioUnitario>${hastaSeis(precio)}</precioUnitario><descuento>${textoCentavos(descuento)}</descuento><precioTotalSinImpuesto>${textoCentavos(base)}</precioTotalSinImpuesto><impuestos><impuesto><codigo>2</codigo><codigoPorcentaje>${xml(cod)}</codigoPorcentaje><tarifa>${dinero(tarifa)}</tarifa><baseImponible>${textoCentavos(base)}</baseImponible><valor>${textoCentavos(iva)}</valor></impuesto></impuestos></detalle>`
+    grupos[cod].base += baseIva
+    if (ice > 0n) {
+      const claveIce = dinero(tarifaIce)
+      if (!gruposIce[claveIce]) gruposIce[claveIce] = { base: 0n, tarifa: tarifaIce, valor: 0n }
+      gruposIce[claveIce].base += base
+      gruposIce[claveIce].valor += ice
+    }
+    const iceXml = ice > 0n
+      ? `<impuesto><codigo>3</codigo><codigoPorcentaje>${xml(String(Math.round(tarifaIce) || 0))}</codigoPorcentaje><tarifa>${dinero(tarifaIce)}</tarifa><baseImponible>${textoCentavos(base)}</baseImponible><valor>${textoCentavos(ice)}</valor></impuesto>`
+      : ""
+    return `<detalle><codigoPrincipal>${xml(item.codigo || item.codigoPrincipal || "001")}</codigoPrincipal>${auxiliar ? `<codigoAuxiliar>${xml(auxiliar)}</codigoAuxiliar>` : ""}<descripcion>${xml(item.descripcion)}</descripcion><cantidad>${hastaSeis(cant)}</cantidad><precioUnitario>${hastaSeis(precio)}</precioUnitario><descuento>${textoCentavos(descuento)}</descuento><precioTotalSinImpuesto>${textoCentavos(base)}</precioTotalSinImpuesto><impuestos>${iceXml}<impuesto><codigo>2</codigo><codigoPorcentaje>${xml(cod)}</codigoPorcentaje><tarifa>${dinero(tarifa)}</tarifa><baseImponible>${textoCentavos(baseIva)}</baseImponible><valor>${textoCentavos(iva)}</valor></impuesto></impuestos></detalle>`
   }).join("")
 
   let totalIva = 0n
   const propina = Number(body?.totales?.propina || 0)
-  const totalesXml = Object.entries(grupos).map(([cod, g]) => {
+  const totalesIva = Object.entries(grupos).map(([cod, g]) => {
     const valor = cod === "6" || cod === "7" ? 0n : mitadArriba(g.base * aEscala(redondear(g.tarifa, 2), 2), 10000n)
     totalIva += valor
     return `<totalImpuesto><codigo>2</codigo><codigoPorcentaje>${cod}</codigoPorcentaje><baseImponible>${textoCentavos(g.base)}</baseImponible><valor>${textoCentavos(valor)}</valor></totalImpuesto>`
   }).join("")
+  const totalesIce = Object.values(gruposIce).map((g) => `<totalImpuesto><codigo>3</codigo><codigoPorcentaje>${xml(String(Math.round(g.tarifa) || 0))}</codigoPorcentaje><tarifa>${dinero(g.tarifa)}</tarifa><baseImponible>${textoCentavos(g.base)}</baseImponible><valor>${textoCentavos(g.valor)}</valor></totalImpuesto>`).join("")
+  const totalesXml = `${totalesIce}${totalesIva}`
   const propinaCentavos = aEscala(redondear(propina, 2), 2)
-  const importe = Number(textoCentavos(totalSin + totalIva + propinaCentavos))
+  const importe = Number(textoCentavos(totalSin + totalIva + totalIce + propinaCentavos))
 
   const listaPagos: Array<[string, number]> = body?.tipo_cobro === "CREDITO"
     ? [["20", importe]]
@@ -230,7 +256,7 @@ export function armarXmlFactura(empresa: {
   const email = String(body?.cliente?.email || "").trim()
   const placa = String(body?.placaVehiculo || "").trim()
 
-  const documento = `<?xml version="1.0" encoding="UTF-8"?><factura id="comprobante" version="1.1.0"><infoTributaria><ambiente>${ambiente}</ambiente><tipoEmision>1</tipoEmision><razonSocial>${xml(razon)}</razonSocial>${comercial ? `<nombreComercial>${xml(comercial)}</nombreComercial>` : ""}<ruc>${ruc}</ruc><claveAcceso>${clave}</claveAcceso><codDoc>01</codDoc><estab>${estab}</estab><ptoEmi>${pto}</ptoEmi><secuencial>${secuencial}</secuencial><dirMatriz>${xml(direccion)}</dirMatriz></infoTributaria><infoFactura><fechaEmision>${fecha}</fechaEmision><dirEstablecimiento>${xml(dirEstablecimiento)}</dirEstablecimiento><obligadoContabilidad>${obligado}</obligadoContabilidad><tipoIdentificacionComprador>${tipoIdentificacion(compradorId, compradorTipo)}</tipoIdentificacionComprador><razonSocialComprador>${xml(comprador)}</razonSocialComprador><identificacionComprador>${xml(compradorId)}</identificacionComprador><totalSinImpuestos>${textoCentavos(totalSin)}</totalSinImpuestos><totalDescuento>${textoCentavos(totalDescuento)}</totalDescuento><totalConImpuestos>${totalesXml}</totalConImpuestos><propina>${dinero(propina)}</propina><importeTotal>${textoCentavos(totalSin + totalIva + propinaCentavos)}</importeTotal><moneda>DOLAR</moneda>${placa ? `<placa>${xml(placa)}</placa>` : ""}<pagos>${pagos}</pagos></infoFactura><detalles>${detalles}</detalles>${email ? `<infoAdicional><campoAdicional nombre="Email">${xml(email)}</campoAdicional></infoAdicional>` : ""}</factura>`
+  const documento = `<?xml version="1.0" encoding="UTF-8"?><factura id="comprobante" version="1.1.0"><infoTributaria><ambiente>${ambiente}</ambiente><tipoEmision>1</tipoEmision><razonSocial>${xml(razon)}</razonSocial>${comercial ? `<nombreComercial>${xml(comercial)}</nombreComercial>` : ""}<ruc>${ruc}</ruc><claveAcceso>${clave}</claveAcceso><codDoc>01</codDoc><estab>${estab}</estab><ptoEmi>${pto}</ptoEmi><secuencial>${secuencial}</secuencial><dirMatriz>${xml(direccion)}</dirMatriz></infoTributaria><infoFactura><fechaEmision>${fecha}</fechaEmision><dirEstablecimiento>${xml(dirEstablecimiento)}</dirEstablecimiento><obligadoContabilidad>${obligado}</obligadoContabilidad><tipoIdentificacionComprador>${tipoIdentificacion(compradorId, compradorTipo)}</tipoIdentificacionComprador><razonSocialComprador>${xml(comprador)}</razonSocialComprador><identificacionComprador>${xml(compradorId)}</identificacionComprador><totalSinImpuestos>${textoCentavos(totalSin)}</totalSinImpuestos><totalDescuento>${textoCentavos(totalDescuento)}</totalDescuento><totalConImpuestos>${totalesXml}</totalConImpuestos><propina>${dinero(propina)}</propina><importeTotal>${textoCentavos(totalSin + totalIva + totalIce + propinaCentavos)}</importeTotal><moneda>DOLAR</moneda>${placa ? `<placa>${xml(placa)}</placa>` : ""}<pagos>${pagos}</pagos></infoFactura><detalles>${detalles}</detalles>${email ? `<infoAdicional><campoAdicional nombre="Email">${xml(email)}</campoAdicional></infoAdicional>` : ""}</factura>`
 
   return { xml: documento, claveAcceso: clave, ambiente, estab, pto, secuencial, fecha }
 }

@@ -37,6 +37,9 @@ function productoDeApi(p: any) {
     stock: Number(p?.stock ?? ficha.stock ?? 0),
     tipoIvaSRI: ficha.tipoIvaSRI || p?.tipoIvaSRI,
     codigoPorcentaje: ficha.codigoPorcentaje || p?.codigoPorcentaje,
+    porcIce: Number(ficha.porcIce ?? p?.porcIce ?? 0) || 0,
+    valorIce: Number(ficha.valorIce ?? p?.valorIce ?? 0) || 0,
+    gravaICE: ficha.gravaICE ?? p?.gravaICE,
   }
 }
 
@@ -123,6 +126,8 @@ type Item = {
   tarifa?:number; // <- con ? ya no te obliga en todos lados
   iva:number;
   ice:number;
+  porcIce?: number;
+  valorIce?: number;
   esPlastico:boolean;
   valorIva?:number;
   detalleAdicional?: string;
@@ -261,6 +266,9 @@ export default function FacturadorXMLReal(){
           precioMinorista: Number(ficha.precioMinorista ?? p.precioMinorista ?? p.precio ?? 0),
           tipoIvaSRI: ficha.tipoIvaSRI || p.tipoIvaSRI,
           codigoPorcentaje: ficha.codigoPorcentaje || p.codigoPorcentaje,
+          porcIce: Number(ficha.porcIce ?? p.porcIce ?? 0) || 0,
+          valorIce: Number(ficha.valorIce ?? p.valorIce ?? 0) || 0,
+          gravaICE: ficha.gravaICE ?? p.gravaICE,
         }
       }
       const leerLocales = (idEmpresa: string) => {
@@ -690,7 +698,7 @@ const manejarConsultaSRIExpress = async () => {
   } else {
     setItems([...items, {
       codigo:p.codigo, codigoAuxiliar: auxiliar, descripcion:p.nombre || p.descripcion, detalle:"", detalleAdicional:p.detalle || "", cant:1, pUnit:precio, descPorc:Number(p.descuento)||0, descDolar:0,
-      codigoPorcentaje:tarifa.codigoPorcentaje, tarifa:tarifa.tarifa, iva:tarifa.tarifa, ice:Number(p.porcIce)||0, esPlastico:false,
+      codigoPorcentaje:tarifa.codigoPorcentaje, tarifa:tarifa.tarifa, iva:tarifa.tarifa, porcIce: p.gravaICE === false ? 0 : Number(p.porcIce) || 0, valorIce: p.gravaICE === false ? 0 : Number(p.valorIce) || 0, ice:0, esPlastico:false,
       tarifas:{min:precio, may:Number(p.precioMayorista ?? p.precioMay ?? precio), dist:Number(p.precioDistribuidor ?? p.precioDist ?? precio)}
     }])
   }
@@ -747,20 +755,28 @@ const CATALOGO_IVA_SRI: any = {
   const subtotalSin = bruto - descuento
 
   const codigoIva = (i: any) => String(i.codigoPorcentaje ?? "")
-  const base15 = items.filter(i=>codigoIva(i)==="4").reduce((s,i)=>s+(i.cant*i.pUnit)*(1-i.descPorc/100),0)
-const base0 = items.filter(i=>codigoIva(i)==="0").reduce((s,i)=>s+(i.cant*i.pUnit)*(1-i.descPorc/100),0)
-const baseNoObjeto = items.filter(i=>codigoIva(i)==="6").reduce((s,i)=>s+(i.cant*i.pUnit)*(1-i.descPorc/100),0)
-const baseExento = items.filter(i=>codigoIva(i)==="7").reduce((s,i)=>s+(i.cant*i.pUnit)*(1-i.descPorc/100),0)
-const baseDiferenciado = items.filter(i=>["10","5","8","2","3"].includes(codigoIva(i))).reduce((s,i)=>s+(i.cant*i.pUnit)*(1-i.descPorc/100),0)
-const base5 = items.filter(i=>codigoIva(i)==="5").reduce((s,i)=>s+(i.cant*i.pUnit)*(1-i.descPorc/100),0)
-const base8 = items.filter(i=>codigoIva(i)==="8").reduce((s,i)=>s+(i.cant*i.pUnit)*(1-i.descPorc/100),0)
+  const baseNeta = (i: any) => (i.cant * i.pUnit) * (1 - (Number(i.descPorc) || 0) / 100)
+  const iceDe = (i: any) => {
+    const porc = Number(i.porcIce) || 0
+    const fijo = Number(i.valorIce) || 0
+    if (porc > 0) return baseNeta(i) * porc / 100
+    if (fijo > 0) return (Number(i.cant) || 0) * fijo
+    return 0
+  }
+  const base15 = items.filter(i=>codigoIva(i)==="4").reduce((s,i)=>s+baseNeta(i),0)
+const base0 = items.filter(i=>codigoIva(i)==="0").reduce((s,i)=>s+baseNeta(i),0)
+const baseNoObjeto = items.filter(i=>codigoIva(i)==="6").reduce((s,i)=>s+baseNeta(i),0)
+const baseExento = items.filter(i=>codigoIva(i)==="7").reduce((s,i)=>s+baseNeta(i),0)
+const baseDiferenciado = items.filter(i=>["10","5","8","2","3"].includes(codigoIva(i))).reduce((s,i)=>s+baseNeta(i),0)
+const base5 = items.filter(i=>codigoIva(i)==="5").reduce((s,i)=>s+baseNeta(i),0)
+const base8 = items.filter(i=>codigoIva(i)==="8").reduce((s,i)=>s+baseNeta(i),0)
 const itemSinTarifa = items.some(i => !["0","2","3","4","5","6","7","8","10"].includes(codigoIva(i)))
 
-const valorICE = items.reduce((s,i)=>s+i.ice,0) || 0
+const valorICE = items.reduce((s,i)=>s+iceDe(i),0) || 0
 const valorIRBPNR = items.filter(i=>i.esPlastico).reduce((s,i)=>s+(i.cant*0.02),0) || 0
-const iva15 = base15*0.15
-const iva5 = base5*0.05
-const iva8 = base8*0.08
+const iva15 = items.filter(i=>codigoIva(i)==="4").reduce((s,i)=>s+(baseNeta(i)+iceDe(i))*0.15,0)
+const iva5 = items.filter(i=>codigoIva(i)==="5").reduce((s,i)=>s+(baseNeta(i)+iceDe(i))*0.05,0)
+const iva8 = items.filter(i=>codigoIva(i)==="8").reduce((s,i)=>s+(baseNeta(i)+iceDe(i))*0.08,0)
 const ivaDiferenciado = iva5 + iva8 // + otros si usas 12%,13%,14%
 const propina = propinaCheck? subtotalSin*0.10 : 0
 const total = subtotalSin + iva15 + ivaDiferenciado + valorICE + valorIRBPNR + propina
@@ -1529,7 +1545,7 @@ const total = subtotalSin + iva15 + ivaDiferenciado + valorICE + valorIRBPNR + p
 {productos.length === 0 && <p className="mt-2 text-sm font-bold text-red-400">No hay productos cargados - revisar API</p>}
 
         {items.length > 0 && (
-          <div className="grid grid-cols-12 gap-1 mt-3 px-2 text-[8px] font-bold leading-tight text-white/50">
+          <div className="grid grid-cols-[repeat(13,minmax(0,1fr))] gap-1 mt-3 px-2 text-[8px] font-bold leading-tight text-white/50">
             <div className="col-span-1">Código</div>
             <div className="col-span-2">Producto</div>
             <div className="col-span-1">Detalle</div>
@@ -1537,6 +1553,7 @@ const total = subtotalSin + iva15 + ivaDiferenciado + valorICE + valorIRBPNR + p
             <div className="col-span-1">Precio</div>
             <div className="col-span-1">Desc. %</div>
             <div className="col-span-1">Desc. $</div>
+            <div className="col-span-1 text-right">ICE</div>
             <div className="col-span-1">Tarifa IVA</div>
             <div className="col-span-1 text-right">Valor IVA</div>
             <div className="col-span-1 text-right">Subtotal</div>
@@ -1590,11 +1607,12 @@ const total = subtotalSin + iva15 + ivaDiferenciado + valorICE + valorIRBPNR + p
             setTextoFila(null)
           }
           const baseFila = it.cant * it.pUnit - (it.descDolar || 0)
+          const iceFila = iceDe(it)
           const tarifaFila = Number(CATALOGO_IVA_SRI[String(it.codigoPorcentaje)]?.tarifa ?? 0)
-          const ivaFila = tarifaFila > 0 ? baseFila * tarifaFila / 100 : 0
-          const subtotalFila = tarifaFila > 0 ? baseFila + ivaFila : baseFila
+          const ivaFila = tarifaFila > 0 ? (baseFila + iceFila) * tarifaFila / 100 : 0
+          const subtotalFila = baseFila + iceFila + ivaFila
           return (
-          <div key={i} className="grid grid-cols-12 gap-1 mt-1 p-2 bg-black rounded-xl border border-white/5 items-center">
+          <div key={i} className="grid grid-cols-[repeat(13,minmax(0,1fr))] gap-1 mt-1 p-2 bg-black rounded-xl border border-white/5 items-center">
             <div className="relative group col-span-1"><input value={it.codigo} onChange={e=>{ const n=[...items]; n[i].codigo=e.target.value; setItems(n); }} className="w-full bg-black p-1 rounded text-[10px] font-mono border border-white/10" placeholder="P001" /></div>
             <div className="relative group col-span-2"><input readOnly value={it.descripcion} className="w-full bg-black p-1 rounded text-[11px] outline-none" /></div>
             <div className="relative group col-span-1"><input value={it.detalleAdicional || ""} onChange={e=>{ const n=[...items]; (n[i] as any).detalleAdicional=e.target.value; setItems(n); }} placeholder="Color, garantía..." className="w-full bg-black p-1 rounded text-[10px] text-white border border-[#00f5d4]/40" /></div>
@@ -1604,6 +1622,7 @@ const total = subtotalSin + iva15 + ivaDiferenciado + valorICE + valorIRBPNR + p
             </div>
             <div className="relative group col-span-1"><input inputMode="decimal" value={visible("descPorc", it.descPorc || 0)} readOnly={!puedeDescuento} onFocus={(e)=>e.currentTarget.select()} onBlur={()=>soltar("descPorc")} onChange={e=>escribir("descPorc", e.target.value)} className="w-full bg-black p-1 rounded text-xs" placeholder="%" /></div>
             <div className="relative group col-span-1"><input inputMode="decimal" value={visible("descDolar", it.descDolar || 0)} readOnly={!puedeDescuento} onFocus={(e)=>e.currentTarget.select()} onBlur={()=>soltar("descDolar")} onChange={e=>escribir("descDolar", e.target.value)} className="w-full bg-black p-1 rounded text-xs border border-yellow-500/20" placeholder="$" /></div>
+            <div className="relative group col-span-1"><div className="bg-black p-1 rounded text-white text-[11px] font-bold text-right">${iceFila.toFixed(2)}</div></div>
             <div className="relative group col-span-1"><select 
     value={it.codigoPorcentaje} 
     onChange={e=>{ 
