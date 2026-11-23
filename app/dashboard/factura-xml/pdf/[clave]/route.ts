@@ -21,10 +21,13 @@ export async function GET(req: Request, context: { params: Promise<{ clave: stri
   const sesion = await usuarioConEmpresaDesdeRequest(req)
   if ("error" in sesion) return pagina("Sesión", "Vuelve a entrar para ver el comprobante.", 401)
   if (!puede(sesion.usuario.rol, "facturar")) return pagina("Permiso", "Tu rol no puede ver este comprobante.", 403)
+  const pedido = new URL(req.url)
+  const quiereXml = pedido.searchParams.get("xml") === "1"
+  const quierePdf = pedido.searchParams.get("pdf") === "1"
   const fila = await facturaPorClave(sesion.empresa.id, clave)
-  const xmlGuardado = await leerComprobanteArchivado(sesion.empresa.id, clave, "xml")
-  const htmlGuardado = await leerComprobanteArchivado(sesion.empresa.id, clave, "html")
-  const pdfGuardado = await leerComprobanteArchivado(sesion.empresa.id, clave, "pdf")
+  const xmlGuardado = quiereXml || !fila ? await leerComprobanteArchivado(sesion.empresa.id, clave, "xml") : null
+  const pdfGuardado = quierePdf || !fila ? await leerComprobanteArchivado(sesion.empresa.id, clave, "pdf") : null
+  const htmlGuardado = !quiereXml && !quierePdf ? await leerComprobanteArchivado(sesion.empresa.id, clave, "html") : null
   if (!fila && !xmlGuardado && !htmlGuardado && !pdfGuardado) return pagina("Comprobante", "No encontré esta factura.", 404)
   const p = ((fila?.payload || {}) as Record<string, any>)
   const emisor = p.configEmisor || {}
@@ -38,7 +41,6 @@ export async function GET(req: Request, context: { params: Promise<{ clave: stri
     const comp = Array.isArray(aut) ? aut.find((a: { estado?: string }) => a?.estado === "AUTORIZADO")?.comprobante || aut[0]?.comprobante : aut?.comprobante
     return String(comp || p.xmlContent || "")
   })()
-  const pedido = new URL(req.url)
   const vuelto = Number(p.pagos?.vuelto || p.vuelto || 0)
   const recibido = Number(p.pagos?.efectivoRecibido || p.efectivoRecibido || p.pagos?.entregado || 0)
   if (pedido.searchParams.get("xml") === "1") {

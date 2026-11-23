@@ -119,10 +119,12 @@ export function htmlRide(data: {
     th { background:#f1f5f9; text-align:left; padding:8px; border-bottom:1px solid #e2e8f0; }
     .tot { display:flex; justify-content:space-between; padding:8px; border-bottom:1px solid #f1f5f9; }
     .total { display:flex; justify-content:space-between; padding:10px; background:#f0f9ff; border-top:2px solid #0284c7; font-weight:700; font-size:14px; }
+    .num-sri { font-family:monospace; font-size:11px; word-break:break-all; margin:0; }
     @media print {
       @page { size: A4; margin: 12mm; }
       html, body { background:#fff !important; padding:0 !important; margin:0 !important; max-width:none !important; -webkit-print-color-adjust:exact; print-color-adjust:exact; }
       .no-print { display:none !important; }
+      .num-sri { font-size:11px !important; }
       table { page-break-inside:auto; }
       thead { display:table-header-group; }
       tr { break-inside:avoid; page-break-inside:avoid; }
@@ -149,14 +151,14 @@ export function htmlRide(data: {
       <h2 style="font-size:18px;color:#0369a1;margin:6px 0">FACTURA</h2>
       <p style="font-weight:700;margin:0 0 8px">No. <span style="font-family:monospace;font-weight:400">${esc(data.numeroFactura)}</span></p>
       <p style="font-weight:700;margin:8px 0 0">NÚMERO DE AUTORIZACIÓN:</p>
-      <p style="font-family:monospace;font-size:11px;word-break:break-all;margin:0">${esc(clave)}</p>
-      <p style="margin:8px 0 0"><b>FECHA Y HORA DE AUTORIZACIÓN:</b> ${esc(fechaAutorizacion || "—")}</p>
+      <p id="numero-autorizacion" class="num-sri">${esc(clave)}</p>
+      <p style="margin:8px 0 0"><b>FECHA Y HORA DE AUTORIZACIÓN:</b> <span id="fecha-autorizacion">${esc(fechaAutorizacion || "—")}</span></p>
       <p style="margin:0"><b>AMBIENTE:</b> ${esc(data.ambiente)}</p>
       <p style="margin:0"><b>EMISIÓN:</b> NORMAL</p>
       ${data.vendedor ? `<p style="margin:0"><b>VENDEDOR:</b> ${esc(data.vendedor)}</p>` : ""}
       <p style="font-weight:700;margin:10px 0 4px">CLAVE DE ACCESO:</p>
       ${barras}
-      <p style="font-family:monospace;font-size:10px;color:#64748b;margin:4px 0 0">${esc(clave)}</p>
+      <p id="clave-acceso" class="num-sri" style="margin-top:4px;color:#64748b">${esc(clave)}</p>
     </div>
   </div>
   <div style="border:1px solid #e2e8f0;border-radius:8px;padding:16px;margin-bottom:24px;display:grid;grid-template-columns:1fr 1fr;gap:8px">

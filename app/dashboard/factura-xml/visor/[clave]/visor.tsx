@@ -20,8 +20,8 @@ export function VisorComprobante({ clave, soloLectura = false }: { clave: string
   const [ticket, setTicket] = useState(false)
   const [estado, setEstado] = useState(soloLectura ? "Documento guardado" : "Enviando al SRI…")
   const [avisoArchivo, setAvisoArchivo] = useState("")
-  const [marca, setMarca] = useState(0)
-  const src = `/dashboard/factura-xml/pdf/${clave}${ticket ? "?ticket=1" : ""}${ticket ? "&" : "?"}v=${marca}`
+  const fechaLista = useRef("")
+  const src = `/dashboard/factura-xml/pdf/${clave}${ticket ? "?ticket=1" : ""}`
 
   useEffect(() => {
     if (soloLectura) {
@@ -43,20 +43,17 @@ export function VisorComprobante({ clave, soloLectura = false }: { clave: string
       const data = await res.json().catch(() => ({}))
       if (!vivo) return
       const fecha = String(data.fechaAutorizacion || "").trim()
+      fechaLista.current = fecha
+      const nodoFecha = marco.current?.contentDocument?.getElementById("fecha-autorizacion")
+      if (nodoFecha && fecha) nodoFecha.textContent = fecha
       setEstado(fecha ? `Autorizado ${fecha}` : (data.mensaje || data.error || "Pendiente de autorización"))
       setAvisoArchivo(data.respaldoOk === false ? String(data.respaldoError || "No se pudo guardar el XML y el RIDE.") : "")
-      setMarca((n) => n + 1)
-      const token = localStorage.getItem("meijsac_token") || ""
-      const remotas = await fetch("/api/facturas", { headers: { Authorization: `Bearer ${token}` } }).then((r) => r.ok ? r.json() : []).catch(() => [])
-      const hallada = Array.isArray(remotas) ? remotas.find((d: any) => String(d?.claveAcceso || "").replace(/\D/g, "") === clave) : null
       const copia = {
-        ...(hallada || {}),
         claveAcceso: clave,
-        facturaId: hallada?.facturaId || hallada?.id || "",
-        estadoSRI: fecha ? "AUTORIZADO" : (hallada?.estadoSRI || data.estado || "PENDIENTE"),
+        estadoSRI: fecha ? "AUTORIZADO" : (data.estado || "PENDIENTE"),
         fechaAutorizacion: fecha,
-        numeroAutorizacion: fecha ? (data.numeroAutorizacion || hallada?.numeroAutorizacion || "") : "",
-        mensajeSri: data.mensaje || data.error || hallada?.mensajeSri || "",
+        numeroAutorizacion: fecha ? (data.numeroAutorizacion || "") : "",
+        mensajeSri: data.mensaje || data.error || "",
       }
       const guardar = (nombre: string) => {
         const previa = JSON.parse(localStorage.getItem(nombre) || "[]")
@@ -90,7 +87,11 @@ export function VisorComprobante({ clave, soloLectura = false }: { clave: string
       {avisoArchivo ? <p className="print:hidden bg-amber-100 text-amber-950 px-4 py-2 text-sm">{avisoArchivo}</p> : null}
       <div className="flex-1 p-4 md:p-8 flex justify-center items-start overflow-y-auto">
         <div className={`bg-white shadow-lg border border-slate-200 rounded-lg print:shadow-none print:border-none ${ticket ? "w-[80mm] p-0" : "max-w-4xl w-full p-4"}`}>
-          <iframe ref={marco} key={src} src={src} title="Comprobante" className={`w-full border-none ${ticket ? "h-[70vh]" : "h-[75vh]"}`} />
+          <iframe ref={marco} key={src} src={src} title="Comprobante" onLoad={() => {
+            const fecha = fechaLista.current
+            const nodoFecha = marco.current?.contentDocument?.getElementById("fecha-autorizacion")
+            if (nodoFecha && fecha) nodoFecha.textContent = fecha
+          }} className={`w-full border-none ${ticket ? "h-[70vh]" : "h-[75vh]"}`} />
         </div>
       </div>
     </div>
