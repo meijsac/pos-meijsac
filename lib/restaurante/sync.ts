@@ -46,13 +46,14 @@ export async function leerRestaurante(): Promise<EstadoRestaurante | null> {
   }
 }
 
-export async function guardarRestaurante(parte: Partial<Pick<EstadoRestaurante, "mesas" | "tickets" | "menu" | "categorias">>) {
-  await fetch("/api/restaurante/estado", {
+export async function guardarRestaurante(parte: Partial<Pick<EstadoRestaurante, "mesas" | "tickets" | "menu" | "categorias">> & { reemplazarTickets?: boolean }) {
+  const res = await fetch("/api/restaurante/estado", {
     method: "PUT",
     credentials: "same-origin",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(parte),
-  }).catch(() => {})
+  }).catch(() => null)
+  return Boolean(res?.ok)
 }
 
 export function leerLocal(clave: string) {

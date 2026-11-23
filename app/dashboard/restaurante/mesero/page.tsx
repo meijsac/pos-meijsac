@@ -106,7 +106,7 @@ export default function AppMesero(){
     setNota("")
   }
 
-  const enviarACocina = () => {
+  const enviarACocina = async () => {
     if(!platoSel || mesaActiva===null) return
     // Valida término si es carne
     if(platoSel.cat==="CARNES" &&!mods.termino){
@@ -123,7 +123,9 @@ export default function AppMesero(){
       const nueva = m.estado==="LIBRE"? {...m, estado:"OCUPADA" as const, inicio:new Date().toISOString(), mesero, tiempo:0} : { ...m, mesero: m.mesero || mesero }
       return {...nueva, items:[...nueva.items, itemFinal]}
     })
-    guardar(lista)
+    silencio.current = Date.now() + 2500
+    localStorage.setItem("meijsac_restaurante_mesas", JSON.stringify(lista))
+    setMesas(lista)
 
     const mesa = mesas.find((m) => m.id === mesaActiva)
     const ticket = {
@@ -147,7 +149,8 @@ export default function AppMesero(){
     kds.push(ticket)
     localStorage.setItem("meijsac_kds", JSON.stringify(kds))
     localStorage.setItem("meijsac_cola_cocina", JSON.stringify(kds))
-    void guardarRestaurante({ tickets: kds })
+    const guardado = await guardarRestaurante({ mesas: lista, tickets: kds })
+    if (!guardado) alert("El pedido quedó en este equipo. La cocina lo verá cuando este equipo vuelva a conectarse.")
 
     if(navigator.vibrate) navigator.vibrate([100,50,100])
     setPlatoSel(null)

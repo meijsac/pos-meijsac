@@ -4,6 +4,13 @@ import { guardarRestaurante, leerLocal, leerRestaurante } from "@/lib/restaurant
 
 const ESTACIONES = ["TODAS", "PARRILLA", "BARRA", "WOK", "COCINA"]
 
+function unirTickets(remoto: any[] | null | undefined, local: any[]) {
+  const base = Array.isArray(remoto) ? remoto : []
+  const ids = new Set(base.map((ticket) => String(ticket?.id)))
+  const faltantes = local.filter((ticket) => ticket?.id != null && !ids.has(String(ticket.id)) && ["PENDIENTE", "EN_COLA", "PREPARANDO"].includes(ticket.estado))
+  return [...base, ...faltantes]
+}
+
 export default function KDS(){
   const [pedidos,setPedidos]=useState<any[]>([])
   const [estacion, setEstacion] = useState("TODAS")
@@ -21,7 +28,7 @@ export default function KDS(){
   useEffect(()=>{
     const cargar = () => {
       leerRestaurante().then((remoto) => {
-        const tickets = remoto?.tickets?.length ? remoto.tickets : leerLocal("meijsac_kds")
+        const tickets = unirTickets(remoto?.tickets, leerLocal("meijsac_kds"))
         aplicar(tickets)
       }).catch(() => aplicar(leerLocal("meijsac_kds")))
     }
@@ -33,7 +40,7 @@ export default function KDS(){
   const marcar = async (id: number, estado: "PREPARANDO" | "LISTO") => {
     const remoto = await leerRestaurante()
     const ahora = new Date().toISOString()
-    const base = remoto?.tickets?.length ? remoto.tickets : leerLocal("meijsac_kds")
+    const base = unirTickets(remoto?.tickets, leerLocal("meijsac_kds"))
     const tickets = base.map((ticket: any) => ticket.id === id ? {
       ...ticket,
       estado,
@@ -58,7 +65,7 @@ export default function KDS(){
     if(!confirm("¿Borrar toda la cola de cocina?")) return
     localStorage.setItem("meijsac_kds", "[]")
     localStorage.setItem("meijsac_cola_cocina", "[]")
-    await guardarRestaurante({ tickets: [] })
+    await guardarRestaurante({ tickets: [], reemplazarTickets: true })
     setPedidos([])
   }
 
