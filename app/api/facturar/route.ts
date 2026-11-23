@@ -23,6 +23,29 @@ export async function POST(req: Request) {
     if ("error" in sesion) return NextResponse.json({ error: sesion.error }, { status: sesion.status })
     if (!puede(sesion.usuario.rol, "facturar")) return NextResponse.json({ error: "Tu rol no puede facturar" }, { status: 403 })
     const body = await req.json()
+    const colaId = String(body?.colaId || "").trim()
+    if (colaId) {
+      const recientes = await prisma.facturaEmitida.findMany({
+        where: { empresaId: sesion.empresa.id },
+        orderBy: { createdAt: "desc" },
+        take: 80,
+        select: { id: true, estado: true, payload: true },
+      })
+      const previa = recientes.find((fila) => String((fila.payload as { colaId?: string } | null)?.colaId || "") === colaId)
+      if (previa) {
+        const payload = (previa.payload || {}) as { claveAcceso?: string; establecimiento?: string; secuencial?: string; firmado?: boolean; fechaAutorizacion?: string }
+        return NextResponse.json({
+          id: previa.id,
+          claveAcceso: payload.claveAcceso || "",
+          establecimiento: payload.establecimiento || "",
+          secuencial: payload.secuencial || "",
+          estado: previa.estado,
+          firmado: Boolean(payload.firmado),
+          fechaAutorizacion: payload.fechaAutorizacion || "",
+          repetida: true,
+        })
+      }
+    }
     const rechazo = validarEntradaFactura(body)
     if (rechazo) {
       prisma.seguridadLog.create({ data: { empresaId: sesion.empresa.id, usuario: sesion.usuario.nombre, ip: ipDe(req), accion: "FACTURA_RECHAZADA", dispositivo: navegadorDe(req), detalle: rechazo } }).catch(() => {})

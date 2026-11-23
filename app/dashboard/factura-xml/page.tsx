@@ -8,6 +8,7 @@ import { permisosLocales } from "@/lib/permisos-pos"
 import { avisarPlan, rutaDePlanPermitida } from "@/lib/plan-acceso"
 import { useModulosDelPlan } from "@/lib/use-modulos-plan"
 import { cerrarSesionEnEsteEquipo } from "@/lib/sesion-cliente"
+import { encolarFacturaSinRed } from "@/lib/factura-sin-red"
 import { normalizarComprador } from "@/lib/sri/xml-factura"
 
 function codigosProducto(p: any) {
@@ -1046,8 +1047,11 @@ const total = subtotalSin + iva15 + ivaDiferenciado + valorICE + valorIRBPNR + p
     facturaPendiente.establecimiento = serieAhora
     facturaPendiente.secuencial = secAhora
     facturaPendiente.atendidoPor = vendedorNombre
+    const colaId = facturaPendiente.colaId || `caja-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
+    facturaPendiente.colaId = colaId
+    const cuerpoFactura = { ...facturaPendiente, estadoSRI: "PENDIENTE", diferirSri: true, colaId }
     try {
-      const guardado = await fetch("/api/facturar", { method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${localStorage.getItem("meijsac_token") || ""}` }, body: JSON.stringify({ ...facturaPendiente, estadoSRI: "PENDIENTE", diferirSri: true }) })
+      const guardado = await fetch("/api/facturar", { method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${localStorage.getItem("meijsac_token") || ""}` }, body: JSON.stringify(cuerpoFactura) })
       const guardada = await guardado.json().catch(() => ({}))
       if (!guardado.ok) {
         const faltan = Array.isArray(guardada.faltantes) ? `\n${guardada.faltantes.join("\n")}` : ""
@@ -1117,9 +1121,15 @@ const total = subtotalSin + iva15 + ivaDiferenciado + valorICE + valorIRBPNR + p
         venta?.close()
         alert("No se pudo obtener la clave de acceso del comprobante.")
       }
-    } catch {
+    } catch (error) {
       setEnviandoSri(false)
       venta?.close()
+      const sinRed = !navigator.onLine || error instanceof TypeError
+      if (sinRed) {
+        encolarFacturaSinRed(cuerpoFactura)
+        alert("No hay conexión. La venta quedó en este equipo con la fecha de ahora. Al volver internet se firma y se envía al SRI. Todavía no está autorizada.")
+        return
+      }
       alert("No se pudo guardar la factura en la base.")
       return
     }

@@ -6,6 +6,7 @@ import { SelloAmbiente } from '@/components/SelloAmbiente'
 import { guardarEmpresaLocal, limpiarSesionLocal } from '@/lib/sesion-cliente'
 import { permisosLocales, rutaPermitida } from '@/lib/permisos-pos'
 import { AVISO_PLAN, rutaDePlanPermitida } from '@/lib/plan-acceso'
+import { enviarFacturasSinRed } from '@/lib/factura-sin-red'
 import { useModulosDelPlan } from '@/lib/use-modulos-plan'
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
@@ -75,9 +76,17 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   }, [pathname, router])
 
   useEffect(() => {
-    if (sessionStorage.getItem("meijsac_sri_reintento")) return
-    sessionStorage.setItem("meijsac_sri_reintento", "1")
-    fetch("/api/sri/reintentar", { method: "POST", credentials: "same-origin" }).catch(() => {})
+    const subir = () => {
+      void enviarFacturasSinRed().finally(() => {
+        fetch("/api/sri/reintentar", { method: "POST", credentials: "same-origin" }).catch(() => {})
+      })
+    }
+    if (!sessionStorage.getItem("meijsac_sri_reintento")) {
+      sessionStorage.setItem("meijsac_sri_reintento", "1")
+      subir()
+    }
+    window.addEventListener("online", subir)
+    return () => window.removeEventListener("online", subir)
   }, [])
 
   useEffect(() => {
