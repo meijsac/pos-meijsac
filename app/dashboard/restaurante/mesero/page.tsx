@@ -116,7 +116,7 @@ export default function AppMesero(){
     const ahora = new Date().toISOString()
     const mesero = nombreUsuario() || "Mesero"
     const destino = platoSel.destino || (platoSel.cat === "BEBIDAS" ? "BARRA" : "PARRILLA")
-    const itemFinal: Item = {...platoSel, uid: `${Date.now()}`, mods:{...mods, nota}, cant:1, estado: "PENDIENTE", destino }
+    const itemFinal: Item = {...platoSel, uid: `${Date.now()}`, mods:{...mods, nota}, cant:1, estado: "ENVIADO", destino }
 
     const lista = mesas.map(m=>{
       if(m.id!==mesaActiva) return m
@@ -149,7 +149,7 @@ export default function AppMesero(){
     kds.push(ticket)
     localStorage.setItem("meijsac_kds", JSON.stringify(kds))
     localStorage.setItem("meijsac_cola_cocina", JSON.stringify(kds))
-    const guardado = await guardarRestaurante({ mesas: lista, tickets: kds })
+    const guardado = await guardarRestaurante({ mesas: lista, tickets: [ticket] })
     if (!guardado) alert("El pedido quedó en este equipo. La cocina lo verá cuando este equipo vuelva a conectarse.")
 
     if(navigator.vibrate) navigator.vibrate([100,50,100])

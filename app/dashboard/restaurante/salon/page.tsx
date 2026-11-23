@@ -54,17 +54,31 @@ export default function SalonCompleto(){
     const localCats = leerLocal("meijsac_categorias_menu")
     const base = localMesas.length ? localMesas : Array.from({length:12},(_,i)=>({ id:i+1, nombre:`Mesa ${i+1}`, zona: i<4?"Salón":i<8?"Terraza":"Barra", estado:"LIBRE", mesero:"", inicio:null, items:[], tiempo:0, capacidad:4 }))
     ticketsRef.current = leerLocal("meijsac_kds")
-    leerRestaurante().then((remoto) => {
-      if (!vivo) return
-      setMesas((remoto?.mesas.length ? remoto.mesas : base) as Mesa[])
-      if (remoto?.menu.length) setMenuRestaurante(remoto.menu)
-      else if (localMenu.length) setMenuRestaurante(localMenu)
-      if (remoto?.categorias.length) setCategoriasMenu(remoto.categorias as string[])
-      else if (localCats.length) setCategoriasMenu(localCats)
-      ticketsRef.current = remoto?.tickets.length ? remoto.tickets : ticketsRef.current
-      setMounted(true)
+    if (localMenu.length) setMenuRestaurante(localMenu)
+    if (localCats.length) setCategoriasMenu(localCats)
+    setMesas(base as Mesa[])
+    setMounted(true)
+    let decidido = false
+    const abrir = (remoto: Awaited<ReturnType<typeof leerRestaurante>>) => {
+      if (!vivo || decidido) return
+      decidido = true
+      if (remoto?.mesas.length) {
+        propia.current.mesas = JSON.stringify(remoto.mesas)
+        setMesas(remoto.mesas as Mesa[])
+      }
+      if (remoto?.menu.length) {
+        propia.current.menu = JSON.stringify(remoto.menu)
+        setMenuRestaurante(remoto.menu)
+      }
+      if (remoto?.categorias.length) {
+        propia.current.categorias = JSON.stringify(remoto.categorias)
+        setCategoriasMenu(remoto.categorias as string[])
+      }
+      if (remoto?.tickets.length) ticketsRef.current = remoto.tickets
       setListo(true)
-    }).catch(() => { if (vivo) { setMesas(base as Mesa[]); setMounted(true); setListo(true) } })
+    }
+    leerRestaurante().then(abrir).catch(() => abrir(null))
+    const espera = setTimeout(() => abrir(null), 4000)
     const reloj = setInterval(() => {
       leerRestaurante().then((remoto) => {
         if (!vivo || !remoto) return
@@ -77,7 +91,7 @@ export default function SalonCompleto(){
         ticketsRef.current = remoto.tickets
       }).catch(() => {})
     }, 2000)
-    return () => { vivo = false; clearInterval(reloj) }
+    return () => { vivo = false; clearTimeout(espera); clearInterval(reloj) }
   },[])
 
   useEffect(()=>{
@@ -190,7 +204,7 @@ export default function SalonCompleto(){
       mesaOrigenId: mesa.id, 
       origen:`Mesa ${mesa.id} - ${mesa.zona}`, 
       cliente:{nombre:"CONSUMIDOR FINAL MESA "+mesa.id, ruc:"9999999999999"}, 
-      items: mesa.items.map(i=>({descripcion:`${i.nombre} ${i.mods.termino?`(${i.mods.termino})`:''} ${i.mods.acomp?`con ${i.mods.acomp}`:''} ${i.mods.nota?`[${i.mods.nota}]`:''}`, nombre:i.nombre, precio:i.precio, cantidad:i.cant, cant:i.cant, mods:i.mods, iva:15})), 
+      items: (Array.isArray(mesa.items) ? mesa.items : []).map(i=>{ const mods = i.mods || {}; return {descripcion:`${i.nombre} ${mods.termino?`(${mods.termino})`:''} ${mods.acomp?`con ${mods.acomp}`:''} ${mods.nota?`[${mods.nota}]`:''}`, nombre:i.nombre, precio:i.precio, cantidad:i.cant, cant:i.cant, mods, iva:15} }), 
       subtotal: total, 
       iva: total*0.15, 
       propina: total*0.10, 
@@ -300,17 +314,21 @@ export default function SalonCompleto(){
         </div>
       </div>
       <div className="flex-1 space-y-2 overflow-y-auto">
-        {mesa?.items.map((it, index)=>(
-          <div key={`${it.uid}-${index}`} className={`p-3 rounded-xl border ${it.estado==="ENVIADO"?"bg-black/20 opacity-70":"bg-white/5"}`}>
-            <div className="flex justify-between"><b className="text-sm">{it.cant}x {it.nombre} {it.estado==="PENDIENTE" && <span className="text-[9px] bg-yellow-500 text-black px-1 rounded ml-2">PENDIENTE</span>}</b><span className="font-black text-[#00f5d4]">${(it.precio*it.cant).toFixed(2)}</span></div>
+        {(Array.isArray(mesa?.items) ? mesa.items : []).map((it, index)=>{
+          const mods = it?.mods || {}
+          const cant = Number(it?.cant) || 0
+          const precio = Number(it?.precio) || 0
+          return (
+          <div key={`${it?.uid || index}-${index}`} className={`p-3 rounded-xl border ${it?.estado==="ENVIADO"?"bg-black/20 opacity-70":"bg-white/5"}`}>
+            <div className="flex justify-between"><b className="text-sm">{cant}x {it?.nombre} {it?.estado==="PENDIENTE" && <span className="text-[9px] bg-yellow-500 text-black px-1 rounded ml-2">PENDIENTE</span>}</b><span className="font-black text-[#00f5d4]">${(precio*cant).toFixed(2)}</span></div>
             <div className="text-[11px] text-orange-300 mt-1">
-              {it.mods.termino && <div>- Término: {it.mods.termino}</div>}
-              {it.mods.acomp && <div>- Con: {it.mods.acomp}</div>}
-              {it.mods.nota && <div className="italic text-white/60">"{it.mods.nota}"</div>}
+              {mods.termino && <div>- Término: {mods.termino}</div>}
+              {mods.acomp && <div>- Con: {mods.acomp}</div>}
+              {mods.nota && <div className="italic text-white/60">"{mods.nota}"</div>}
             </div>
-            {it.estado==="PENDIENTE" && <button onClick={()=>setMesas(prev=>prev.map(m=>m.id===mesaActiva?{...m, items:m.items.filter(x=>x.uid!==it.uid)}:m))} className="text-[10px] text-red-400 mt-1">✕ Quitar</button>}
+            {it?.estado==="PENDIENTE" && <button onClick={()=>setMesas(prev=>prev.map(m=>m.id===mesaActiva?{...m, items:m.items.filter(x=>x.uid!==it.uid)}:m))} className="text-[10px] text-red-400 mt-1">✕ Quitar</button>}
           </div>
-        ))}
+        )})}
       </div>
       <button
         onClick={enviarLoteACocina}
@@ -363,7 +381,7 @@ export default function SalonCompleto(){
               setMesas(prev=>prev.map(m=>m.id===mesaActiva?{...m, items:[...m.items, nuevoItem], estado:"OCUPADA"}:m))
             }} className={`w-full p-3 rounded-xl bg-white/5 border border-white/10 text-left hover:bg-white/10 ${modoEdicionMenu?"opacity-60":""}`}>
               <div className="font-bold text-xs leading-tight">{plato.nombre}</div>
-              <div className="text-[10px] text-[#00f5d4] font-black mt-1">${plato.precio.toFixed(2)} - {plato.destino}</div>
+              <div className="text-[10px] text-[#00f5d4] font-black mt-1">${Number(plato.precio || 0).toFixed(2)} - {plato.destino || "COCINA"}</div>
             </button>
             {modoEdicionMenu && <button onClick={()=>{ if(!confirm(`¿Desactivar ${plato.nombre}?`)) return; setMenuRestaurante(prev=>prev.map(p=>p.id===plato.id?{...p, activo:false}:p)) }} className="absolute -top-2 -right-2 w-6 h-6 bg-red-500 rounded-full text-[10px] font-black flex items-center justify-center">✕</button>}
           </div>

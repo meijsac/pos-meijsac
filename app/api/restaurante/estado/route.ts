@@ -63,25 +63,22 @@ export async function PUT(req: Request) {
   const sesion = await usuarioConEmpresaDesdeRequest(req)
   if ("error" in sesion) return NextResponse.json({ error: sesion.error }, { status: sesion.status })
   const body = await req.json().catch(() => ({}))
-  const estado = await prisma.$transaction(async (tx) => {
-    await tx.$queryRaw`SELECT empresa_id FROM restaurante_estado WHERE empresa_id = ${sesion.empresa.id} FOR UPDATE`
-    const actual = await tx.restauranteEstado.findUnique({ where: { empresaId: sesion.empresa.id } })
-    const tickets = body.tickets === undefined
-      ? lista(actual?.tickets, 500)
-      : body.reemplazarTickets === true
-        ? lista(body.tickets, 500)
-        : mezclarTickets(actual?.tickets, lista(body.tickets, 500))
-    const data = {
-      mesas: body.mesas === undefined ? lista(actual?.mesas, 200) : conservarCodigoMesa(actual?.mesas, lista(body.mesas, 200)),
-      tickets,
-      menu: body.menu === undefined ? lista(actual?.menu, 500) : lista(body.menu, 500),
-      categorias: body.categorias === undefined ? lista(actual?.categorias, 80) : lista(body.categorias, 80),
-    }
-    return tx.restauranteEstado.upsert({
-      where: { empresaId: sesion.empresa.id },
-      update: data,
-      create: { empresaId: sesion.empresa.id, ...data },
-    })
+  const actual = await prisma.restauranteEstado.findUnique({ where: { empresaId: sesion.empresa.id } })
+  const tickets = body.tickets === undefined
+    ? lista(actual?.tickets, 500)
+    : body.reemplazarTickets === true
+      ? lista(body.tickets, 500)
+      : mezclarTickets(actual?.tickets, lista(body.tickets, 500))
+  const data = {
+    mesas: body.mesas === undefined ? lista(actual?.mesas, 200) : conservarCodigoMesa(actual?.mesas, lista(body.mesas, 200)),
+    tickets,
+    menu: body.menu === undefined ? lista(actual?.menu, 500) : lista(body.menu, 500),
+    categorias: body.categorias === undefined ? lista(actual?.categorias, 80) : lista(body.categorias, 80),
+  }
+  const estado = await prisma.restauranteEstado.upsert({
+    where: { empresaId: sesion.empresa.id },
+    update: data,
+    create: { empresaId: sesion.empresa.id, ...data },
   })
   return NextResponse.json({ ok: true, updatedAt: estado.updatedAt.toISOString() })
 }

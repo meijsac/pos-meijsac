@@ -33,7 +33,7 @@ export function sonarListo() {
 }
 
 export async function leerRestaurante(): Promise<EstadoRestaurante | null> {
-  const res = await fetch("/api/restaurante/estado", { credentials: "same-origin" }).catch(() => null)
+  const res = await fetch("/api/restaurante/estado", { credentials: "same-origin", signal: AbortSignal.timeout(8000) }).catch(() => null)
   if (!res?.ok) return null
   const data = await res.json().catch(() => null)
   if (!data || typeof data !== "object") return null
@@ -52,6 +52,7 @@ export async function guardarRestaurante(parte: Partial<Pick<EstadoRestaurante, 
     credentials: "same-origin",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(parte),
+    signal: AbortSignal.timeout(8000),
   }).catch(() => null)
   return Boolean(res?.ok)
 }
