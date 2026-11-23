@@ -76,12 +76,9 @@ const campo = "admin-campo"
 const panel = "admin-marco"
 
 const estilosAdmin = `
-@property --giro { syntax: "<angle>"; inherits: false; initial-value: 0deg; }
 .meijsac-admin { --fondo:#05070d; --texto:#f4fffd; --suave:rgba(244,255,253,.68); --tenue:rgba(244,255,253,.46); --panel:rgba(7,14,22,.78); --campo:rgba(255,255,255,.05); min-height:100vh; color:var(--texto); background-color:var(--fondo); background-image:radial-gradient(ellipse at top, rgba(0,245,212,.16), transparent 42%), radial-gradient(ellipse at bottom, rgba(99,102,241,.18), transparent 46%); }
 .meijsac-admin[data-tema="claro"] { --fondo:#f4fbfb; --texto:#102027; --suave:rgba(16,32,39,.72); --tenue:rgba(16,32,39,.52); --panel:rgba(255,255,255,.9); --campo:#ffffff; background-image:radial-gradient(ellipse at top, rgba(0,245,212,.28), transparent 42%), radial-gradient(ellipse at bottom, rgba(99,102,241,.12), transparent 48%); }
-.admin-marco { position:relative; border-radius:1rem; background:var(--panel); }
-.admin-marco::before { content:""; position:absolute; inset:0; border-radius:inherit; padding:1.5px; background:conic-gradient(from var(--giro), rgba(0,245,212,.15), #00f5d4, rgba(0,245,212,.15) 30%, #5eead4 58%, rgba(0,245,212,.15) 80%, #00f5d4); animation:admin-giro 7s linear infinite; -webkit-mask:linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0); -webkit-mask-composite:xor; mask:linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0); mask-composite:exclude; pointer-events:none; }
-@keyframes admin-giro { to { --giro:360deg; } }
+.admin-marco { border-radius:1rem; background:var(--panel); border:1px solid rgba(0,245,212,.55); box-shadow:0 0 18px rgba(0,245,212,.12); }
 .admin-campo { width:100%; border-radius:.75rem; border:1px solid rgba(0,245,212,.55); background:var(--campo); color:var(--texto); padding:.65rem .8rem; font-size:.875rem; outline:none; }
 .admin-campo::placeholder { color:var(--tenue); }
 .admin-suave { color:var(--suave); }
@@ -94,7 +91,6 @@ const estilosAdmin = `
 .meijsac-admin[data-tema="claro"] .chip-aviso { color:#b45309; }
 .admin-aviso { border:1px solid rgba(251,191,36,.45); background:rgba(251,191,36,.12); color:#fde68a; }
 .meijsac-admin[data-tema="claro"] .admin-aviso { color:#92400e; }
-@media (prefers-reduced-motion: reduce) { .admin-marco::before { animation:none; } }
 `
 
 function Lienzo({ claro, children }: { claro: boolean; children: ReactNode }) {
