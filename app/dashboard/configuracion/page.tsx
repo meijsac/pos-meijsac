@@ -445,6 +445,36 @@ export default function ConfiguracionAvanzadaSRI() {
       try {
         const guardada = JSON.parse(localStorage.getItem("meijsac_config_pro") || "null")
         if (guardada && typeof guardada === "object") setCfg(guardada)
+        else {
+          const emp = JSON.parse(localStorage.getItem("meijsac_empresa") || "{}")
+          const reg = JSON.parse(localStorage.getItem("meijsac_registro") || "{}")
+          const previo = { ...reg, ...emp }
+          if (previo.ruc || previo.razonSocial || previo.razon) {
+            setCfg({
+              ruc: previo.ruc || "",
+              razonSocial: previo.razonSocial || previo.razon || "",
+              nombreComercial: previo.nombreComercial || "",
+              dirMatriz: previo.dirMatriz || previo.direccion || "",
+              provincia: previo.provincia || "",
+              ciudad: previo.ciudad || "",
+              regimen: previo.regimen || "",
+              contribuyenteEspecial: previo.contribuyenteEspecial || "",
+              resolucionAgente: previo.resolucionAgente || "",
+              obligadoConta: previo.obligadoConta || previo.obligadoContabilidad || "",
+              agenteRetencion: previo.agenteRetencion || "NO",
+              ambiente: previo.ambiente || "1",
+              telefono: previo.telefono || "",
+              email: previo.email || previo.correo || "",
+              actividad: previo.actividad || "",
+              sucursales: Array.isArray(previo.sucursales) ? previo.sucursales : [],
+              firma: previo.firma || { nombre: "", clave: "", expira: "", ambiente: "1" },
+              secuenciales: Array.isArray(previo.secuenciales) ? previo.secuenciales : [],
+              roles: Array.isArray(previo.roles) && previo.roles.length ? previo.roles : [{ usuario: "admin", nombre: "Admin", rol: "ADMIN", permisos: {} }],
+              modoOffline: false,
+              colaOffline: [],
+            })
+          }
+        }
       } catch {}
       ;(async () => {
         const reg = JSON.parse(localStorage.getItem("meijsac_registro") || "{}");

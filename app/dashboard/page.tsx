@@ -159,7 +159,7 @@ export default function DashboardMeijsac(){
   const [accesoPlan, setAccesoPlan] = useState<any>(null)
   const [firmaMock, setFirmaMock] = useState({ vence: "", titular: "" })
   const [planMock, setPlanMock] = useState({ vence: "", nombre: "" })
-  const [userMock, setUserMock] = useState({ razon: "Cargando...", ruc: "", logo: "" })
+  const [userMock, setUserMock] = useState({ razon: "", ruc: "", logo: "" })
   
   useEffect(()=>{
     setMounted(true)

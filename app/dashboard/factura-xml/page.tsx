@@ -247,33 +247,6 @@ export default function FacturadorXMLReal(){
         }
       }
       const local = armar(empresa, cfg)
-      if (vivo && local.razon && local.ruc) {
-        setConfigEmisor(local)
-        setEmisorListo(true)
-        setEmisorCargando(false)
-      }
-      try {
-        const { cargarEmpresaSesion } = await import("@/lib/sesion-cliente")
-        empresa = await cargarEmpresaSesion()
-      } catch {}
-      cfg = {}
-      try { cfg = JSON.parse(localStorage.getItem("meijsac_config_pro") || "{}") } catch { cfg = {} }
-      const emisor = armar(empresa, cfg)
-      if (!vivo) return
-      setConfigEmisor(emisor)
-      setEmisorListo(Boolean(emisor.razon && emisor.ruc && emisor.regimen))
-      setEmisorCargando(false)
-      const idEmpresa = String(emisor.empresaId || empresa?.id || empresa?.empresaId || "")
-      const locales: any[] = []
-      if (idEmpresa) {
-        try { locales.push(...JSON.parse(localStorage.getItem(`productos_${idEmpresa}`) || "[]")) } catch {}
-      }
-      let remotos: any[] = []
-      try {
-        const res = await fetch("/api/productos")
-        const data = await res.json()
-        if (Array.isArray(data)) remotos = data
-      } catch {}
       const normal = (p: any) => {
         const ficha = p?.ficha && typeof p.ficha === "object" ? p.ficha : {}
         return {
@@ -290,6 +263,36 @@ export default function FacturadorXMLReal(){
           codigoPorcentaje: ficha.codigoPorcentaje || p.codigoPorcentaje,
         }
       }
+      const leerLocales = (idEmpresa: string) => {
+        if (!idEmpresa) return []
+        try {
+          const data = JSON.parse(localStorage.getItem(`productos_${idEmpresa}`) || "[]")
+          return Array.isArray(data) ? data : []
+        } catch { return [] }
+      }
+      const idLocal = String(local.empresaId || empresa?.id || empresa?.empresaId || "")
+      const localesIniciales = leerLocales(idLocal)
+      if (vivo && localesIniciales.length) setProductos(localesIniciales.map(normal))
+      if (vivo && local.razon && local.ruc) {
+        setConfigEmisor(local)
+        setEmisorListo(true)
+        setEmisorCargando(false)
+      }
+      const productosRemotos = fetch("/api/productos").then((res) => res.json()).then((data) => Array.isArray(data) ? data : []).catch(() => [])
+      try {
+        const { cargarEmpresaSesion } = await import("@/lib/sesion-cliente")
+        empresa = await cargarEmpresaSesion()
+      } catch {}
+      cfg = {}
+      try { cfg = JSON.parse(localStorage.getItem("meijsac_config_pro") || "{}") } catch { cfg = {} }
+      const emisor = armar(empresa, cfg)
+      if (!vivo) return
+      setConfigEmisor(emisor)
+      setEmisorListo(Boolean(emisor.razon && emisor.ruc && emisor.regimen))
+      setEmisorCargando(false)
+      const idEmpresa = String(emisor.empresaId || empresa?.id || empresa?.empresaId || "")
+      const locales = localesIniciales.length && idEmpresa === idLocal ? localesIniciales : leerLocales(idEmpresa)
+      const remotos = await productosRemotos
       const vistos = new Set<string>()
       const lista = [...locales, ...remotos].map(normal).filter((p) => {
         const clave = String(p.codigo || p.id || p.nombre || "").toLowerCase()

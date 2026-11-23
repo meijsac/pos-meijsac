@@ -17,20 +17,33 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const planCerrado = modulosPlan !== undefined && !rutaDePlanPermitida(pathname, modulosPlan)
 
   useEffect(() => {
-    ;["/dashboard", "/dashboard/comprobantes", "/dashboard/configuracion", "/dashboard/factura-xml", "/dashboard/clientes", "/dashboard/productos", "/dashboard/caja", "/dashboard/respaldo"].forEach((ruta) => router.prefetch(ruta))
-  }, [pathname, router])
+    const rutas = ["/dashboard", "/dashboard/comprobantes", "/dashboard/configuracion", "/dashboard/factura-xml", "/dashboard/clientes", "/dashboard/productos", "/dashboard/caja", "/dashboard/respaldo"]
+    const avisos: number[] = []
+    const empezar = window.setTimeout(() => {
+      rutas.forEach((ruta, i) => {
+        avisos.push(window.setTimeout(() => router.prefetch(ruta), i * 350))
+      })
+    }, 1600)
+    return () => {
+      window.clearTimeout(empezar)
+      avisos.forEach((aviso) => window.clearTimeout(aviso))
+    }
+  }, [router])
 
   useEffect(() => {
-    if (!sessionStorage.getItem("meijsac_firma_ok")) {
-      fetch("/api/sri/clave-firma", { credentials: "same-origin" })
+    const espera = window.setTimeout(() => {
+      if (!sessionStorage.getItem("meijsac_firma_ok")) {
+        fetch("/api/sri/clave-firma", { credentials: "same-origin" })
+          .then((r) => r.ok ? r.json() : null)
+          .then((firma) => sessionStorage.setItem("meijsac_firma_ok", firma?.guardada ? "1" : "0"))
+          .catch(() => {})
+      }
+      void fetch("/api/empresa/mia", { credentials: "same-origin" })
         .then((r) => r.ok ? r.json() : null)
-        .then((firma) => sessionStorage.setItem("meijsac_firma_ok", firma?.guardada ? "1" : "0"))
+        .then((data) => { if (data?.empresa) guardarEmpresaLocal(data.empresa) })
         .catch(() => {})
-    }
-    void fetch("/api/empresa/mia", { credentials: "same-origin" })
-      .then((r) => r.ok ? r.json() : null)
-      .then((data) => { if (data?.empresa) guardarEmpresaLocal(data.empresa) })
-      .catch(() => {})
+    }, 1200)
+    return () => window.clearTimeout(espera)
   }, [])
 
   useEffect(() => {
@@ -81,12 +94,16 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         fetch("/api/sri/reintentar", { method: "POST", credentials: "same-origin" }).catch(() => {})
       })
     }
+    let espera = 0
     if (!sessionStorage.getItem("meijsac_sri_reintento")) {
       sessionStorage.setItem("meijsac_sri_reintento", "1")
-      subir()
+      espera = window.setTimeout(subir, 1600)
     }
     window.addEventListener("online", subir)
-    return () => window.removeEventListener("online", subir)
+    return () => {
+      window.clearTimeout(espera)
+      window.removeEventListener("online", subir)
+    }
   }, [])
 
   useEffect(() => {

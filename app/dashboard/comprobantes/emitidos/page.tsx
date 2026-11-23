@@ -78,17 +78,18 @@ export default function EmitidosPage(){
     setDocs(todos)
     setPendientes(todos.filter(d=> d.estadoSRI==='PENDIENTE_DE_AUTORIZAR' || d.estadoSRI==='PENDIENTE'))
     setBorradores(get("meijsac_borradores_facturas").filter((d: unknown) => esDelAmbiente(d, ambienteRef.current)))
-    const autorizo = await reenviarPendientes(todos)
-    if (autorizo && !refrescando) {
-      refrescando = true
-      await cargar()
-      refrescando = false
-    }
+    void reenviarPendientes(todos).then((autorizo) => {
+      if (autorizo && !refrescando) {
+        refrescando = true
+        void cargar().finally(() => { refrescando = false })
+      }
+    })
   }
 
   const reenviarPendientes = async (lista: ComprobanteHistorialSRI[], avisar = false) => {
     if (typeof navigator !== "undefined" && !navigator.onLine) return
-    const marcas = JSON.parse(sessionStorage.getItem("meijsac_sri_reintento") || "{}")
+    const crudo = JSON.parse(sessionStorage.getItem("meijsac_sri_reintento") || "{}")
+    const marcas = crudo && typeof crudo === "object" && !Array.isArray(crudo) ? crudo : {}
     const ahora = Date.now()
     let autorizo = false
     const candidatos = lista.filter((d) => {
