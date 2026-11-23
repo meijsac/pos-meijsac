@@ -5,11 +5,14 @@ import { EsisaAvatar } from '@/components/EsisaAvatar'
 import { SelloAmbiente } from '@/components/SelloAmbiente'
 import { guardarEmpresaLocal, limpiarSesionLocal } from '@/lib/sesion-cliente'
 import { permisosLocales, rutaPermitida } from '@/lib/permisos-pos'
+import { rutaDePlanPermitida } from '@/lib/plan-acceso'
+import { useModulosDelPlan } from '@/lib/use-modulos-plan'
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   const router = useRouter()
   const pathname = usePathname()
   const isDashboard = pathname === '/dashboard'
+  const modulosPlan = useModulosDelPlan()
 
   useEffect(() => {
     ;["/dashboard", "/dashboard/comprobantes", "/dashboard/configuracion", "/dashboard/factura-xml", "/dashboard/clientes", "/dashboard/productos", "/dashboard/caja", "/dashboard/respaldo"].forEach((ruta) => router.prefetch(ruta))
@@ -42,7 +45,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           if (data?.rol) {
             const previo = JSON.parse(localStorage.getItem("meijsac_user") || "{}")
             localStorage.setItem("meijsac_user", JSON.stringify({ ...previo, nombre: data.nombre || previo.nombre, rol: data.rol, permisos: data.permisos ?? null, empresaId: data.empresaId || previo.empresaId }))
-            if (!rutaPermitida(pathname, permisosLocales())) router.replace("/dashboard/factura-xml")
+            if (!rutaPermitida(pathname, permisosLocales())) router.replace(modulosPlan !== undefined && !rutaDePlanPermitida("/dashboard/factura-xml", modulosPlan) ? "/dashboard" : "/dashboard/factura-xml")
           }
           if (!tieneLocal()) {
             const data = await fetch("/api/empresa/mia", { credentials: "same-origin" }).then((r) => r.json()).catch(() => null)
@@ -67,8 +70,9 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   }, [router])
 
   useEffect(() => {
-    if (!rutaPermitida(pathname, permisosLocales())) router.replace("/dashboard/factura-xml")
-  }, [pathname, router])
+    if (!rutaPermitida(pathname, permisosLocales())) router.replace(modulosPlan !== undefined && !rutaDePlanPermitida("/dashboard/factura-xml", modulosPlan) ? "/dashboard" : "/dashboard/factura-xml")
+    if (modulosPlan !== undefined && !rutaDePlanPermitida(pathname, modulosPlan)) router.replace("/dashboard")
+  }, [pathname, router, modulosPlan])
 
   useEffect(() => {
     if (sessionStorage.getItem("meijsac_sri_reintento")) return

@@ -428,9 +428,12 @@ export default function AdminModuladorCompleto() {
 }
 
 function conDocumentosGuardados(modulos: string[]) {
-  if (modulos.some((nombre) => DOCUMENTOS_ADICIONALES.includes(nombre))) return modulos
-  if (!modulos.includes("COMPROBANTES ADICIONALES")) return modulos
-  return [...modulos, ...DOCUMENTOS_ADICIONALES]
+  let lista = modulos
+  if (!lista.some((nombre) => (CARPETAS_PLAN as readonly string[]).includes(nombre)) && lista.includes("CONFIGURACIÓN")) {
+    lista = [...lista, ...CARPETAS_PLAN]
+  }
+  if (lista.some((nombre) => DOCUMENTOS_ADICIONALES.includes(nombre)) || !lista.includes("COMPROBANTES ADICIONALES")) return lista
+  return [...lista, ...DOCUMENTOS_ADICIONALES]
 }
 
 function ModulosPlan({ elegidos, onChange }: { elegidos: string[]; onChange: (modulos: string[]) => void }) {

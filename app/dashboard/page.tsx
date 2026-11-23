@@ -5,6 +5,7 @@ import { useEffect, useState } from "react"
 import { cargarEmpresaSesion, cerrarSesionEnEsteEquipo } from "@/lib/sesion-cliente"
 import { useAmbienteVivo } from "@/components/SelloAmbiente"
 import { permisosLocales, rutaPermitida, type PermisosPos } from "@/lib/permisos-pos"
+import { seccionPermitida } from "@/lib/plan-acceso"
 
 const CORPORATE = "#23AAB3"
 
@@ -424,7 +425,7 @@ export default function DashboardMeijsac(){
         </div>
 
         <div className={`grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-3 max-w-[1600px] mx-auto ${estaBloqueado ? 'pointer-events-none opacity-40 grayscale' : ''}`}>
-          {modules.filter((m) => rutaPermitida(m.href, acceso)).map((m,i)=>{
+          {modules.filter((m) => rutaPermitida(m.href, acceso) && seccionPermitida(accesoPlan?.modulos, m.title)).map((m,i)=>{
             const isSide = m.title === "CONFIGURACIÓN" || m.title === "COMPROBANTES ELECTRÓNICOS"
             // Si es SOFT BLOCK, POS y COMPROBANTES no dejan entrar
             const bloqueadoPorSoft = estaPorVencer && (m.title.includes("COMPROBANTES") || m.title.includes("POS") || m.title.includes("RESTAURANTE"))

@@ -3,6 +3,8 @@ import { useState, useEffect, useRef } from "react";
 import Link from "next/link";
 import { feriadosIvaReducido } from '@/lib/iva-feriados.config';
 import { cargarEmpresaSesion } from "@/lib/sesion-cliente";
+import { carpetaPermitida } from "@/lib/plan-acceso";
+import { useModulosDelPlan } from "@/lib/use-modulos-plan";
 import { publicarAmbiente } from "@/components/SelloAmbiente";
 import { errorLogo } from "@/lib/logo-empresa";
 import DocumentosLegales from "./documentos-legales";
@@ -179,12 +181,33 @@ function MetodoInventario() {
   );
 }
 
+const PESTANAS = [
+    ["IDENTIDAD", "Identidad"],
+    ["FIRMA", "Firma"],
+    ["SECUENCIALES", "Secuenciales"],
+    ["IMPUESTOS", "Impuestos"],
+    ["INVENTARIO", "Inventario"],
+    ["SEGURIDAD", "Seguridad"],
+    ["WHATSAPP", "WhatsApp"],
+    ["RESPALDO", "Respaldo"],
+    ["MARCA RIDE", "Marca RIDE"],
+    ["DOCUMENTOS", "Documentos"],
+    ["PERMISOS", "Permisos"],
+    ["AMBIENTE SRI", "Ambiente SRI"],
+] as const
+
 export default function ConfiguracionAvanzadaSRI() {
     const [tab, setTab] = useState("IDENTIDAD");
+    const modulosPlan = useModulosDelPlan();
+    const pestanas = PESTANAS.filter(([, carpeta]) => carpetaPermitida(modulosPlan, carpeta));
     useEffect(() => {
         const pedido = new URLSearchParams(window.location.search).get("tab");
         if (pedido === "DOCUMENTOS" || pedido === "SECUENCIALES") setTab(pedido);
     }, []);
+    useEffect(() => {
+        if (modulosPlan === undefined) return;
+        if (!pestanas.some(([id]) => id === tab) && pestanas[0]) setTab(pestanas[0][0]);
+    }, [modulosPlan, tab, pestanas]);
     useEffect(() => {
         if (tab !== "AMBIENTE SRI" && tab !== "FIRMA") return;
         let vivo = true;
@@ -603,7 +626,7 @@ base.sucursales = datosReales.sucursales || base.sucursales || [];
         <div className="min-h-screen bg-[#060608] text-white p-4">
             <div className="flex justify-between items-center mb-4 bg-[#0c1e24] border border-[#294650] rounded-[20px] px-5 py-3">
     <div className="flex items-center gap-4">
-      <GearFuturista size={52} active={tab === "AMBIENTE SRI"} onClick={() => setTab("AMBIENTE SRI")} />
+      {carpetaPermitida(modulosPlan, "Ambiente SRI") && <GearFuturista size={52} active={tab === "AMBIENTE SRI"} onClick={() => setTab("AMBIENTE SRI")} />}
       <h1 className="text-white font-black text-[14px] tracking-widest">
         MEIJSAC POS - CENTRO DE CONTROL MODULAR SRI
       </h1>
@@ -611,7 +634,7 @@ base.sucursales = datosReales.sucursales || base.sucursales || [];
     <button onClick={() => location.href = '/dashboard'} className="bg-white/10 px-4 py-2 rounded-xl text-xs">← Dashboard</button>
 </div>
 
-            <div className="mb-4 max-w-sm">
+            {carpetaPermitida(modulosPlan, "Catálogo SRI") && <div className="mb-4 max-w-sm">
                 <Link href="/dashboard/configuracion/catalogo-sri" className="bg-[#11131a] border border-white/10 rounded-2xl px-4 py-4 flex items-center gap-3">
                     <span className="text-2xl" aria-hidden="true">📁</span>
                     <span>
@@ -619,10 +642,10 @@ base.sucursales = datosReales.sucursales || base.sucursales || [];
                         <span className="block text-[10px] text-white/50">IVA y retenciones</span>
                     </span>
                 </Link>
-            </div>
+            </div>}
 
             <div className="flex gap-2 mb-4 overflow-x-auto pb-2">
-                {["IDENTIDAD", "FIRMA", "SECUENCIALES", "IMPUESTOS", "INVENTARIO", "SEGURIDAD", "WHATSAPP", "RESPALDO", "MARCA RIDE", "DOCUMENTOS", "PERMISOS", "AMBIENTE SRI"].map(t => (
+                {pestanas.map(([t]) => (
                     <button key={t} onClick={() => setTab(t)} className={`px-4 py-2 rounded-xl text-[10px] font-black whitespace-nowrap ${tab === t ? 'bg-[#00f5d4] text-black' : 'bg-[#11131a] border border-white/10'}`}>{t}</button>
                 ))}
             </div>
