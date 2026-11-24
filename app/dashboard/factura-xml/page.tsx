@@ -456,6 +456,8 @@ const [sugerencias, setSugerencias] = useState<any[]>([]);
   }
 
   const [productos, setProductos] = useState<any[]>([])
+  const [altaProducto, setAltaProducto] = useState<null | { codigo: string; nombre: string; precio: string; stock: string; tipoIva: string }>(null)
+  const [guardandoProducto, setGuardandoProducto] = useState(false)
   useEffect(() => { void cargarCatalogo() }, [])
     const codigoRef = useRef<HTMLInputElement>(null)
   const [codigoRapido, setCodigoRapido] = useState("")
@@ -737,6 +739,41 @@ const manejarConsultaSRIExpress = async () => {
     buscarRef.current = (texto: string) => { void buscarYAgregarPorCodigoTexto(texto, false) }
   
   const addVacio = () => setItems([...items, {codigo:"", descripcion:"", detalle:"", detalleAdicional:"", cant:1, pUnit:0, descPorc:0, descDolar:0, codigoPorcentaje:"4", tarifa:15, iva:15, ice:0, esPlastico:false }])
+  const abrirAltaProducto = () => {
+    const escrito = String(textoLector.current || codigoRapido || "").trim()
+    const esCodigo = Boolean(escrito) && !escrito.includes(" ")
+    setAltaProducto({ codigo: esCodigo ? escrito : "", nombre: esCodigo ? "" : escrito, precio: "", stock: "0", tipoIva: "15%" })
+  }
+  const guardarProductoInventario = async () => {
+    if (!altaProducto) return
+    const codigo = altaProducto.codigo.trim()
+    const nombre = altaProducto.nombre.trim()
+    const precio = Number(altaProducto.precio)
+    if (!codigo || !nombre) return alert("Código y nombre son obligatorios")
+    if (!Number.isFinite(precio) || precio < 0) return alert("Pon el precio sin IVA")
+    const tipoIvaSRI = altaProducto.tipoIva
+    const ficha = { codigo, nombre, precioMinorista: precio, precioSinIVA: precio, tipoIvaSRI, detalle: "", gravaICE: false, porcIce: 0, valorIce: 0, stock: Number(altaProducto.stock) || 0 }
+    setGuardandoProducto(true)
+    try {
+      const res = await fetch("/api/productos", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${localStorage.getItem("meijsac_token") || ""}` },
+        body: JSON.stringify({ codigo, nombre, precio, stock: Number(altaProducto.stock) || 0, costo: 0, stockMinimo: 5, ficha }),
+      })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok) return alert(data.error || "No se pudo guardar el producto")
+      const producto = { ...ficha, codigo, nombre, precio, precioMinorista: precio }
+      setProductos((prev) => [producto, ...prev.filter((p) => String(p.codigo) !== codigo)])
+      addProducto(producto)
+      setAltaProducto(null)
+      textoLector.current = ""
+      setCodigoRapido("")
+      setSugerencias([])
+      setErrorLector("")
+    } finally {
+      setGuardandoProducto(false)
+    }
+  }
   // CATÁLOGO TABLA 17 SRI - TARIFAS IVA OFFLINE
 const CATALOGO_IVA_SRI: any = {
   "0":  { tarifa: 0,  label: "0% - 0% Canasta Básica / Medicina / Export",  sri: "0%" },
@@ -900,15 +937,10 @@ const total = subtotalSin + iva15 + ivaDiferenciado + valorICE + valorIRBPNR + p
     if (tipoCobro === "credito" && (!(plazoCredito > 0) || !(cuotasCredito >= 1))) return alert("Para crédito debes poner plazo y cuotas")
     if (!window.confirm("¿Está seguro de enviar la factura al SRI?")) return
     setEnviandoSri(true)
-    const venta = window.open("", "_blank")
-    try {
-      venta?.document.write("<p style=\"font-family:Arial,sans-serif;padding:24px\">Generando el comprobante…</p>")
-      venta?.document.close()
-    } catch {}
     const { emisionBloqueada, rucLocal } = await import("@/lib/plan-cliente")
     const avisoPlan = await emisionBloqueada(configEmisor?.ruc || rucLocal())
-    if (avisoPlan) { setEnviandoSri(false); venta?.close(); return alert(avisoPlan) }
-    if (!Number.isFinite(total)) { setEnviandoSri(false); venta?.close(); return alert("No se puede emitir: faltan valores de la factura que no se pueden calcular.") }
+    if (avisoPlan) { setEnviandoSri(false); return alert(avisoPlan) }
+    if (!Number.isFinite(total)) { setEnviandoSri(false); return alert("No se puede emitir: faltan valores de la factura que no se pueden calcular.") }
     const sinCobro = tipoCobro === "pendiente" || tipoCobro === "credito"
     const netoEmit = sinCobro ? 0 : (Number.isFinite(Number(pagosReales.efectivo)) ? Number(pagosReales.efectivo) : 0)
     const entregadoCaja = Number(abonos.efectivo || 0) + Number(abonos.transfer || 0) + Number(abonos.tarjeta || 0)
@@ -1075,7 +1107,6 @@ const total = subtotalSin + iva15 + ivaDiferenciado + valorICE + valorIRBPNR + p
       if (!guardado.ok) {
         const faltan = Array.isArray(guardada.faltantes) ? `\n${guardada.faltantes.join("\n")}` : ""
         setEnviandoSri(false)
-        venta?.close()
         alert((guardada.error || "No se pudo guardar la factura en la base.") + faltan)
         cargarPunto()
         return
@@ -1096,18 +1127,12 @@ const total = subtotalSin + iva15 + ivaDiferenciado + valorICE + valorIRBPNR + p
       facturaPendiente.mensajeSri = guardada.mensaje || ""
       facturaPendiente.mensajesSri = guardada.mensajes || []
       const claveRide = String(guardada.claveAcceso || facturaPendiente.claveAcceso || "").replace(/\D/g, "")
-      const urlRide = `/dashboard/factura-xml/visor/${claveRide}`
-      setEnviandoSri(false)
-      if (claveRide.length === 49) {
-        if (venta && !venta.closed) venta.location.href = urlRide
-        else {
-          const abierta = window.open(urlRide, "_blank")
-          if (!abierta) alert(`La factura quedó ${estadoVisible}. Permite las ventanas emergentes para ver el comprobante.`)
-        }
-      } else {
-        venta?.close()
+      if (claveRide.length !== 49) {
+        setEnviandoSri(false)
         alert("No se pudo obtener la clave de acceso del comprobante.")
+        return
       }
+      await guardarSecuencialUsado(serieUsada, secUsado)
       try {
       void guardarClienteEmitido(facturaPendiente.cliente)
       const listaDoc = {
@@ -1137,17 +1162,14 @@ const total = subtotalSin + iva15 + ivaDiferenciado + valorICE + valorIRBPNR + p
         const previa = JSON.parse(localStorage.getItem(clave) || "[]")
         localStorage.setItem(clave, JSON.stringify([...previa, listaDoc]))
       })
-      void guardarSecuencialUsado(serieUsada, secUsado).then((siguiente) => {
-        if (siguiente) setPuntoEmision((p) => ({ ...p, secuencial: siguiente, ultimo: String(secUsado || "").replace(/\D/g, "").padStart(9, "0") }))
-      })
-      cargarPunto()
       localStorage.setItem("meijsac_ultima_factura_pendiente", JSON.stringify(facturaPendiente))
       } catch (error) {
         console.error(error)
       }
+      window.location.replace(`/dashboard/factura-xml/visor/${claveRide}`)
+      return
     } catch (error) {
       setEnviandoSri(false)
-      venta?.close()
       const sinRed = !navigator.onLine || error instanceof TypeError
       if (sinRed) {
         encolarFacturaSinRed(cuerpoFactura)
@@ -1540,7 +1562,7 @@ const total = subtotalSin + iva15 + ivaDiferenciado + valorICE + valorIRBPNR + p
     className="flex-1 bg-[#0f172a] border border-transparent p-3 rounded-lg text-white font-mono text-sm outline-none"
     autoFocus
   />
-  <button type="button" onMouseDown={(e)=>e.preventDefault()} onClick={()=> buscarYAgregarPorCodigoTexto(textoLector.current || codigoRapido, true)} className="bg-teal-400 text-slate-950 px-4 py-3 rounded-lg font-semibold text-xs">+ Agregar</button>
+  <button type="button" onMouseDown={(e)=>e.preventDefault()} onClick={abrirAltaProducto} className="bg-teal-400 text-slate-950 px-4 py-3 rounded-lg font-semibold text-xs">Nuevo producto</button>
 
   {sugerencias.length>0 && (
     <div className="absolute top-full left-0 mt-2 w-[85%] max-h-72 overflow-y-auto bg-[#0f172a] border border-[#00f5d4]/40 rounded-xl z-[100] shadow-2xl">
@@ -1558,6 +1580,29 @@ const total = subtotalSin + iva15 + ivaDiferenciado + valorICE + valorIRBPNR + p
   )}
 </div>
 {errorLector && <p className="mt-2 text-sm font-bold text-red-400">{errorLector}</p>}
+{altaProducto && (
+  <div className="fixed inset-0 bg-black/80 z-[160] flex items-center justify-center p-4">
+    <div className="bg-[#0f172a] w-full max-w-md rounded-2xl border border-[#00f5d4]/40 p-5 text-white">
+      <h2 className="font-black text-[#00f5d4] mb-3">Nuevo producto</h2>
+      <div className="grid gap-2">
+        <input value={altaProducto.codigo} onChange={(e) => setAltaProducto({ ...altaProducto, codigo: e.target.value })} placeholder="Código" className="bg-black border border-white/10 rounded-lg p-2 text-sm" />
+        <input value={altaProducto.nombre} onChange={(e) => setAltaProducto({ ...altaProducto, nombre: e.target.value })} placeholder="Nombre" className="bg-black border border-white/10 rounded-lg p-2 text-sm" />
+        <input type="number" min="0" step="0.01" value={altaProducto.precio} onChange={(e) => setAltaProducto({ ...altaProducto, precio: e.target.value })} placeholder="Precio sin IVA" className="bg-black border border-white/10 rounded-lg p-2 text-sm" />
+        <input type="number" min="0" step="1" value={altaProducto.stock} onChange={(e) => setAltaProducto({ ...altaProducto, stock: e.target.value })} placeholder="Stock" className="bg-black border border-white/10 rounded-lg p-2 text-sm" />
+        <select value={altaProducto.tipoIva} onChange={(e) => setAltaProducto({ ...altaProducto, tipoIva: e.target.value })} className="bg-black border border-white/10 rounded-lg p-2 text-sm">
+          <option value="15%">IVA 15%</option>
+          <option value="0%">IVA 0%</option>
+          <option value="EXENTO">Exento</option>
+          <option value="NO_OBJETO">No objeto</option>
+        </select>
+      </div>
+      <div className="flex gap-2 mt-4">
+        <button type="button" onClick={() => setAltaProducto(null)} className="flex-1 bg-white/10 py-3 rounded-xl font-bold">Cerrar</button>
+        <button type="button" disabled={guardandoProducto} onClick={() => { void guardarProductoInventario() }} className="flex-1 bg-[#00f5d4] text-black py-3 rounded-xl font-black disabled:opacity-50">{guardandoProducto ? "Guardando…" : "Guardar en inventario"}</button>
+      </div>
+    </div>
+  </div>
+)}
 {productos.length === 0 && <p className="mt-2 text-sm font-bold text-red-400">No hay productos cargados - revisar API</p>}
 
         {items.length > 0 && (

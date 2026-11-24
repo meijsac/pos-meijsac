@@ -102,20 +102,15 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: e.message || "No se pudo firmar el XML" }, { status: 400 })
     }
     if (body?.estadoSRI !== "BORRADOR") {
-      const previas = await prisma.facturaEmitida.findMany({
-        where: { empresaId: sesion.empresa.id },
-        select: { payload: true },
-        orderBy: { createdAt: "desc" },
-        take: 400,
-      })
       const serie = `${armado.estab}-${armado.pto}`
-      const repetida = previas.some((fila) => {
-        const p = (fila.payload || {}) as any
-        const est = String(p.establecimiento || "")
-        const sec = String(p.secuencial || "").replace(/\D/g, "").padStart(9, "0").slice(-9)
-        return est === serie && sec === armado.secuencial
-      })
-      if (repetida) return NextResponse.json({ error: `El secuencial ${serie}-${armado.secuencial} ya existe. No se puede emitir otra vez.` }, { status: 409 })
+      const repetidas = await prisma.$queryRaw<Array<{ id: string }>>`
+        SELECT id FROM "FacturaEmitida"
+        WHERE "empresaId" = ${sesion.empresa.id}
+        AND payload->>'establecimiento' = ${serie}
+        AND lpad(regexp_replace(COALESCE(payload->>'secuencial', ''), '[^0-9]', '', 'g'), 9, '0') = ${armado.secuencial}
+        LIMIT 1
+      `
+      if (repetidas.length) return NextResponse.json({ error: `El secuencial ${serie}-${armado.secuencial} ya existe. No se puede emitir otra vez.` }, { status: 409 })
     }
     body.claveAcceso = armado.claveAcceso
     body.establecimiento = `${armado.estab}-${armado.pto}`

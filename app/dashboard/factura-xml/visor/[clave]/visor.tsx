@@ -73,7 +73,7 @@ export function VisorComprobante({ clave, soloLectura = false }: { clave: string
     <div className="min-h-screen bg-slate-100 flex flex-col">
       <div className="print:hidden bg-slate-900 text-white p-4 flex justify-between items-center gap-3 shadow-md sticky top-0 z-10">
         <div className="flex gap-2 flex-wrap">
-          <Link href="/dashboard/factura-xml" className="bg-slate-700 hover:bg-slate-600 px-3 py-1.5 rounded text-xs font-medium">Regresar a facturar</Link>
+          <Link href="/dashboard/factura-xml" className="bg-slate-700 hover:bg-slate-600 px-3 py-1.5 rounded text-xs font-medium">Volver al facturador</Link>
           <Link href="/dashboard" className="bg-slate-700 hover:bg-slate-600 px-3 py-1.5 rounded text-xs font-medium">Ir al dashboard</Link>
         </div>
         <p className="text-[11px] text-slate-300 max-w-sm truncate">{estado}</p>
