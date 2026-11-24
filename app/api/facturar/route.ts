@@ -70,30 +70,41 @@ export async function POST(req: Request) {
       if (!punto.serie) return NextResponse.json({ error: "Configura el punto de emisión y guarda. No hay un secuencial fijo." }, { status: 400 })
       const serie = punto.serie
       const codigoAmbiente = ambientePrevio === "2" ? "2" : "1"
-      const previas = await prisma.$queryRaw<Array<{ secuencial: string | null; digito: string | null; envio: string | null }>>`
-        SELECT payload->>'secuencial' AS secuencial,
-          substring(COALESCE(payload->>'claveAcceso', '') from 24 for 1) AS digito,
-          payload->>'envioSri' AS envio
-        FROM "FacturaEmitida"
-        WHERE "empresaId" = ${sesion.empresa.id}
-        AND payload->>'establecimiento' = ${serie}
-        ORDER BY "createdAt" DESC
-        LIMIT 400
-      `
       const usados = new Set<string>()
-      for (const fila of previas) {
-        const envio = String(fila.envio || "").toUpperCase()
-        const mismo = fila.digito === "1" || fila.digito === "2"
-          ? fila.digito === codigoAmbiente
-          : envio.includes("PROD") ? codigoAmbiente === "2" : envio.includes("PRUEB") ? codigoAmbiente === "1" : true
-        if (!mismo) continue
-        const n = String(fila.secuencial || "").replace(/\D/g, "").padStart(9, "0").slice(-9)
-        if (n && n !== "000000000") usados.add(n)
+      let elegido = ""
+      for (let intento = 0; intento < 30; intento++) {
+        elegido = elegirSecuencial("", String(punto.ultimo || ""), usados)
+        if (!elegido) break
+        const ocupado = await prisma.$queryRaw<Array<{ id: string }>>`
+          SELECT id FROM "FacturaEmitida"
+          WHERE "empresaId" = ${sesion.empresa.id}
+          AND payload->>'establecimiento' = ${serie}
+          AND lpad(regexp_replace(COALESCE(payload->>'secuencial', ''), '[^0-9]', '', 'g'), 9, '0') = ${elegido}
+          AND (
+            substring(COALESCE(payload->>'claveAcceso', '') from 24 for 1) = ${codigoAmbiente}
+            OR (
+              substring(COALESCE(payload->>'claveAcceso', '') from 24 for 1) NOT IN ('1', '2')
+              AND (
+                (${codigoAmbiente} = '2' AND upper(COALESCE(payload->>'envioSri', '')) LIKE '%PROD%')
+                OR (${codigoAmbiente} = '1' AND upper(COALESCE(payload->>'envioSri', '')) LIKE '%PRUEB%')
+                OR (
+                  upper(COALESCE(payload->>'envioSri', '')) NOT LIKE '%PROD%'
+                  AND upper(COALESCE(payload->>'envioSri', '')) NOT LIKE '%PRUEB%'
+                )
+              )
+            )
+          )
+          LIMIT 1
+        `
+        if (!ocupado.length) break
+        usados.add(elegido)
+        elegido = ""
       }
+      if (!elegido) return NextResponse.json({ error: "No hay un secuencial libre en este punto de emisión." }, { status: 409 })
       const pedido = String(body.secuencial || "")
       body.establecimiento = serie
       body.ultimoSecuencial = punto.ultimo || body.ultimoSecuencial
-      body.secuencial = elegirSecuencial("", String(punto.ultimo || ""), usados)
+      body.secuencial = elegido
       console.log("[secuencial] emision", { serie, ultimoGuardado: punto.ultimo, llega: pedido, emite: body.secuencial })
     }
     let armado: ReturnType<typeof armarXmlFactura>
