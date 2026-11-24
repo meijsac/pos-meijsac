@@ -91,6 +91,7 @@ export function VisorComprobante({ clave, soloLectura = false }: { clave: string
             const fecha = fechaLista.current
             const nodoFecha = marco.current?.contentDocument?.getElementById("fecha-autorizacion")
             if (nodoFecha && fecha) nodoFecha.textContent = fecha
+            if (!soloLectura) fetch(`/dashboard/factura-xml/pdf/${clave}?xml=1`).catch(() => {})
           }} className={`w-full border-none ${ticket ? "h-[70vh]" : "h-[75vh]"}`} />
         </div>
       </div>

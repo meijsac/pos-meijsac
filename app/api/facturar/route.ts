@@ -9,7 +9,7 @@ import { firmarXmlEmpresa } from "@/lib/sri/firmar"
 import { ambienteDeEmpresa } from "@/lib/sri/ambiente"
 import { enviarAlSri } from "@/lib/sri/cliente-sri"
 import { guardarRespuestaSri, sriStatusDe } from "@/lib/sri/guardar-respuesta"
-import { elegirSecuencial, mismoAmbienteFactura, puntoActivoFactura } from "@/lib/sri/punto-emision"
+import { elegirSecuencial, puntoActivoFactura } from "@/lib/sri/punto-emision"
 import { avanzarSecuencialEmpresa } from "@/lib/sri/avanzar-secuencial"
 import { validarEntradaFactura } from "@/lib/factura-entrada"
 import { encolarReenvioSri } from "@/lib/security/cola"
@@ -25,23 +25,29 @@ export async function POST(req: Request) {
     const body = await req.json()
     const colaId = String(body?.colaId || "").trim()
     if (colaId) {
-      const recientes = await prisma.facturaEmitida.findMany({
-        where: { empresaId: sesion.empresa.id },
-        orderBy: { createdAt: "desc" },
-        take: 80,
-        select: { id: true, estado: true, payload: true },
-      })
-      const previa = recientes.find((fila) => String((fila.payload as { colaId?: string } | null)?.colaId || "") === colaId)
+      const recientes = await prisma.$queryRaw<Array<{ id: string; estado: string; clave: string | null; establecimiento: string | null; secuencial: string | null; fecha: string | null; firmado: string | null }>>`
+        SELECT id, estado,
+          payload->>'claveAcceso' AS clave,
+          payload->>'establecimiento' AS establecimiento,
+          payload->>'secuencial' AS secuencial,
+          payload->>'fechaAutorizacion' AS fecha,
+          payload->>'firmado' AS firmado
+        FROM "FacturaEmitida"
+        WHERE "empresaId" = ${sesion.empresa.id}
+        AND payload->>'colaId' = ${colaId}
+        ORDER BY "createdAt" DESC
+        LIMIT 1
+      `
+      const previa = recientes[0]
       if (previa) {
-        const payload = (previa.payload || {}) as { claveAcceso?: string; establecimiento?: string; secuencial?: string; firmado?: boolean; fechaAutorizacion?: string }
         return NextResponse.json({
           id: previa.id,
-          claveAcceso: payload.claveAcceso || "",
-          establecimiento: payload.establecimiento || "",
-          secuencial: payload.secuencial || "",
+          claveAcceso: previa.clave || "",
+          establecimiento: previa.establecimiento || "",
+          secuencial: previa.secuencial || "",
           estado: previa.estado,
-          firmado: Boolean(payload.firmado),
-          fechaAutorizacion: payload.fechaAutorizacion || "",
+          firmado: previa.firmado === "true",
+          fechaAutorizacion: previa.fecha || "",
           repetida: true,
         })
       }
@@ -63,18 +69,25 @@ export async function POST(req: Request) {
       const punto = puntoActivoFactura(datosRegistroDe(sesion.empresa.datosRegistro).secuenciales, ambientePrevio).punto
       if (!punto.serie) return NextResponse.json({ error: "Configura el punto de emisión y guarda. No hay un secuencial fijo." }, { status: 400 })
       const serie = punto.serie
-      const previas = await prisma.facturaEmitida.findMany({
-        where: { empresaId: sesion.empresa.id },
-        select: { payload: true },
-        orderBy: { createdAt: "desc" },
-        take: 400,
-      })
+      const codigoAmbiente = ambientePrevio === "2" ? "2" : "1"
+      const previas = await prisma.$queryRaw<Array<{ secuencial: string | null; digito: string | null; envio: string | null }>>`
+        SELECT payload->>'secuencial' AS secuencial,
+          substring(COALESCE(payload->>'claveAcceso', '') from 24 for 1) AS digito,
+          payload->>'envioSri' AS envio
+        FROM "FacturaEmitida"
+        WHERE "empresaId" = ${sesion.empresa.id}
+        AND payload->>'establecimiento' = ${serie}
+        ORDER BY "createdAt" DESC
+        LIMIT 400
+      `
       const usados = new Set<string>()
       for (const fila of previas) {
-        const p = (fila.payload || {}) as any
-        if (!mismoAmbienteFactura(p, ambientePrevio)) continue
-        if (String(p.establecimiento || "") !== serie) continue
-        const n = String(p.secuencial || "").replace(/\D/g, "").padStart(9, "0").slice(-9)
+        const envio = String(fila.envio || "").toUpperCase()
+        const mismo = fila.digito === "1" || fila.digito === "2"
+          ? fila.digito === codigoAmbiente
+          : envio.includes("PROD") ? codigoAmbiente === "2" : envio.includes("PRUEB") ? codigoAmbiente === "1" : true
+        if (!mismo) continue
+        const n = String(fila.secuencial || "").replace(/\D/g, "").padStart(9, "0").slice(-9)
         if (n && n !== "000000000") usados.add(n)
       }
       const pedido = String(body.secuencial || "")

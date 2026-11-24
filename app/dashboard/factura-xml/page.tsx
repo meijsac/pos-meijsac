@@ -1150,7 +1150,7 @@ const total = subtotalSin + iva15 + ivaDiferenciado + valorICE + valorIRBPNR + p
         numeroAutorizacion: guardada.numeroAutorizacion || "",
         mensajeSri: guardada.mensaje || "",
         estadoRecepcion: guardada.estadoRecepcion || "",
-        xmlContent: facturaPendiente.xmlContent || "",
+        xmlContent: "",
         tipo_cobro: facturaPendiente.tipo_cobro,
         estado_pago: facturaPendiente.estado_pago,
         plazo: facturaPendiente.plazo,
