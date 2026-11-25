@@ -121,10 +121,20 @@ export function htmlRide(data: {
     .total { display:flex; justify-content:space-between; padding:10px; background:#f0f9ff; border-top:2px solid #0284c7; font-weight:700; font-size:14px; }
     .num-sri { font-family:monospace; font-size:11px; word-break:break-all; margin:0; }
     @media print {
-      @page { size: A4; margin: 12mm; }
-      html, body { background:#fff !important; padding:0 !important; margin:0 !important; max-width:none !important; -webkit-print-color-adjust:exact; print-color-adjust:exact; }
+      @page { size: A4; margin: 8mm; }
+      html, body { background:#fff !important; padding:0 !important; margin:0 !important; max-width:none !important; font-size:10px !important; line-height:1.2 !important; -webkit-print-color-adjust:exact; print-color-adjust:exact; }
       .no-print { display:none !important; }
-      .num-sri { font-size:11px !important; }
+      h1, h2, h3, p, th, td, span, div { font-size:10px !important; }
+      h2 { font-size:12px !important; }
+      .num-sri { font-size:10px !important; }
+      .grid { gap:8px !important; margin-bottom:8px !important; }
+      .caja { padding:8px !important; }
+      .tot { padding:2px 6px !important; }
+      .total { padding:4px 6px !important; font-size:11px !important; }
+      th, td { padding:3px 4px !important; }
+      img { max-height:42px !important; margin-bottom:4px !important; }
+      svg { height:28px !important; }
+      body > div { margin-bottom:8px !important; padding:6px !important; gap:6px !important; }
       table { page-break-inside:auto; }
       thead { display:table-header-group; }
       tr { break-inside:avoid; page-break-inside:avoid; }
