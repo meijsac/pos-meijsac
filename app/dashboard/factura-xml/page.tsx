@@ -588,26 +588,60 @@ useEffect(()=>{
     }
     try {
       const crudo = sessionStorage.getItem("meijsac_proforma_factura")
-      if (!crudo) return
-      sessionStorage.removeItem("meijsac_proforma_factura")
-      const data = JSON.parse(crudo)
-      if (data?.cliente && typeof data.cliente === "object") setCliente((prev: any) => ({ ...prev, ...data.cliente }))
-      if (data?.propina) setPropinaCheck(true)
-      if (Array.isArray(data?.items) && data.items.length) {
-        setItems(data.items.map((it: any) => ({
+      if (crudo) {
+        sessionStorage.removeItem("meijsac_proforma_factura")
+        const data = JSON.parse(crudo)
+        if (data?.cliente && typeof data.cliente === "object") setCliente((prev: any) => ({ ...prev, ...data.cliente }))
+        if (data?.propina) setPropinaCheck(true)
+        if (Array.isArray(data?.items) && data.items.length) {
+          setItems(data.items.map((it: any) => ({
+            codigo: String(it.codigo || ""),
+            descripcion: String(it.descripcion || ""),
+            detalle: "",
+            detalleAdicional: "",
+            cant: Number(it.cant) || 1,
+            pUnit: Number(it.pUnit) || 0,
+            descPorc: Number(it.descPorc) || 0,
+            descDolar: 0,
+            codigoPorcentaje: String(it.codigoPorcentaje || "4"),
+            tarifa: Number(it.tarifa || 15),
+            iva: Number(it.iva || 15),
+            ice: Number(it.ice) || 0,
+            esPlastico: Boolean(it.esPlastico),
+          })))
+        }
+      }
+    } catch {}
+    try {
+      const pedido = new URLSearchParams(window.location.search).get("borrador")
+      if (!pedido) return
+      const lista = JSON.parse(localStorage.getItem("meijsac_borradores_facturas") || "[]")
+      const activo = JSON.parse(localStorage.getItem("meijsac_borrador_activo") || "null")
+      const elegido = (Array.isArray(lista) ? lista : []).find((b: { id?: string }) => String(b?.id || "") === pedido) || (activo && String(activo.id || "") === pedido ? activo : null)
+      if (!elegido) return
+      localStorage.removeItem("meijsac_borrador_activo")
+      sessionStorage.setItem("meijsac_borrador_en_edicion", pedido)
+      if (elegido.cliente && typeof elegido.cliente === "object") setCliente((prev: any) => ({ ...prev, ...elegido.cliente }))
+      if (Number(elegido.totales?.propina) > 0) setPropinaCheck(true)
+      if (Array.isArray(elegido.items) && elegido.items.length) {
+        setItems(elegido.items.map((it: any) => ({
           codigo: String(it.codigo || ""),
+          codigoAuxiliar: String(it.codigoAuxiliar || ""),
           descripcion: String(it.descripcion || ""),
-          detalle: "",
-          detalleAdicional: "",
+          detalle: String(it.detalle || ""),
+          detalleAdicional: String(it.detalleAdicional || ""),
           cant: Number(it.cant) || 1,
           pUnit: Number(it.pUnit) || 0,
           descPorc: Number(it.descPorc) || 0,
-          descDolar: 0,
+          descDolar: Number(it.descDolar) || 0,
           codigoPorcentaje: String(it.codigoPorcentaje || "4"),
-          tarifa: Number(it.tarifa || 15),
-          iva: Number(it.iva || 15),
-          ice: Number(it.ice) || 0,
+          tarifa: Number(it.tarifa || it.iva || 15),
+          iva: Number(it.iva || it.tarifa || 15),
+          porcIce: Number(it.porcIce) || 0,
+          valorIce: Number(it.valorIce) || 0,
+          ice: 0,
           esPlastico: Boolean(it.esPlastico),
+          tarifas: it.tarifas,
         })))
       }
     } catch {}
@@ -919,9 +953,6 @@ const total = subtotalSin + iva15 + ivaDiferenciado + valorICE + valorIRBPNR + p
     const actuales = JSON.parse(localStorage.getItem("meijsac_borradores_facturas")||"[]")
     const completo = { ...borrador, configEmisor, cliente, items, totales: { bruto, descuento, subtotalSin, base15, base0, baseNoObjeto, baseExento, baseDiferenciado, valorICE, valorIRBPNR, iva15, ivaDiferenciado, propina, total } }
     localStorage.setItem("meijsac_borradores_facturas", JSON.stringify([...actuales, completo]))
-    try {
-      await fetch("/api/facturas", { method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${localStorage.getItem("meijsac_token") || ""}` }, body: JSON.stringify(completo) })
-    } catch {}
     alert("El comprobante ha sido guardado.")
     window.location.href = "/dashboard/comprobantes/emitidos"
   }
@@ -1163,6 +1194,12 @@ const total = subtotalSin + iva15 + ivaDiferenciado + valorICE + valorIRBPNR + p
         localStorage.setItem(clave, JSON.stringify([...previa, listaDoc]))
       })
       localStorage.setItem("meijsac_ultima_factura_pendiente", JSON.stringify(facturaPendiente))
+      const idBorrador = sessionStorage.getItem("meijsac_borrador_en_edicion")
+      if (idBorrador) {
+        const lista = JSON.parse(localStorage.getItem("meijsac_borradores_facturas") || "[]")
+        localStorage.setItem("meijsac_borradores_facturas", JSON.stringify((Array.isArray(lista) ? lista : []).filter((b: { id?: string }) => String(b?.id || "") !== idBorrador)))
+        sessionStorage.removeItem("meijsac_borrador_en_edicion")
+      }
       } catch (error) {
         console.error(error)
       }
