@@ -6,11 +6,16 @@ import { puntoActivoFactura } from "@/lib/sri/punto-emision"
 
 type Item = {
   codigo: string
+  codigoAuxiliar: string
   descripcion: string
+  detalle: string
+  detalleAdicional: string
   cant: number
   pUnit: number
   descPorc: number
   codigoPorcentaje: string
+  porcIce: number
+  valorIce: number
   ice: number
   esPlastico: boolean
 }
@@ -37,7 +42,7 @@ function tarifaProducto(p: any) {
 
 export default function ProformaPage() {
   const [emisor, setEmisor] = useState({ razon: "", ruc: "", matriz: "", regimen: "" })
-  const [cliente, setCliente] = useState({ tipoDoc: "07", identificacion: "9999999999999", razon: "CONSUMIDOR FINAL", direccion: "", email: "", telefono: "" })
+  const [cliente, setCliente] = useState({ tipoDoc: "07", identificacion: "9999999999999", razon: "CONSUMIDOR FINAL", direccion: "", provincia: "", ciudad: "", email: "", telefono: "", celular: "", tipoCliente: "", regimen: "", id: "" })
   const [coincidentes, setClientes] = useState<any[]>([])
   const [items, setItems] = useState<Item[]>([])
   const [propina, setPropina] = useState(false)
@@ -119,14 +124,20 @@ export default function ProformaPage() {
     const precio = Number(p.precioMinorista ?? p.precio ?? p.ficha?.precioMinorista ?? 0)
     if (!Number.isFinite(precio)) { setAviso("Ese producto no tiene precio."); return }
     setAviso("")
+    const gravaIce = p.gravaICE !== false && p.ficha?.gravaICE !== false
     setItems((prev) => [...prev, {
       codigo: String(p.codigo || ""),
+      codigoAuxiliar: String(p.codigoAuxiliar || p.ficha?.codigoAuxiliar || ""),
       descripcion: String(p.nombre || p.descripcion || ""),
+      detalle: String(p.detalle || p.ficha?.detalle || ""),
+      detalleAdicional: String(p.detalle || p.ficha?.detalle || ""),
       cant: 1,
       pUnit: precio,
       descPorc: 0,
       codigoPorcentaje,
-      ice: Number(p.porcIce) || 0,
+      porcIce: gravaIce ? Number(p.porcIce ?? p.ficha?.porcIce) || 0 : 0,
+      valorIce: gravaIce ? Number(p.valorIce ?? p.ficha?.valorIce) || 0 : 0,
+      ice: 0,
       esPlastico: false,
     }])
     setTexto("")
@@ -192,7 +203,13 @@ export default function ProformaPage() {
           {coincidentes.length > 0 && (
             <div className="absolute z-20 mt-1 w-full max-h-60 overflow-y-auto bg-[#0f172a] border border-white/10 rounded-lg">
               {coincidentes.map((c) => (
-                <button type="button" key={c.id || c.identificacion} onClick={() => { setCliente({ tipoDoc: c.tipoId || "04", identificacion: c.identificacion || "", razon: c.razonSocial || "", direccion: c.direccion || "", email: c.email || "", telefono: c.telefono || "" }); setClientes([]) }} className="block w-full text-left px-3 py-2 text-[12px] hover:bg-white/10">
+                <button type="button" key={c.id || c.identificacion} onClick={() => {
+                  const id = String(c.identificacion || "")
+                  const digitos = id.replace(/\D/g, "")
+                  const tipoDoc = digitos === "9999999999999" ? "07" : digitos.length === 13 ? "04" : digitos.length === 10 ? "05" : "06"
+                  setCliente({ id: String(c.id || ""), tipoDoc, identificacion: id, razon: c.razonSocial || "", direccion: c.direccion || "", provincia: c.provincia || "", ciudad: c.ciudad || "", email: c.email || "", telefono: c.telefono || "", celular: c.telefono || "", tipoCliente: c.tipoCliente || "", regimen: c.regimen || "" })
+                  setClientes([])
+                }} className="block w-full text-left px-3 py-2 text-[12px] hover:bg-white/10">
                   {c.razonSocial} · {c.identificacion}
                 </button>
               ))}

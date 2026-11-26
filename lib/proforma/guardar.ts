@@ -56,13 +56,21 @@ export function armarPayload(body: unknown, emisor: EmisorProforma, atendidoPor:
   const propina = Boolean(pedido.propina)
   const totales = totalesProforma(items, propina)
   if (!Number.isFinite(totales.total)) return { error: "No se puede calcular el total" }
+  const digitos = identificacion.replace(/\D/g, "")
+  const tipoDoc = digitos === "9999999999999" ? "07" : digitos.length === 13 ? "04" : digitos.length === 10 ? "05" : texto(clienteRaw.tipoDoc, 4) || "06"
   const cliente = {
-    tipoDoc: texto(clienteRaw.tipoDoc, 4),
+    id: texto(clienteRaw.id, 40),
+    tipoDoc,
     identificacion,
     razon,
     direccion: texto(clienteRaw.direccion, 180),
+    provincia: texto(clienteRaw.provincia, 80),
+    ciudad: texto(clienteRaw.ciudad, 80),
     email: texto(clienteRaw.email, 120),
     telefono: texto(clienteRaw.telefono, 40),
+    celular: texto(clienteRaw.celular || clienteRaw.telefono, 40),
+    tipoCliente: texto(clienteRaw.tipoCliente, 40),
+    regimen: texto(clienteRaw.regimen, 80),
   }
   return {
     payload: {

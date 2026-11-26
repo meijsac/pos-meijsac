@@ -591,14 +591,18 @@ useEffect(()=>{
       if (crudo) {
         sessionStorage.removeItem("meijsac_proforma_factura")
         const data = JSON.parse(crudo)
-        if (data?.cliente && typeof data.cliente === "object") setCliente((prev: any) => ({ ...prev, ...data.cliente }))
+        if (data?.cliente && typeof data.cliente === "object") {
+          setCliente((prev: any) => ({ ...prev, ...data.cliente }))
+          if (data.cliente.id) void cargarSucursalesFactura(String(data.cliente.id))
+        }
         if (data?.propina) setPropinaCheck(true)
         if (Array.isArray(data?.items) && data.items.length) {
           setItems(data.items.map((it: any) => ({
             codigo: String(it.codigo || ""),
+            codigoAuxiliar: String(it.codigoAuxiliar || ""),
             descripcion: String(it.descripcion || ""),
-            detalle: "",
-            detalleAdicional: "",
+            detalle: String(it.detalle || ""),
+            detalleAdicional: String(it.detalleAdicional || it.detalle || ""),
             cant: Number(it.cant) || 1,
             pUnit: Number(it.pUnit) || 0,
             descPorc: Number(it.descPorc) || 0,
@@ -606,7 +610,9 @@ useEffect(()=>{
             codigoPorcentaje: String(it.codigoPorcentaje || "4"),
             tarifa: Number(it.tarifa || 15),
             iva: Number(it.iva || 15),
-            ice: Number(it.ice) || 0,
+            porcIce: Number(it.porcIce) || (Number(it.valorIce) > 0 ? 0 : Number(it.ice) || 0),
+            valorIce: Number(it.valorIce) || 0,
+            ice: 0,
             esPlastico: Boolean(it.esPlastico),
           })))
         }

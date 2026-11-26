@@ -1,10 +1,15 @@
 export type ItemProforma = {
   codigo: string
+  codigoAuxiliar: string
   descripcion: string
+  detalle: string
+  detalleAdicional: string
   cant: number
   pUnit: number
   descPorc: number
   codigoPorcentaje: string
+  porcIce: number
+  valorIce: number
   ice: number
   esPlastico: boolean
 }
@@ -49,14 +54,26 @@ export function itemProforma(row: unknown): ItemProforma | null {
   const descPorc = Math.min(100, Math.max(0, Number(fila.descPorc) || 0))
   return {
     codigo: texto(fila.codigo, 40),
+    codigoAuxiliar: texto(fila.codigoAuxiliar, 40),
     descripcion: texto(fila.descripcion, 300),
+    detalle: texto(fila.detalle, 300),
+    detalleAdicional: texto(fila.detalleAdicional || fila.detalle, 300),
     cant,
     pUnit,
     descPorc,
     codigoPorcentaje,
+    porcIce: Math.max(0, Number(fila.porcIce) || 0),
+    valorIce: Math.max(0, Number(fila.valorIce) || 0),
     ice: Math.max(0, Number(fila.ice) || 0),
     esPlastico: Boolean(fila.esPlastico),
   }
+}
+
+function iceDeProforma(item: ItemProforma) {
+  const base = item.cant * item.pUnit * (1 - item.descPorc / 100)
+  if (item.porcIce > 0) return base * item.porcIce / 100
+  if (item.valorIce > 0) return item.cant * item.valorIce
+  return item.ice
 }
 
 function base(items: ItemProforma[], codigo: string) {
@@ -70,12 +87,10 @@ export function totalesProforma(items: ItemProforma[], conPropina: boolean): Tot
   const descuento = items.reduce((suma, item) => suma + item.cant * item.pUnit * item.descPorc / 100, 0)
   const subtotalSin = bruto - descuento
   const base15 = base(items, "4")
-  const base5 = base(items, "5")
-  const base8 = base(items, "8")
   const propina = conPropina ? subtotalSin * 0.1 : 0
-  const iva15 = base15 * 0.15
-  const ivaDiferenciado = base5 * 0.05 + base8 * 0.08
-  const valorICE = items.reduce((suma, item) => suma + item.ice, 0)
+  const iva15 = items.filter((item) => item.codigoPorcentaje === "4").reduce((suma, item) => suma + (item.cant * item.pUnit * (1 - item.descPorc / 100) + iceDeProforma(item)) * 0.15, 0)
+  const ivaDiferenciado = items.filter((item) => item.codigoPorcentaje === "5").reduce((suma, item) => suma + (item.cant * item.pUnit * (1 - item.descPorc / 100) + iceDeProforma(item)) * 0.05, 0) + items.filter((item) => item.codigoPorcentaje === "8").reduce((suma, item) => suma + (item.cant * item.pUnit * (1 - item.descPorc / 100) + iceDeProforma(item)) * 0.08, 0)
+  const valorICE = items.reduce((suma, item) => suma + iceDeProforma(item), 0)
   const valorIRBPNR = items.filter((item) => item.esPlastico).reduce((suma, item) => suma + item.cant * 0.02, 0)
   const total = subtotalSin + iva15 + ivaDiferenciado + valorICE + valorIRBPNR + propina
   return {
