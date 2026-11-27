@@ -13,11 +13,11 @@ type Orden = {
   facturaId: string | null
   formula: { od?: { esf?: number; cil?: number; eje?: number }; oi?: { esf?: number; cil?: number; eje?: number } }
   paciente?: { nombres: string; apellidos: string; identificacion: string }
-  clienteFacturacion?: { razonSocial: string } | null
+  clienteFacturacion?: { id: string; razonSocial: string; identificacion?: string } | null
 }
 type Paciente = { id: string; nombres: string; apellidos: string; identificacion: string }
 type Producto = { nombre: string }
-type Cliente = { id: string; razonSocial: string; identificacion: string }
+type Cliente = { id: string; razonSocial: string; identificacion: string; direccion?: string; provincia?: string; ciudad?: string; email?: string; telefono?: string; tipoCliente?: string }
 
 const ESTADOS = [
   ["PENDIENTE_COTIZAR", "Por cotizar"],
@@ -122,6 +122,43 @@ function OrdenFila({ orden, guardar, campo }: { orden: Orden; guardar: (id: stri
   const [cliente, setCliente] = useState("")
   const [clientes, setClientes] = useState<Cliente[]>([])
   const [productos, setProductos] = useState<Producto[]>([])
+
+  async function irAlFacturador() {
+    const pago = orden.clienteFacturacion
+    try {
+      if (pago?.id) {
+        const data = await fetch("/api/clientes").then((r) => r.json()).catch(() => [])
+        const lista = Array.isArray(data) ? data : []
+        const fila = lista.find((c: Cliente) => c.id === pago.id)
+        if (fila) {
+          const identificacion = String(fila.identificacion || "")
+          const digitos = identificacion.replace(/\D/g, "")
+          const tipoDoc = digitos === "9999999999999" ? "07" : digitos.length === 13 ? "04" : digitos.length === 10 ? "05" : "06"
+          sessionStorage.setItem("meijsac_proforma_factura", JSON.stringify({
+            cliente: {
+              id: fila.id,
+              tipoDoc,
+              identificacion,
+              razon: fila.razonSocial || "",
+              direccion: fila.direccion || "",
+              provincia: fila.provincia || "",
+              ciudad: fila.ciudad || "",
+              email: fila.email || "",
+              telefono: fila.telefono || "",
+              celular: fila.telefono || "",
+              tipoCliente: fila.tipoCliente || "",
+            },
+          }))
+        } else {
+          sessionStorage.removeItem("meijsac_proforma_factura")
+        }
+      } else {
+        sessionStorage.removeItem("meijsac_proforma_factura")
+      }
+    } catch {}
+    window.location.href = "/dashboard/factura-xml"
+  }
+
   return (
     <article className="bg-white border border-slate-200 rounded-2xl p-4 space-y-2 shadow-sm">
       <b>{orden.paciente?.apellidos} {orden.paciente?.nombres}</b>
@@ -140,6 +177,7 @@ function OrdenFila({ orden, guardar, campo }: { orden: Orden; guardar: (id: stri
         <input value={secuencial} onChange={(e) => setSecuencial(e.target.value)} placeholder="Secuencial de la factura ya emitida" className={campo} />
         <button type="button" onClick={() => guardar(orden.id, { secuencial })} className="text-xs font-bold px-3 rounded-xl bg-slate-100 border border-slate-300 text-slate-900">Vincular</button>
       </div>
+      <button type="button" onClick={irAlFacturador} className="text-xs font-black bg-teal-600 text-white px-4 py-2 rounded-xl">Facturar</button>
     </article>
   )
 }

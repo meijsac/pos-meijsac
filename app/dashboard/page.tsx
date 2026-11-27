@@ -20,7 +20,7 @@ const modules = [
   { title: "CAJA", desc: "Apertura, cierre y arqueo", href: "/dashboard/caja", icon: "💰", size: "col-span-1", primary: false },
   { title: "CLIENTES", desc: "Gestión y políticas de crédito", href: "/dashboard/clientes", icon: "👥", size: "col-span-1", primary: false },
   { title: "REPORTES", desc: "Ventas, SRI, utilidades", href: "/dashboard/reportes", icon: "📈", size: "col-span-1", primary: false },
-  { title: "COMPROBANTES ADICIONALES", desc: "Proformas, historias, recetas", href: "/dashboard/comprobantes-adicionales", icon: "📋", size: "col-span-1", primary: true },
+  { title: "COMPROBANTES ADICIONALES", desc: "Proforma, ópticas, medicina y más", href: "/dashboard/comprobantes-adicionales", icon: "📋", size: "col-span-1", primary: true },
   { title: "RESPALDO / RESTAURAR", desc: "XML y PDF por fecha, cliente o factura", href: "/dashboard/respaldo", icon: "🗄️", size: "col-span-1", primary: false },
 ]
 
@@ -71,7 +71,7 @@ const titulosModulo: Record<string, string> = {
   "CAJA": "Caja",
   "CLIENTES": "Clientes",
   "REPORTES": "Reportes",
-  "COMPROBANTES ADICIONALES": "Comprobantes Adicionales",
+  "COMPROBANTES ADICIONALES": "Apps adicionales",
 }
 
 function BarrasColoresCompact({ series, filtro, setFiltro }: { series: Serie; filtro: Periodo; setFiltro: (f: Periodo) => void }){

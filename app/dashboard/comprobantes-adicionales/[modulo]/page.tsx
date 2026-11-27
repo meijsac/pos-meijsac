@@ -12,7 +12,7 @@ export default function ModuloAdicionalPage() {
   const modulo = moduloPorSlug(String(params.modulo || ""))
   if (!modulo) {
     return (
-      <Marco titulo="Comprobantes adicionales">
+      <Marco titulo="Apps adicionales">
         <p className="text-slate-300">Ese módulo no está en la lista.</p>
       </Marco>
     )

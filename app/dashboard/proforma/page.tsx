@@ -172,7 +172,7 @@ export default function ProformaPage() {
       <div className="max-w-7xl mx-auto flex flex-wrap gap-2 mb-4">
         <a href="/dashboard/factura-xml" className="bg-[#1e293b] border border-white/10 px-4 py-2 rounded-full text-[11px] font-bold">Facturador</a>
         <a href="/dashboard/proforma/emitidas" className="bg-[#1e293b] border border-white/10 px-4 py-2 rounded-full text-[11px] font-bold">Proformas emitidas</a>
-        <a href="/dashboard/comprobantes-adicionales" className="bg-[#1e293b] border border-white/10 px-4 py-2 rounded-full text-[11px] font-bold">Comprobantes adicionales</a>
+        <a href="/dashboard/comprobantes-adicionales" className="bg-[#1e293b] border border-white/10 px-4 py-2 rounded-full text-[11px] font-bold">Apps adicionales</a>
       </div>
       <div className="max-w-7xl mx-auto bg-[#1e293b] border border-white/10 rounded-xl p-4 mb-3">
         <h1 className="font-black text-lg">Proforma</h1>

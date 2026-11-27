@@ -8,7 +8,7 @@ import { Marco, tarjeta } from "./marco"
 export default function ComprobantesAdicionalesPage() {
   const modulos = useModulosDelPlan()
   return (
-    <Marco titulo="Comprobantes adicionales">
+    <Marco titulo="Apps adicionales">
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
         {MODULOS_ADICIONALES.map((modulo) => {
           const permitido = !modulo.documentos?.length

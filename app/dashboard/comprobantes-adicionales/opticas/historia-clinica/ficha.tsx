@@ -31,6 +31,7 @@ type Consulta = {
   motilidad?: { cover_test_vl?: string; cover_test_vp?: string; ppc?: string; versiones?: string }
   diagnosticos: { codigo_cie10?: string; descripcion?: string }[]
   adendas: { id: string; texto: string; createdAt: string; usuarioNombre: string }[]
+  orden?: { id: string; estado: string } | null
 }
 
 const ojoCero = (): Ojo => ({ esf: "0.00", cil: "0.00", eje: "0", add: "0.00" })
@@ -130,7 +131,31 @@ export function FichaOptica() {
     }
   }
 
+  function limpiarFormulario() {
+    setEditId("")
+    setMotivo("")
+    setPlan("")
+    setDiagnosticos([])
+    setAnamnesis({ usaLentes: false, tiempoUso: "", ultimoControl: "", antecedentesOculares: "", antecedentesSistemicos: "", alergias: "" })
+    setLenteOd(ojoCero())
+    setLenteOi(ojoCero())
+    setRxOd(ojoCero())
+    setRxOi(ojoCero())
+    setExtraOd({ prisma: "", dip: "", altura: "", avFinal: "" })
+    setExtraOi({ prisma: "", dip: "", altura: "", avFinal: "" })
+    setMaterial("")
+    setAgudeza({ vlSc: vistaCero(), vlCc: vistaCero(), ph: vistaCero(), vpSc: vistaCero(), vpCc: vistaCero() })
+    setExamen({ biomicroscopia: "", oftalmoscopia: "" })
+    setMotilidad({ coverVl: "", coverVp: "", ppc: "", versiones: "" })
+  }
+
+  function nuevaConsulta() {
+    limpiarFormulario()
+    setAviso("Formulario limpio. Al guardar se crea otra consulta. Las anteriores siguen en la lista.")
+  }
+
   async function abrir(fila: Paciente) {
+    if (paciente?.id !== fila.id) limpiarFormulario()
     setPaciente(fila)
     setError("")
     const data = await pedir(`/api/optica/consultas?pacienteId=${fila.id}`)
@@ -193,13 +218,14 @@ export function FichaOptica() {
         plan,
         sucursalId,
       }
-      if (editId) await pedir(`/api/optica/consultas/${editId}`, cuerpo, "PATCH")
-      else await pedir("/api/optica/consultas", { ...cuerpo, pacienteId: paciente.id })
-      setEditId("")
-      setMotivo("")
-      setPlan("")
-      setDiagnosticos([])
-      setAviso("Consulta guardada y abierta. Ciérrala para emitir la receta. No se puede borrar.")
+      const data = editId
+        ? await pedir(`/api/optica/consultas/${editId}`, cuerpo, "PATCH")
+        : await pedir("/api/optica/consultas", { ...cuerpo, pacienteId: paciente.id })
+      const id = String(data?.consulta?.id || editId || "")
+      if (id) setEditId(id)
+      setAviso(editId
+        ? "Esta misma consulta quedó actualizada. No se creó otra."
+        : "Consulta nueva guardada y abierta. Actualizar cambia esta misma. Nueva consulta empieza otra.")
       await abrir(paciente)
     } catch (e) {
       setError(e instanceof Error ? e.message : "No se pudo guardar")
@@ -243,11 +269,34 @@ export function FichaOptica() {
     setError("")
     try {
       await pedir(`/api/optica/consultas/${id}/cerrar`, {})
-      setAviso("Consulta cerrada. La receta quedó en la orden de trabajo.")
+      if (editId === id) limpiarFormulario()
+      setAviso("Consulta cerrada. La receta quedó lista y la orden de trabajo ya se creó. Ábrela con Ver orden de trabajo.")
       await abrir(paciente)
     } catch (e) {
       setError(e instanceof Error ? e.message : "No se pudo cerrar")
     }
+  }
+
+  async function irAlFacturador() {
+    if (!paciente) return
+    const identificacion = String(paciente.identificacion || "")
+    try {
+      const data = await fetch("/api/clientes").then((r) => r.json()).catch(() => [])
+      const lista = Array.isArray(data) ? data : []
+      const fila = lista.find((c: { identificacion?: string }) => String(c.identificacion || "") === identificacion) as { id?: string; razonSocial?: string; identificacion?: string; direccion?: string; provincia?: string; ciudad?: string; email?: string; telefono?: string; tipoCliente?: string } | undefined
+      const digitos = identificacion.replace(/\D/g, "")
+      const tipoDoc = digitos === "9999999999999" ? "07" : digitos.length === 13 ? "04" : digitos.length === 10 ? "05" : "06"
+      const cliente = fila
+        ? { id: fila.id, tipoDoc, identificacion, razon: fila.razonSocial || "", direccion: fila.direccion || "", provincia: fila.provincia || "", ciudad: fila.ciudad || "", email: fila.email || "", telefono: fila.telefono || "", celular: fila.telefono || "", tipoCliente: fila.tipoCliente || "" }
+        : identificacion
+          ? { tipoDoc, identificacion, razon: `${paciente.apellidos || ""} ${paciente.nombres || ""}`.trim(), email: paciente.email || "", telefono: paciente.telefono || "", celular: paciente.telefono || "" }
+          : null
+      if (cliente) sessionStorage.setItem("meijsac_proforma_factura", JSON.stringify({ cliente }))
+      else sessionStorage.removeItem("meijsac_proforma_factura")
+    } catch {
+      sessionStorage.removeItem("meijsac_proforma_factura")
+    }
+    window.location.href = "/dashboard/factura-xml"
   }
 
   async function agregarNota(id: string) {
@@ -315,7 +364,8 @@ export function FichaOptica() {
           {paciente ? (
             <section className={`${tarjeta} space-y-4`}>
               <h2 className="font-black text-slate-950">Consulta de {paciente.nombres} {paciente.apellidos}</h2>
-              <p className="text-xs text-slate-600">La guarda {usuario || "el usuario de esta sesión"}. Mientras esté abierta se puede corregir. Al cerrarla sale la receta y ya no se modifica.</p>
+              <p className="text-xs text-slate-600">{editId ? "Estás corrigiendo la consulta abierta marcada abajo. Actualizar no crea otra." : "Formulario nuevo. Al guardar se crea una consulta distinta de las que ya están en la lista."}</p>
+              <p className="text-xs text-slate-600">La guarda {usuario || "el usuario de esta sesión"}. Mientras esté abierta se puede corregir. Al cerrarla sale la receta, se crea la orden de trabajo y ya no se modifica.</p>
               <select value={sucursalId} onChange={(e) => setSucursalId(e.target.value)} className={campo}>
                 <option value="">Sucursal de la atención</option>
                 {sucursales.map((fila) => <option key={fila.codigo + fila.id} value={fila.id}>{fila.codigo} {fila.nombre}</option>)}
@@ -382,21 +432,32 @@ export function FichaOptica() {
                 <div className="mt-2 text-sm">{diagnosticos.map((fila) => <span key={fila.codigo} className="inline-block mr-2">{fila.codigo} {fila.descripcion}</span>)}</div>
               </div>
               <textarea value={plan} onChange={(e) => setPlan(e.target.value)} placeholder="Plan" className={campo} />
-              <button type="button" disabled={guardando} onClick={guardarConsulta} className="bg-teal-600 text-white font-black text-xs px-4 py-2 rounded-xl">{editId ? "Actualizar consulta abierta" : "Guardar consulta abierta"}</button>
+              <div className="flex flex-wrap gap-2">
+                <button type="button" disabled={guardando} onClick={guardarConsulta} className="bg-teal-600 text-white font-black text-xs px-4 py-2 rounded-xl">{editId ? "Actualizar esta consulta" : "Guardar consulta nueva"}</button>
+                {editId ? <button type="button" onClick={nuevaConsulta} className="bg-white text-slate-900 border border-slate-300 font-black text-xs px-4 py-2 rounded-xl">Nueva consulta</button> : null}
+                <button type="button" onClick={irAlFacturador} className="bg-slate-900 text-white font-black text-xs px-4 py-2 rounded-xl">Facturar</button>
+              </div>
             </section>
           ) : null}
 
           <section className="space-y-3">
-            {consultas.map((consulta) => (
-              <article key={consulta.id} className={`${tarjeta} space-y-2`}>
-                <b className="text-slate-950">{new Date(consulta.fechaHora).toLocaleString("es-EC", { timeZone: "America/Guayaquil" })} · {consulta.estado === "CERRADA" ? "Cerrada" : "Abierta"}</b>
+            <h2 className="font-black text-slate-950">Consultas guardadas</h2>
+            {consultas.map((consulta) => {
+              const abierta = consulta.estado !== "CERRADA"
+              const boton = "text-xs font-black px-3 py-2 rounded-xl"
+              return (
+              <article key={consulta.id} className={`${tarjeta} space-y-2 ${consulta.id === editId ? "border-teal-600" : ""}`}>
+                <b className="text-slate-950">{new Date(consulta.fechaHora).toLocaleString("es-EC", { timeZone: "America/Guayaquil" })} · {abierta ? "Abierta" : "Cerrada"}{consulta.id === editId ? " · Esta es la que estás editando" : ""}</b>
                 <p className="text-sm text-slate-800">{consulta.motivo}</p>
                 <p className="text-xs text-slate-500">Atendió {consulta.usuarioNombre}. {(consulta.diagnosticos || []).map((d) => d.codigo_cie10).filter(Boolean).join(", ")}</p>
-                <div className="flex gap-3 text-xs font-bold">
-                  <a className="text-teal-700" target="_blank" href={`/dashboard/comprobantes-adicionales/opticas/imprimir/${consulta.id}`}>PDF historia</a>
-                  <a className="text-teal-700" target="_blank" href={`/dashboard/comprobantes-adicionales/opticas/imprimir/${consulta.id}?tipo=receta`}>PDF receta</a>
-                  {consulta.estado !== "CERRADA" ? <button type="button" onClick={() => continuarConsulta(consulta)} className="text-teal-700">Continuar</button> : null}
-                  {consulta.estado !== "CERRADA" ? <button type="button" onClick={() => cerrarConsulta(consulta.id)} className="text-amber-700">Cerrar y emitir receta</button> : null}
+                <p className="text-xs text-slate-600">{abierta ? "La orden de trabajo se crea al cerrar y emitir la receta." : "La orden de trabajo ya quedó creada con esta fórmula."}</p>
+                <div className="flex flex-wrap gap-2">
+                  <a className={`${boton} bg-teal-600 text-white`} target="_blank" href={`/dashboard/comprobantes-adicionales/opticas/imprimir/${consulta.id}`}>PDF historia</a>
+                  <a className={`${boton} bg-teal-600 text-white`} target="_blank" href={`/dashboard/comprobantes-adicionales/opticas/imprimir/${consulta.id}?tipo=receta`}>PDF receta</a>
+                  <button type="button" onClick={irAlFacturador} className={`${boton} bg-slate-900 text-white`}>Facturar</button>
+                  {abierta ? <button type="button" onClick={() => continuarConsulta(consulta)} className={`${boton} bg-white text-slate-900 border border-slate-300`}>Continuar</button> : null}
+                  {abierta ? <button type="button" onClick={() => cerrarConsulta(consulta.id)} className={`${boton} bg-amber-500 text-slate-950`}>Cerrar y emitir receta</button> : null}
+                  {abierta ? null : <a className={`${boton} bg-white text-slate-900 border border-slate-300`} href="/dashboard/comprobantes-adicionales/opticas/orden-trabajo">Ver orden de trabajo</a>}
                 </div>
                 {consulta.adendas.map((adenda) => <p key={adenda.id} className="text-xs text-slate-600">Nota {new Date(adenda.createdAt).toLocaleString("es-EC", { timeZone: "America/Guayaquil" })} · {adenda.usuarioNombre}: {adenda.texto}</p>)}
                 <div className="flex gap-2">
@@ -404,7 +465,8 @@ export function FichaOptica() {
                   <button type="button" onClick={() => agregarNota(consulta.id)} className="text-xs font-bold px-3 rounded-xl bg-slate-100 border border-slate-300 text-slate-900">Agregar</button>
                 </div>
               </article>
-            ))}
+              )
+            })}
           </section>
         </div>
       </div>

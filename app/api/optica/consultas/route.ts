@@ -12,7 +12,7 @@ export async function GET(req: NextRequest) {
   if (pacienteId && !historia) return NextResponse.json({ error: "La historia clínica es solo del optometrista" }, { status: 403 })
   const consultas = await prisma.opticaConsulta.findMany({
     where: { empresaId: sesion.empresa.id, ...(pacienteId ? { pacienteId } : {}) },
-    include: { paciente: true, adendas: { orderBy: { createdAt: "asc" } } },
+    include: { paciente: true, orden: { select: { id: true, estado: true } }, adendas: { orderBy: { createdAt: "asc" } } },
     orderBy: { fechaHora: "desc" },
     take: pacienteId ? 50 : 30,
   })

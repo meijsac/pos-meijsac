@@ -8,7 +8,7 @@ export function Marco({ titulo, children, claro = false }: { titulo: string; chi
       <div className="max-w-6xl mx-auto space-y-8">
         <div className={claro ? "flex flex-wrap items-center gap-3 pb-6 border-b border-slate-200" : "flex flex-wrap items-center gap-3 pb-6 border-b border-slate-800/80"}>
           <Link href="/dashboard" className={claro ? "text-xs font-medium text-slate-700 hover:text-slate-950 bg-white border border-slate-300 px-4 py-2.5 rounded-xl" : "text-xs font-medium text-slate-300 hover:text-white bg-[#111827] border border-slate-800 px-4 py-2.5 rounded-xl"}>Dashboard</Link>
-          <Link href="/dashboard/comprobantes-adicionales" className={claro ? "text-xs font-medium text-slate-700 hover:text-slate-950 bg-white border border-slate-300 px-4 py-2.5 rounded-xl" : "text-xs font-medium text-slate-300 hover:text-white bg-[#111827] border border-slate-800 px-4 py-2.5 rounded-xl"}>Comprobantes adicionales</Link>
+          <Link href="/dashboard/comprobantes-adicionales" className={claro ? "text-xs font-medium text-slate-700 hover:text-slate-950 bg-white border border-slate-300 px-4 py-2.5 rounded-xl" : "text-xs font-medium text-slate-300 hover:text-white bg-[#111827] border border-slate-800 px-4 py-2.5 rounded-xl"}>Apps adicionales</Link>
           <h1 className={claro ? "text-2xl font-black text-slate-950" : "text-2xl font-black text-white"}>{titulo}</h1>
         </div>
         {children}
