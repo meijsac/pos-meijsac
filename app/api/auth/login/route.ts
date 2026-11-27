@@ -77,6 +77,11 @@ export async function POST(req: Request) {
     if (validos.length > 1) return responder({ error: MENSAJE }, 401)
     const usuario = validos[0] || null
     if (usuario?.empresa && usuario.empresaId) {
+      if (process.env.DOBLE_FACTOR === "1") {
+        const { exigeDobleFactor } = await import("@/lib/doble-factor")
+        const falta = await exigeDobleFactor(usuario.id, body.codigo)
+        if (falta) return responder({ error: falta.error, requiereDobleFactor: true }, falta.status)
+      }
       await limpiarIntentos(ip, identificador)
       prisma.seguridadLog.create({ data: { empresaId: usuario.empresaId, usuario: usuario.nombre, ip, accion: "LOGIN_OK", dispositivo: ua, detalle: ruc } }).catch(() => {})
       const sid = randomBytes(16).toString("hex")
