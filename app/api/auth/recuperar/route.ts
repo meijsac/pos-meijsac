@@ -1,8 +1,13 @@
 import { randomBytes } from "crypto"
 import { NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
+import { ipDe } from "@/lib/seguridad"
+import { cupoPublico } from "@/lib/tope-publico"
 
 export async function POST(req: Request) {
+  if (!cupoPublico(`recuperar:${ipDe(req)}`)) {
+    return NextResponse.json({ mensaje: "Si el RUC existe, enviaremos el enlace al correo registrado." }, { status: 429 })
+  }
   const body = await req.json().catch(() => ({}))
   const ruc = String(body.ruc || "").trim()
   const usuario = await prisma.usuario.findFirst({ where: { empresa: { ruc } }, include: { empresa: true } })

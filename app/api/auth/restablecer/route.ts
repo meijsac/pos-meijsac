@@ -2,9 +2,11 @@ import bcrypt from "bcryptjs"
 import { NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
 import { cerrarSesion } from "@/lib/login-memoria"
-import { claveValida } from "@/lib/seguridad"
+import { claveValida, ipDe } from "@/lib/seguridad"
+import { cupoPublico } from "@/lib/tope-publico"
 
 export async function POST(req: Request) {
+  if (!cupoPublico(`restablecer:${ipDe(req)}`)) return NextResponse.json({ error: "Demasiados intentos. Espera unos minutos." }, { status: 429 })
   const body = await req.json().catch(() => ({}))
   const token = String(body.token || "")
   const clave = claveValida(String(body.password || ""))

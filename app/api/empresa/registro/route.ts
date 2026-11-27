@@ -1,12 +1,14 @@
 import bcrypt from "bcryptjs"
 import { NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
-import { claveValida, sanitizarTexto } from "@/lib/seguridad"
+import { claveValida, ipDe, sanitizarTexto } from "@/lib/seguridad"
+import { cupoPublico } from "@/lib/tope-publico"
 import { asegurarPlanInicial, vigenciaPlan } from "@/lib/plan-inicial"
 
 export async function POST(req: Request) {
   try {
     const body = await req.json()
+    if (!cupoPublico(`registro:${ipDe(req)}`)) return NextResponse.json({ error: "Demasiados registros. Espera unos minutos." }, { status: 429 })
     const ruc = String(body?.ruc || "").trim()
     const razonSocial = sanitizarTexto(body?.razonSocial || body?.razon || "")
     const adminUser = sanitizarTexto(body?.adminUser || "")
